@@ -1,0 +1,589 @@
+DH Telemetry MVP Final
+Pocket + Barometer, No Jump Height, No Suspension Travel
+0) Objetivo del producto
+
+Permitir que un rider haga dos (o más) bajadas en el mismo tramo y obtenga:
+
+Comparación A/B de:
+
+Impact Score (castigo)
+
+Harshness (vibración/chatter)
+
+Stability (oscilación)
+
+Landing Quality (suavidad de aterrizaje, no altura)
+
+Tiempo total
+
+Dónde ocurre (por recorrido 0–100%):
+
+curvas por recorrido (impact/harshness/stability)
+
+heatmap
+
+eventos (impactos fuertes, aterrizajes duros)
+
+Validación del run (anti-basura):
+
+Confirmar que fue un descenso continuo (barómetro)
+
+Señal estable (teléfono no bailando)
+
+Movimiento real (GPS/velocidad/duración)
+
+No medimos: altura de saltos, recorrido de suspensión, clicks exactos.
+
+1) Requerimientos funcionales
+1.1 Flujo usuario MVP
+
+Home: seleccionar tramo (manual o “auto-detect” básico), ubicación “Pocket (thigh)” default
+
+Start Run
+
+Recording: indicadores live (Señal/Descenso/Estado sensores) + Stop
+
+Post-run: Run Summary (métricas) + “Compare”
+
+Compare: tabla A/B + veredicto + “Charts”
+
+Charts: 4 gráficas por recorrido + eventos + heatmap
+
+History: runs por tramo + etiquetas manuales (setup notes)
+
+1.2 Validación run
+
+Si no cumple criterios mínimos → Run “INVALID”, guardado opcionalmente como “discarded” pero no comparable.
+
+1.3 Visualizaciones (obligatorias)
+
+Comparaciones por recorrido (0–100%)
+
+Impact Density vs recorrido
+
+Harshness vs recorrido
+
+Stability vs recorrido
+
+Slope context vs recorrido (barómetro)
+
+Velocidad vs tiempo (secundaria)
+
+Eventos sobre recorrido (marcas)
+
+Heatmap lineal (2 barras: Run A, Run B)
+
+2) Requerimientos no funcionales
+
+On-device first: almacenamiento local (Room). Sin nube en MVP.
+
+Consumo batería: recording solo durante run. Nada en background.
+
+Privacidad: no subir datos; GPS se guarda solo como polyline simplificada o “recorrido relativo” (configurable).
+
+Compatibilidad: Android 10+ (ideal 11+). Sensores: accel/gyro/baro (baro opcional pero recomendado). Si no baro: se degrada validación.
+
+Performance: procesamiento post-run < 5–10 s en gama media.
+
+3) Arquitectura Android (recomendada)
+
+Clean Architecture + MVVM con módulos (Gradle) para aislar dominio/algoritmos.
+
+3.1 Módulos
+
+app (UI, DI, navigation)
+
+core (utilidades, logging)
+
+data (Room DB, repositories, file storage)
+
+domain (use cases, entidades, interfaces)
+
+sensing (SensorManager/GNSS/Barometer acquisition)
+
+signal (DSP: filtros, features, event detection)
+
+charts (rendering, MPAndroidChart o Compose Canvas)
+
+3.2 Patrón de runtime (captura)
+
+Foreground Service durante recording (obligatorio para estabilidad y permisos).
+
+SensorManager callbacks en HandlerThread dedicado.
+
+FusedLocationProviderClient para GPS.
+
+Procesamiento:
+
+Opción A (simple): guardar raw + procesar al final
+
+Opción B (mejor): computar features por ventanas y guardar features (reduce storage)
+
+MVP recomendado: guardar features + eventos, no raw completo (raw opcional en debug).
+
+4) Permisos y configuración
+4.1 Permisos
+
+ACCESS_FINE_LOCATION (GPS)
+
+FOREGROUND_SERVICE
+
+FOREGROUND_SERVICE_LOCATION (Android 14+)
+
+(Opcional) POST_NOTIFICATIONS (si usas notificación de servicio)
+
+4.2 Sensores
+
+Accelerometer: SENSOR_DELAY_FASTEST (esperar ~200Hz real)
+
+Gyroscope: SENSOR_DELAY_FASTEST
+
+Barometer: SENSOR_DELAY_FASTEST (suele 25–50Hz)
+
+Nota: Android limita típicamente a ~200Hz en listener estándar; no asumir más.
+
+5) Modelo de datos (Room)
+5.1 Entidades
+TrackEntity
+
+trackId: String (UUID)
+
+name: String
+
+createdAt: Long
+
+locationHint: String? (opcional)
+
+notes: String?
+
+RunEntity
+
+runId: String (UUID)
+
+trackId: String
+
+startedAt: Long
+
+endedAt: Long
+
+durationMs: Long
+
+isValid: Boolean
+
+invalidReason: String? (enum string)
+
+phonePlacement: String = "POCKET_THIGH"
+
+deviceModel: String
+
+sampleRateAccelHz: Float
+
+sampleRateGyroHz: Float
+
+sampleRateBaroHz: Float?
+
+gpsQuality: String (GOOD/MED/POOR)
+
+Summary metrics:
+
+impactScore: Float?
+
+harshnessAvg: Float?
+
+harshnessP90: Float?
+
+stabilityScore: Float?
+
+landingQualityScore: Float?
+
+avgSpeed: Float?
+
+slopeClassAvg: Int? (0..2)
+
+User tags:
+
+setupNote: String? (ej “+1 rebote, 22 psi”)
+
+conditionsNote: String? (ej “mojado”)
+
+RunSeriesEntity (series por recorrido)
+
+runId: String
+
+seriesType: String (IMPACT_DENSITY, HARSHNESS, STABILITY, SLOPE, SPEED_TIME(optional))
+
+xType: String (DIST_PCT o TIME_S)
+
+points: ByteArray (packed float pairs) o JSON comprimido
+
+pointCount: Int
+
+Recomendación: almacenar como binario: [x0,y0,x1,y1,...] floats (Little Endian).
+
+EventEntity
+
+eventId: String
+
+runId: String
+
+type: String (LANDING, IMPACT_PEAK, HARSHNESS_BURST)
+
+distPct: Float (0..100)
+
+timeSec: Float
+
+severity: Float
+
+meta: String? (JSON: peakG, recoveryMs, etc.)
+
+GpsPolylineEntity (opcional MVP)
+
+runId: String
+
+polyline: ByteArray (encoded polyline simplificado) o lista de lat/lon reducida
+
+sampleCount: Int
+
+Si quieres máxima privacidad: almacenar solo distPct y no lat/lon.
+
+6) Captura de señales: detalles de implementación
+6.1 Sincronización temporal
+
+Todos los samples deben tener timestamp monotónico:
+
+Usar event.timestamp de sensores (nanosegundos desde boot)
+
+Convertir a tSec = (timestampNs - t0Ns) / 1e9
+
+GPS viene con tiempo wall-clock; mapearlo a monotónico al recibir:
+
+guardar SystemClock.elapsedRealtimeNanos() al callback de GPS y usar eso para alinear.
+
+6.2 Buffers
+
+Captura en ring buffers por sensor:
+
+Accel: FloatArray triples + timestamp
+
+Gyro: triples + timestamp
+
+Baro: pressure + timestamp
+
+GPS: lat/lon/speed + timestamp
+
+MVP: procesa en ventanas y descarta raw para ahorrar almacenamiento.
+
+6.3 Ventanas
+
+windowSec = 1.0 (o 0.5)
+
+hopSec = 0.25 (50% overlap si 0.5 window)
+
+Para cada ventana:
+
+features de impacto/harshness/stability
+
+asociar a distPct estimado
+
+7) GPS: cómo se usa (MVP técnico)
+
+GPS sirve para mapear a recorrido y alinear A/B.
+
+7.1 Estimación de distancia y distPct
+
+Integrar distancia entre puntos GPS (Haversine) con smoothing.
+
+totalDist = sum(segmentDist)
+
+Para cada timestamp t, tener dist(t) y distPct = 100 * dist(t)/totalDist
+
+Si GPS es pobre:
+
+usar speed del fused provider + integrar para una distancia aproximada
+
+o degradar a “time-based charts” solo para ese run (marcarlo como baja calidad para comparar).
+
+7.2 Resampling a eje común
+
+Para series por recorrido:
+
+definir N = 200 puntos (0..100% en pasos de 0.5%)
+
+interpolar cada feature a esos N puntos
+
+guardar arrays en RunSeriesEntity.
+
+8) Barómetro: cómo se usa (MVP)
+
+Usar barómetro como contexto y validador.
+
+8.1 Convertir presión a altitud relativa
+
+No necesitas altitud absoluta.
+
+Filtrar presión con media móvil (2–3 s)
+
+Convertir a altitud relativa: fórmula estándar aproximada o usar directamente tendencia de presión:
+
+presión ↑ suele implicar descenso; pero mejor convertir a “altitud relativa” para interpretar.
+
+8.2 “Descenso continuo” (validación)
+
+Criterio simple:
+
+calcular altRel(t) suavizada
+
+delta = altRel(t) - altRel(t - 10s)
+
+Run válido si delta < -Hmin durante una proporción del run
+
+ej: Hmin = 15m en 10–15s (ajustable por park)
+
+Además: ratio de tiempo en descenso > 70%
+
+8.3 Pendiente relativa por recorrido
+
+slope = d(altRel)/d(dist) suavizada
+
+Clasificar en 3 bins:
+
+0: suave
+
+1: medio
+
+2: empinado
+Guardar como serie SLOPE por recorrido (0–100%).
+
+9) Signal Processing y métricas (implementación concreta)
+9.1 Estimación del eje vertical
+
+En bolsillo, orientación cambia. Para robustez:
+
+Estimar gravedad gVec con low-pass (cutoff ~0.5–1Hz) sobre accelerometer.
+
+Obtener componente vertical: aVert = dot(aRaw, normalize(gVec)) - 9.81
+
+Usar magnitud también como fallback: aMag = |aRaw| - 9.81
+
+Para MVP:
+
+usar aVert si |gVec| estable; si no, usar aMag.
+
+9.2 Impact Score (por ventana)
+
+Definición:
+
+detectar picos en aVert (o aMag) con:
+
+threshold Tg (ej 2.0g equivalente en m/s²: T = 2*9.81)
+
+peak-picking: un pico cada mínimo 150 ms (debounce)
+
+severidad por pico: sev = peak^2 (o log(1+peak))
+
+impactWindow = sum(sev)
+
+impactRun = sum(impactWindow) normalizado por distancia/tiempo
+
+Serie guardada:
+
+IMPACT_DENSITY(distPct) = impactWindow / windowDist
+
+9.3 Harshness Index (RMS vibracional)
+
+En cada ventana:
+
+band-pass 15–40Hz sobre aVert (IIR Butterworth 4º orden)
+
+rms = sqrt(mean(x^2))
+
+serie HARSHNESS(distPct) = rms
+
+resumen:
+
+harshAvg = mean(rms)
+
+harshP90 = percentile90(rms)
+
+9.4 Stability Score (giroscopio)
+
+En cada ventana:
+
+usar gyro ωx, ωy, ωz
+
+estabilidad enfocada en pitch/roll:
+
+stab = var(ωx) + var(ωy) (o RMS)
+
+serie STABILITY(distPct) = stab
+
+resumen: promedio + p90 (opcional)
+
+9.5 Landing detection y Landing Quality
+
+No altura. Solo calidad del aterrizaje.
+
+Detección (evento LANDING)
+
+Heurística robusta:
+
+un LANDING es un pico fuerte aVert > Tlanding (ej 3–4g) con:
+
+pre-event “ligereza” opcional: aVert cercano a 0 por ≥ 120 ms (no obligatorio por falsos)
+
+Debounce: no más de 1 landing cada 1.0 s
+
+Calidad
+
+Para cada landing:
+
+peakG = pico (en g)
+
+energy300ms = sum(x^2) en 0–300ms post pico
+
+recoveryMs = tiempo hasta que |aVert| vuelve por debajo de umbral bajo (ej 0.5g) durante 200 ms
+
+landingSeverity = w1*peakG + w2*sqrt(energy300ms) + w3*(recoveryMs/1000)
+
+Resumen LandingQualityScore:
+
+promedio de landingSeverity o p90 (si muchos landings)
+
+Guardar eventos:
+
+tipo LANDING, distPct, severity, meta JSON: {peakG, energy300ms, recoveryMs}
+
+10) Validación “Phone loose / signal quality” (crítica)
+
+Objetivo: evitar que el teléfono rebotando dentro del bolsillo genere análisis falso.
+
+Heurística MVP:
+
+medir “rotational jitter” en gyro + aceleración errática:
+
+looseIndex = p90(|ω|) + p90(|aMag|) en caminata/calibración vs run
+
+si looseIndex excede umbral → INVALID_SIGNAL_LOOSE
+
+Además:
+
+detectar clipping/sensor anomalies: demasiados samples perdidos o tasa real < 80Hz.
+
+11) Comparación A/B (algoritmo)
+
+Solo comparar runs del mismo track con:
+
+isValid = true
+
+gpsQuality != POOR (o permitir con warning)
+
+phonePlacement igual
+
+Comparación:
+
+delta porcentual de métricas summary
+
+por secciones:
+
+dividir recorrido en 10 bins (0–10%, …)
+
+calcular promedio de series en cada bin y comparar (para mensajes “en 30–45% mejoraste”)
+
+Veredicto (reglas simples):
+
+Si Impact ↓ y Harshness ↓ y Stability ↑ → “mejor”
+
+Si Impact ↓ pero Stability ↓ → “más suave pero menos estable”
+
+Si Tiempo ↓ pero Impact ↑ → “más rápido pero más castigador”
+
+12) UI/UX: especificación implementable
+12.1 Navegación
+
+Home
+
+Recording
+
+Run Summary
+
+Compare
+
+Charts
+
+Events
+
+History/Track detail
+
+12.2 Gráficas (exactas)
+Gráficas por recorrido (0–100%)
+
+X: distPct (0..100)
+
+Y:
+
+Impact Density
+
+Harshness RMS
+
+Stability var/RMS
+
+Slope class/valor (fondo sombreado)
+
+Render:
+
+dos series A y B superpuestas o toggle
+
+markers de eventos en X
+
+Velocidad por tiempo (secundaria)
+
+X: timeSec
+
+Y: speed (m/s)
+
+para ver paradas / errores
+
+Heatmap lineal
+
+Barra 0–100% con color por severity (Impact Density combinado)
+
+2 filas: Run A y Run B
+
+Librería: MPAndroidChart funciona rápido. En Compose, Canvas custom si quieres más control.
+
+13) APIs internas (interfaces que el equipo debe implementar)
+13.1 Sensing
+
+interface SensorRecorder { fun start(config: RunConfig): Result<Unit> fun stop(): Result<RawCaptureHandle> }
+
+RunConfig:
+
+placement
+
+sampling preferences
+
+trackId/name
+
+RawCaptureHandle:
+
+metadata (timestamps, sample rates)
+
+pointers to temp files/buffers
+
+13.2 Processing
+
+interface RunProcessor { fun process(handle: RawCaptureHandle): ProcessedRun }
+
+ProcessedRun:
+
+isValid + invalidReason
+
+summary metrics
+
+series arrays (N=200)
+
+events list
+
+13.3 Repository
+
+interface RunRepository { fun saveProcessed(run: ProcessedRun) fun getRuns(trackId): List<Run> fun getSeries(runId, type): FloatArray fun getEvents(runId): List<Event> }

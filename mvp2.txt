@@ -1,0 +1,188 @@
+rediseño el MVP para depender solo de: ✅ Linear Acceleration + Gyro + Rotation Vector (+ Gravity opcional) + GPS
+y NO depender de barómetro.
+MVP REDISEÑADO — “DH Telemetry (Pocket, No-Barometer)”
+Qué cambia por no tener barómetro
+Se elimina:
+“Descenso continuo detectado por barómetro”
+“Pendiente por recorrido”
+“Contexto empinado/suave”
+Se mantiene (core del producto):
+Impactos, vibración (chatter), estabilidad, calidad de aterrizajes
+Comparación A/B por recorrido (0–100%)
+Eventos sobre el recorrido
+Validación del run, pero basada en GPS + continuidad de movimiento (más simple)
+1) Sensores usados (final, solo los tuyos)
+Principales
+TYPE_LINEAR_ACCELERATION (clave): ya viene sin gravedad → perfecto para impactos/vibración
+TYPE_GYROSCOPE: estabilidad (pitch/roll/yaw)
+TYPE_ROTATION_VECTOR: orientación robusta para alinear ejes (mejor que “Orientation” legacy)
+Fused Location (GPS): distancia, velocidad, alineación por recorrido
+Opcionales (si quieres)
+TYPE_GRAVITY: respaldo si Linear Acceleration es ruidoso
+TYPE_MAGNETIC_FIELD: solo si necesitas yaw absoluto (no recomendado en DH por interferencias)
+No usados en MVP
+Contador de pasos
+Orientación legacy (se ignora; es obsoleta en Android moderno)
+2) Nueva validación de “Run válido” (sin barómetro)
+Como ya no puedes confirmar “descenso” físicamente, la app valida que el run sea un tramo de movimiento continuo tipo DH:
+✅ Valid run si cumple (valores iniciales sugeridos):
+Duración > 30 s
+Distancia GPS > 250 m
+Tiempo con velocidad > 8 km/h al menos 70% del run
+Sin pausas largas: no más de 2 s seguidos con velocidad < 2 km/h (tolerancia configurable)
+Calidad GPS: accuracy < 25 m la mayor parte del tiempo (si no, warning)
+📌 Para evitar que un “lift” pase como run:
+En MVP, lo más seguro es Start/Stop manual y “este run es de este tramo”.
+Puedes añadir un toggle: “Estoy bajando ahora” (el usuario lo controla).
+Mensaje en UI cambia de:
+“Descenso detectado ✅”
+a:
+“Movimiento válido ✅ / Pausas detectadas ⚠️ / GPS pobre ⚠️”
+3) Métricas (actualizadas, sin slope)
+A) Impact Score (castigo)
+Fuente: Linear Acceleration (ideal)
+Señal base: aLin = (x,y,z) en m/s²
+Magnitud: a = sqrt(x²+y²+z²)
+Detectar picos: a > Timpact (ej: 12–18 m/s²; se calibra)
+Debounce: 150 ms
+Severidad: sev = peak²
+ImpactScore = Σ sev (normalizado por distancia para comparar)
+Serie por recorrido
+ImpactDensity(distPct) = sum(sev en ventana) / windowDist
+B) Harshness Index (vibración / chatter)
+Fuente: Linear Acceleration
+Band-pass 15–40 Hz (IIR Butterworth)
+RMS por ventana (0.5–1.0 s)
+Resumen:
+HarshAvg
+HarshP90
+Serie por recorrido
+Harshness(distPct) = RMS
+C) Stability Score (control)
+Fuente: Gyroscope
+ω = (ωx, ωy, ωz) rad/s
+stabWindow = var(ωx)+var(ωy) o RMS
+Resumen:
+StabilityScore = mean(stabWindow) (menor = mejor)
+(opcional) p90
+Serie por recorrido
+Stability(distPct)
+D) Landing Quality (sin altura)
+Fuente: Linear Acceleration
+Detectar aterrizaje = impacto grande con firma típica:
+a > Tlanding (ej: 25–35 m/s²)
+Debounce 1 s
+Calidad:
+peak (m/s²)
+energy300ms = Σ a² en 0–300 ms
+recoveryMs: tiempo hasta volver bajo umbral pequeño por 200 ms
+landingSeverity = w1*peak + w2*sqrt(energy300ms) + w3*recoveryMs
+Eventos
+LANDING(distPct, severity, meta{peak,energy,recovery})
+4) Cómo se usa el Rotation Vector (para mejorar precisión)
+En bolsillo la orientación cambia. Para no depender de ejes X/Y/Z “tal cual”, haces esto:
+Obtén matriz de rotación desde TYPE_ROTATION_VECTOR
+Rota aLin a un marco “earth/body” consistente
+Calcula componente “vertical” estimada o usa magnitud |a| como fallback
+MVP simple y robusto:
+Métricas principales con |aLin| (magnitud)
+Stability con giroscopio (no requiere orientación absoluta)
+Esto evita depender del magnetómetro (que en DH suele ser basura).
+5) GPS: uso exacto (sin barómetro)
+Se usa para 4 cosas:
+Distancia recorrida (para normalizar)
+Velocidad (para validar run y detectar pausas)
+Alinear runs por recorrido (0–100% distPct)
+Resampling a un eje común (N=200 puntos)
+No se usa para altura de saltos ni pendientes.
+6) Pantallas del MVP (wireframes actualizados)
+6.1 Home
+Copiar código
+
+┌───────────────────────────────┐
+│ DH Telemetry                  │
+├───────────────────────────────┤
+│ Tramo                         │
+│ ▢ Seleccionar tramo           │
+│                               │
+│ Teléfono                      │
+│ ▢ Bolsillo muslo (default)    │
+│                               │
+│ Sensores OK                   │
+│ ● LinAcc ● Gyro ● RotVec ● GPS│
+│                               │
+│ ⬤ START RUN                   │
+└───────────────────────────────┘
+6.2 Recording (sin “descenso detectado”)
+Copiar código
+
+┌───────────────────────────────┐
+│ ● REC      01:12              │
+├───────────────────────────────┤
+│ Señal: ● BUENA                │
+│ GPS:   ● OK (±16 m)           │
+│ Movimiento: ● CONTINUO        │
+│                               │
+│ Impactos (live)   ▓▓▓░░       │
+│ Vibración (live)  ▓▓░░░       │
+│ Estabilidad       ▓▓▓░░       │
+│                               │
+│ ⬤ STOP                         │
+└───────────────────────────────┘
+6.3 Run Summary
+(sin pendiente)
+Copiar código
+
+┌───────────────────────────────┐
+│ Run B — VÁLIDO                │
+├───────────────────────────────┤
+│ Tiempo: 2:39     Dist: 1.02km │
+│ Vel media: 23 km/h            │
+│ Pausas: 0                      │
+│                               │
+│ ▢ Impact Score        64      │
+│ ▢ Harshness Avg       0.54    │
+│ ▢ Stability           0.29    │
+│ ▢ Landing Quality     0.48    │
+│                               │
+│ ⬤ VER COMPARACIÓN             │
+└───────────────────────────────┘
+6.4 Compare A/B
+(igual, solo sin slope context)
+Copiar código
+
+Impact  A 86 → B 64   ↓26%
+Harsh   A .79→ B .54  ↓32%
+Stab    A .35→ B .29  ↑17%
+Land    A .71→ B .48  ↓32%
+Tiempo  A 2:42→B 2:39 ↓3 s
+6.5 Charts (por recorrido)
+Quedan 3 curvas + eventos + heatmap:
+Impact Density vs distPct
+Harshness vs distPct
+Stability vs distPct
+Eventos sobre distPct
+Heatmap lineal (Run A vs Run B)
+Se elimina la gráfica de pendiente.
+7) Arquitectura: qué cambia respecto al diseño anterior
+Quitas por completo Barometer y todo lo de “slope”.
+El módulo sensing implementa:
+SensorManager para LINEAR_ACCELERATION, GYROSCOPE, ROTATION_VECTOR (y GRAVITY opcional)
+FusedLocationProvider para GPS
+El módulo signal mantiene DSP igual, pero ya no calcula slope.
+8) Riesgos al no tener barómetro (y cómo mitigarlos)
+Riesgo: confundir “lift” o tramos no-DH como run válido.
+Mitigación MVP:
+Start/Stop manual
+Validación por velocidad/pausas/distancia
+Etiquetar runs “GPS pobre” como no comparables o comparables con warning
+Riesgo: GPS malo en bosque → distPct ruidoso
+Mitigación:
+Resampling por distancia suavizada
+Si accuracy > 30–50m por mucho tiempo → warning fuerte y/o invalidar
+9) Qué le entregas al equipo (cambios concretos)
+Remover dependencia de barómetro
+Usar TYPE_LINEAR_ACCELERATION como señal base para impactos/vibración/landing
+Usar TYPE_ROTATION_VECTOR solo para estabilizar orientación (opcional en MVP si van con magnitud)
+Validación basada en GPS: distancia/velocidad/pausas/calidad GPS
+UI: reemplazar “Descenso detectado” por “Movimiento continuo / GPS OK”

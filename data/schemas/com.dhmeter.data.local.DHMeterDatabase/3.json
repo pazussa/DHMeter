@@ -1,0 +1,469 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "7a4dc765feb16c6fcae97ad9bc260749",
+    "entities": [
+      {
+        "tableName": "tracks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`trackId` TEXT NOT NULL, `name` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `locationHint` TEXT, `notes` TEXT, PRIMARY KEY(`trackId`))",
+        "fields": [
+          {
+            "fieldPath": "trackId",
+            "columnName": "trackId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationHint",
+            "columnName": "locationHint",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "trackId"
+          ]
+        },
+        "indices": [],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "runs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`runId` TEXT NOT NULL, `trackId` TEXT NOT NULL, `startedAt` INTEGER NOT NULL, `endedAt` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, `isValid` INTEGER NOT NULL, `invalidReason` TEXT, `phonePlacement` TEXT NOT NULL, `deviceModel` TEXT NOT NULL, `sampleRateAccelHz` REAL NOT NULL, `sampleRateGyroHz` REAL NOT NULL, `sampleRateBaroHz` REAL, `gpsQuality` TEXT NOT NULL, `distanceMeters` REAL, `pauseCount` INTEGER NOT NULL, `impactScore` REAL, `harshnessAvg` REAL, `harshnessP90` REAL, `stabilityScore` REAL, `landingQualityScore` REAL, `avgSpeed` REAL, `slopeClassAvg` INTEGER, `setupNote` TEXT, `conditionsNote` TEXT, PRIMARY KEY(`runId`), FOREIGN KEY(`trackId`) REFERENCES `tracks`(`trackId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "runId",
+            "columnName": "runId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trackId",
+            "columnName": "trackId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "startedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAt",
+            "columnName": "endedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isValid",
+            "columnName": "isValid",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "invalidReason",
+            "columnName": "invalidReason",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "phonePlacement",
+            "columnName": "phonePlacement",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceModel",
+            "columnName": "deviceModel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sampleRateAccelHz",
+            "columnName": "sampleRateAccelHz",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sampleRateGyroHz",
+            "columnName": "sampleRateGyroHz",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sampleRateBaroHz",
+            "columnName": "sampleRateBaroHz",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "gpsQuality",
+            "columnName": "gpsQuality",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "distanceMeters",
+            "columnName": "distanceMeters",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "pauseCount",
+            "columnName": "pauseCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "impactScore",
+            "columnName": "impactScore",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "harshnessAvg",
+            "columnName": "harshnessAvg",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "harshnessP90",
+            "columnName": "harshnessP90",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "stabilityScore",
+            "columnName": "stabilityScore",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "landingQualityScore",
+            "columnName": "landingQualityScore",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "avgSpeed",
+            "columnName": "avgSpeed",
+            "affinity": "REAL",
+            "notNull": false
+          },
+          {
+            "fieldPath": "slopeClassAvg",
+            "columnName": "slopeClassAvg",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "setupNote",
+            "columnName": "setupNote",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "conditionsNote",
+            "columnName": "conditionsNote",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "runId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_runs_trackId",
+            "unique": false,
+            "columnNames": [
+              "trackId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_runs_trackId` ON `${TABLE_NAME}` (`trackId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tracks",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "trackId"
+            ],
+            "referencedColumns": [
+              "trackId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "run_series",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `runId` TEXT NOT NULL, `seriesType` TEXT NOT NULL, `xType` TEXT NOT NULL, `points` BLOB NOT NULL, `pointCount` INTEGER NOT NULL, FOREIGN KEY(`runId`) REFERENCES `runs`(`runId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runId",
+            "columnName": "runId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seriesType",
+            "columnName": "seriesType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "xType",
+            "columnName": "xType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "points",
+            "columnName": "points",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pointCount",
+            "columnName": "pointCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_run_series_runId",
+            "unique": false,
+            "columnNames": [
+              "runId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_run_series_runId` ON `${TABLE_NAME}` (`runId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "runs",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "runId"
+            ],
+            "referencedColumns": [
+              "runId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`eventId` TEXT NOT NULL, `runId` TEXT NOT NULL, `type` TEXT NOT NULL, `distPct` REAL NOT NULL, `timeSec` REAL NOT NULL, `severity` REAL NOT NULL, `meta` TEXT, PRIMARY KEY(`eventId`), FOREIGN KEY(`runId`) REFERENCES `runs`(`runId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "eventId",
+            "columnName": "eventId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runId",
+            "columnName": "runId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "distPct",
+            "columnName": "distPct",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeSec",
+            "columnName": "timeSec",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "severity",
+            "columnName": "severity",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "meta",
+            "columnName": "meta",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "eventId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_events_runId",
+            "unique": false,
+            "columnNames": [
+              "runId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_events_runId` ON `${TABLE_NAME}` (`runId`)"
+          },
+          {
+            "name": "index_events_type",
+            "unique": false,
+            "columnNames": [
+              "type"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_events_type` ON `${TABLE_NAME}` (`type`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "runs",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "runId"
+            ],
+            "referencedColumns": [
+              "runId"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "gps_polylines",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`runId` TEXT NOT NULL, `points` BLOB NOT NULL, `pointCount` INTEGER NOT NULL, `totalDistanceM` REAL NOT NULL, `avgAccuracyM` REAL NOT NULL, `gpsQuality` TEXT NOT NULL, PRIMARY KEY(`runId`), FOREIGN KEY(`runId`) REFERENCES `runs`(`runId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "runId",
+            "columnName": "runId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "points",
+            "columnName": "points",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pointCount",
+            "columnName": "pointCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalDistanceM",
+            "columnName": "totalDistanceM",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "avgAccuracyM",
+            "columnName": "avgAccuracyM",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gpsQuality",
+            "columnName": "gpsQuality",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "runId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_gps_polylines_runId",
+            "unique": false,
+            "columnNames": [
+              "runId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_gps_polylines_runId` ON `${TABLE_NAME}` (`runId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "runs",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "runId"
+            ],
+            "referencedColumns": [
+              "runId"
+            ]
+          }
+        ]
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '7a4dc765feb16c6fcae97ad9bc260749')"
+    ]
+  }
+}

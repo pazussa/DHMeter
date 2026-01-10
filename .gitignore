@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Local config
+local.properties
+
+# Android
+*.apk
+*.ap_ 
+*.keystore
+
+# IDEs
+.idea/
+*.iml
+
+# OS
+.DS_Store
+
+# Generated
+app/build/
+
+# Ignore APK we created on desktop
+../appv2.apk

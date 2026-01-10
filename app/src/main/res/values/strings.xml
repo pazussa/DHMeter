@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DH Meter</string>
+    
+    <!-- General -->
+    <string name="loading">Loading…</string>
+    <string name="error">Error</string>
+    <string name="retry">Retry</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="confirm">Confirm</string>
+    <string name="ok">OK</string>
+    
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_history">History</string>
+    <string name="nav_settings">Settings</string>
+    
+    <!-- Home Screen -->
+    <string name="home_title">DH Meter</string>
+    <string name="home_subtitle">Downhill Telemetry</string>
+    <string name="home_no_tracks">No tracks yet</string>
+    <string name="home_create_track">Create your first track to start recording runs</string>
+    <string name="home_new_track">New Track</string>
+    
+    <!-- Track -->
+    <string name="track_name">Track Name</string>
+    <string name="track_name_hint">Enter track name</string>
+    <string name="track_runs">%d runs</string>
+    <string name="track_no_runs">No runs yet</string>
+    <string name="track_last_run">Last run: %s</string>
+    <string name="track_delete_confirm">Delete this track and all its runs?</string>
+    
+    <!-- Recording -->
+    <string name="recording_title">Recording</string>
+    <string name="recording_start">Start Recording</string>
+    <string name="recording_stop">Stop Recording</string>
+    <string name="recording_pause">Pause</string>
+    <string name="recording_resume">Resume</string>
+    <string name="recording_discard">Discard</string>
+    <string name="recording_discard_confirm">Discard this recording?</string>
+    <string name="recording_elapsed">Elapsed Time</string>
+    <string name="recording_distance">Distance</string>
+    <string name="recording_speed">Current Speed</string>
+    <string name="recording_gps_accuracy">GPS Accuracy</string>
+    <string name="recording_waiting_gps">Waiting for GPS signal…</string>
+    <string name="recording_poor_gps">Poor GPS signal</string>
+    
+    <!-- Run Summary -->
+    <string name="summary_title">Run Summary</string>
+    <string name="summary_duration">Duration</string>
+    <string name="summary_distance">Distance</string>
+    <string name="summary_avg_speed">Avg Speed</string>
+    <string name="summary_max_speed">Max Speed</string>
+    <string name="summary_descent">Total Descent</string>
+    <string name="summary_impacts">Impacts</string>
+    <string name="summary_max_impact">Max Impact</string>
+    <string name="summary_harshness">Harshness (RMS)</string>
+    <string name="summary_stability">Stability</string>
+    <string name="summary_landings">Landings</string>
+    <string name="summary_gps_quality">GPS Quality</string>
+    <string name="summary_save_run">Save Run</string>
+    <string name="summary_compare">Compare with Previous</string>
+    <string name="summary_view_charts">View Charts</string>
+    
+    <!-- Comparison -->
+    <string name="compare_title">Compare Runs</string>
+    <string name="compare_select_runs">Select runs to compare</string>
+    <string name="compare_run_a">Run A</string>
+    <string name="compare_run_b">Run B</string>
+    <string name="compare_better">Better</string>
+    <string name="compare_worse">Worse</string>
+    <string name="compare_similar">Similar</string>
+    <string name="compare_verdict">Overall Verdict</string>
+    <string name="compare_smoother">Smoother</string>
+    <string name="compare_rougher">Rougher</string>
+    <string name="compare_more_stable">More stable</string>
+    <string name="compare_less_stable">Less stable</string>
+    
+    <!-- Charts -->
+    <string name="charts_title">Charts</string>
+    <string name="charts_impact">Impact (g)</string>
+    <string name="charts_harshness">Harshness (RMS)</string>
+    <string name="charts_stability">Stability</string>
+    <string name="charts_speed">Speed (km/h)</string>
+    <string name="charts_slope">Slope (%)</string>
+    <string name="charts_x_axis">Track Distance (%)</string>
+    
+    <!-- Events -->
+    <string name="events_title">Events</string>
+    <string name="events_impact">Impact</string>
+    <string name="events_landing">Landing</string>
+    <string name="events_jump">Jump</string>
+    <string name="event_at">at %s%%</string>
+    
+    <!-- History -->
+    <string name="history_title">History</string>
+    <string name="history_no_runs">No runs recorded yet</string>
+    <string name="history_filter_all">All</string>
+    <string name="history_filter_week">This Week</string>
+    <string name="history_filter_month">This Month</string>
+    
+    <!-- Metrics -->
+    <string name="metric_g">g</string>
+    <string name="metric_ms">m/s²</string>
+    <string name="metric_kmh">km/h</string>
+    <string name="metric_m">m</string>
+    <string name="metric_percent">%</string>
+    
+    <!-- Permissions -->
+    <string name="permission_location_title">Location Permission</string>
+    <string name="permission_location_message">DH Meter needs location permission to track your runs and measure distance.</string>
+    <string name="permission_location_denied">Location permission is required for recording runs.</string>
+    <string name="permission_activity_title">Activity Recognition</string>
+    <string name="permission_activity_message">This helps detect when you\'re moving.</string>
+    
+    <!-- Notifications -->
+    <string name="notification_channel_recording">Recording</string>
+    <string name="notification_channel_recording_desc">Shows when a run is being recorded</string>
+    <string name="notification_recording_title">Recording run</string>
+    <string name="notification_recording_text">%1$s | %2$s</string>
+    
+    <!-- Validation -->
+    <string name="validation_too_short">Run is too short (minimum 30 seconds)</string>
+    <string name="validation_no_movement">Not enough movement detected</string>
+    <string name="validation_no_descent">No descent detected</string>
+    <string name="validation_poor_gps">GPS quality is too poor</string>
+    <string name="validation_poor_signal">Sensor signal quality is poor</string>
+    
+    <!-- About -->
+    <string name="about_title">About DH Meter</string>
+    <string name="about_version">Version %s</string>
+    <string name="about_description">Downhill mountain bike telemetry app for analyzing and comparing runs using phone sensors.</string>
+</resources>

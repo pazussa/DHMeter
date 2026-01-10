@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DH Meter</string>
+    
+    <!-- General -->
+    <string name="loading">Cargando…</string>
+    <string name="error">Error</string>
+    <string name="retry">Reintentar</string>
+    <string name="cancel">Cancelar</string>
+    <string name="save">Guardar</string>
+    <string name="delete">Eliminar</string>
+    <string name="confirm">Confirmar</string>
+    <string name="ok">Aceptar</string>
+    
+    <!-- Navigation -->
+    <string name="nav_home">Inicio</string>
+    <string name="nav_history">Historial</string>
+    <string name="nav_settings">Ajustes</string>
+    
+    <!-- Home Screen -->
+    <string name="home_title">DH Meter</string>
+    <string name="home_subtitle">Telemetría Downhill</string>
+    <string name="home_no_tracks">Sin tracks todavía</string>
+    <string name="home_create_track">Crea tu primer track para empezar a grabar bajadas</string>
+    <string name="home_new_track">Nuevo Track</string>
+    
+    <!-- Track -->
+    <string name="track_name">Nombre del Track</string>
+    <string name="track_name_hint">Introduce el nombre del track</string>
+    <string name="track_runs">%d bajadas</string>
+    <string name="track_no_runs">Sin bajadas aún</string>
+    <string name="track_last_run">Última bajada: %s</string>
+    <string name="track_delete_confirm">¿Eliminar este track y todas sus bajadas?</string>
+    
+    <!-- Recording -->
+    <string name="recording_title">Grabando</string>
+    <string name="recording_start">Iniciar Grabación</string>
+    <string name="recording_stop">Detener</string>
+    <string name="recording_pause">Pausar</string>
+    <string name="recording_resume">Continuar</string>
+    <string name="recording_discard">Descartar</string>
+    <string name="recording_discard_confirm">¿Descartar esta grabación?</string>
+    <string name="recording_elapsed">Tiempo</string>
+    <string name="recording_distance">Distancia</string>
+    <string name="recording_speed">Velocidad Actual</string>
+    <string name="recording_gps_accuracy">Precisión GPS</string>
+    <string name="recording_waiting_gps">Esperando señal GPS…</string>
+    <string name="recording_poor_gps">Señal GPS débil</string>
+    
+    <!-- Run Summary -->
+    <string name="summary_title">Resumen de la Bajada</string>
+    <string name="summary_duration">Duración</string>
+    <string name="summary_distance">Distancia</string>
+    <string name="summary_avg_speed">Velocidad Media</string>
+    <string name="summary_max_speed">Velocidad Máxima</string>
+    <string name="summary_descent">Desnivel</string>
+    <string name="summary_impacts">Impactos</string>
+    <string name="summary_max_impact">Impacto Máximo</string>
+    <string name="summary_harshness">Dureza (RMS)</string>
+    <string name="summary_stability">Estabilidad</string>
+    <string name="summary_landings">Aterrizajes</string>
+    <string name="summary_gps_quality">Calidad GPS</string>
+    <string name="summary_save_run">Guardar Bajada</string>
+    <string name="summary_compare">Comparar</string>
+    <string name="summary_view_charts">Ver Gráficas</string>
+    
+    <!-- Comparison -->
+    <string name="compare_title">Comparar Bajadas</string>
+    <string name="compare_select_runs">Selecciona bajadas para comparar</string>
+    <string name="compare_run_a">Bajada A</string>
+    <string name="compare_run_b">Bajada B</string>
+    <string name="compare_better">Mejor</string>
+    <string name="compare_worse">Peor</string>
+    <string name="compare_similar">Similar</string>
+    <string name="compare_verdict">Veredicto</string>
+    <string name="compare_smoother">Más suave</string>
+    <string name="compare_rougher">Más dura</string>
+    <string name="compare_more_stable">Más estable</string>
+    <string name="compare_less_stable">Menos estable</string>
+    
+    <!-- Charts -->
+    <string name="charts_title">Gráficas</string>
+    <string name="charts_impact">Impacto (g)</string>
+    <string name="charts_harshness">Dureza (RMS)</string>
+    <string name="charts_stability">Estabilidad</string>
+    <string name="charts_speed">Velocidad (km/h)</string>
+    <string name="charts_slope">Pendiente (%)</string>
+    <string name="charts_x_axis">Distancia del Track (%)</string>
+    
+    <!-- Events -->
+    <string name="events_title">Eventos</string>
+    <string name="events_impact">Impacto</string>
+    <string name="events_landing">Aterrizaje</string>
+    <string name="events_jump">Salto</string>
+    <string name="event_at">al %s%%</string>
+    
+    <!-- History -->
+    <string name="history_title">Historial</string>
+    <string name="history_no_runs">Sin bajadas grabadas aún</string>
+    <string name="history_filter_all">Todas</string>
+    <string name="history_filter_week">Esta Semana</string>
+    <string name="history_filter_month">Este Mes</string>
+    
+    <!-- Metrics -->
+    <string name="metric_g">g</string>
+    <string name="metric_ms">m/s²</string>
+    <string name="metric_kmh">km/h</string>
+    <string name="metric_m">m</string>
+    <string name="metric_percent">%</string>
+    
+    <!-- Permissions -->
+    <string name="permission_location_title">Permiso de Ubicación</string>
+    <string name="permission_location_message">DH Meter necesita permiso de ubicación para rastrear tus bajadas y medir la distancia.</string>
+    <string name="permission_location_denied">Se requiere permiso de ubicación para grabar bajadas.</string>
+    <string name="permission_activity_title">Reconocimiento de Actividad</string>
+    <string name="permission_activity_message">Esto ayuda a detectar cuando te estás moviendo.</string>
+    
+    <!-- Notifications -->
+    <string name="notification_channel_recording">Grabación</string>
+    <string name="notification_channel_recording_desc">Muestra cuando se está grabando una bajada</string>
+    <string name="notification_recording_title">Grabando bajada</string>
+    <string name="notification_recording_text">%1$s | %2$s</string>
+    
+    <!-- Validation -->
+    <string name="validation_too_short">La bajada es muy corta (mínimo 30 segundos)</string>
+    <string name="validation_no_movement">No se detectó suficiente movimiento</string>
+    <string name="validation_no_descent">No se detectó descenso</string>
+    <string name="validation_poor_gps">La calidad del GPS es muy baja</string>
+    <string name="validation_poor_signal">La calidad de la señal del sensor es baja</string>
+    
+    <!-- About -->
+    <string name="about_title">Acerca de DH Meter</string>
+    <string name="about_version">Versión %s</string>
+    <string name="about_description">App de telemetría para bicicleta de montaña downhill para analizar y comparar bajadas usando los sensores del teléfono.</string>
+</resources>
