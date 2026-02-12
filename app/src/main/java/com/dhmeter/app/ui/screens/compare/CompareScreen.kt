@@ -1,6 +1,7 @@
 package com.dhmeter.app.ui.screens.compare
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -21,8 +22,21 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dhmeter.app.ui.theme.*
 import com.dhmeter.domain.model.*
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.Polyline
+import com.google.maps.android.compose.rememberCameraPositionState
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,13 +122,6 @@ private fun MultiRunComparisonContent(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // Warning banner for invalid runs
-        val invalidRuns = comparison.runs.filter { !it.run.isValid }
-        if (invalidRuns.isNotEmpty()) {
-            InvalidRunsWarningBanner(invalidRuns)
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-        
         // Runs header (horizontal scroll for many runs)
         RunsHeader(runs = comparison.runs)
         
@@ -131,12 +138,32 @@ private fun MultiRunComparisonContent(
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(bottom = 12.dp)
         )
+        Text(
+            text = "For 0-100 metrics, lower means smoother/less punishing.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline
+        )
+        Spacer(modifier = Modifier.height(8.dp))
         
         MultiMetricsTable(
             runs = comparison.runs,
             comparisons = comparison.metricComparisons
         )
-        
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        comparison.mapComparison?.let { mapComparison ->
+            Text(
+                text = "Route Comparison",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            MapComparisonSection(
+                mapComparison = mapComparison,
+                totalRunCount = comparison.runs.size
+            )
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
         // Section analysis
@@ -148,49 +175,6 @@ private fun MultiRunComparisonContent(
             )
             
             SectionInsights(insights = comparison.sectionInsights)
-        }
-    }
-}
-
-@Composable
-private fun InvalidRunsWarningBanner(invalidRuns: List<RunWithColor>) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = YellowWarning.copy(alpha = 0.15f)
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Icon(
-                imageVector = Icons.Default.Warning,
-                contentDescription = null,
-                tint = YellowWarning
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "Comparison includes invalid run(s)",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                invalidRuns.forEach { runWithColor ->
-                    Text(
-                        text = "- ${runWithColor.label}: ${runWithColor.run.invalidReason ?: "Invalid"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Results may not be fully reliable",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
         }
     }
 }
@@ -240,15 +224,6 @@ private fun RunCard(
                     fontWeight = FontWeight.Bold,
                     color = Color(runWithColor.color)
                 )
-                if (!runWithColor.run.isValid) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        Icons.Default.Warning,
-                        contentDescription = "Invalid",
-                        tint = YellowWarning,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
             }
             Text(
                 text = dateFormat.format(Date(runWithColor.run.startedAt)),
@@ -319,6 +294,8 @@ private fun MultiMetricsTable(
     runs: List<RunWithColor>,
     comparisons: List<MultiMetricComparison>
 ) {
+    val horizontalScroll = rememberScrollState()
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -332,14 +309,14 @@ private fun MultiMetricsTable(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
+                    .horizontalScroll(horizontalScroll),
                 horizontalArrangement = Arrangement.Start
             ) {
                 Text(
                     text = "Metric",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.width(100.dp)
+                    modifier = Modifier.width(132.dp)
                 )
                 runs.forEach { runWithColor ->
                     Text(
@@ -347,7 +324,7 @@ private fun MultiMetricsTable(
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(runWithColor.color),
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.width(70.dp)
+                        modifier = Modifier.width(80.dp)
                     )
                 }
             }
@@ -356,38 +333,314 @@ private fun MultiMetricsTable(
             
             // Metric rows
             comparisons.forEach { comparison ->
-                MultiMetricRow(comparison = comparison)
+                MultiMetricRow(
+                    comparison = comparison,
+                    horizontalScroll = horizontalScroll
+                )
             }
         }
     }
 }
 
 @Composable
-private fun MultiMetricRow(comparison: MultiMetricComparison) {
+private fun MapComparisonSection(
+    mapComparison: MapComparisonData,
+    totalRunCount: Int
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (mapComparison.runs.size < totalRunCount) {
+            Text(
+                text = "Showing ${mapComparison.runs.size}/$totalRunCount runs with GPS route data.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+
+        Text(
+            text = "Split deltas are versus ${mapComparison.runs.firstOrNull()?.runLabel ?: "Run 1"} (baseline), similar to live race sectors.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline
+        )
+        if (!mapComparison.hasMeasuredSplitTiming) {
+            Text(
+                text = "Some runs lack timing profile data; split deltas are estimated from total duration.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            RouteOverlayMap(
+                mapComparison = mapComparison,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(260.dp)
+            )
+        }
+
+        SplitDeltaTable(mapComparison = mapComparison)
+    }
+}
+
+@Composable
+private fun RouteOverlayMap(
+    mapComparison: MapComparisonData,
+    modifier: Modifier = Modifier
+) {
+    val runs = mapComparison.runs
+    if (runs.isEmpty()) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Text("No route data available")
+        }
+        return
+    }
+
+    val allPoints = remember(runs) {
+        runs.flatMap { run -> run.polyline.points.map { LatLng(it.lat, it.lon) } }
+    }
+    val baselinePoints = runs.first().polyline.points
+    var mapLoaded by remember { mutableStateOf(false) }
+    val boundsBuilder = remember(allPoints) {
+        if (allPoints.isEmpty()) null else LatLngBounds.builder().apply {
+            allPoints.forEach { include(it) }
+        }
+    }
+    val cameraPositionState = rememberCameraPositionState {
+        val firstPoint = allPoints.firstOrNull()
+        if (firstPoint != null) {
+            position = CameraPosition.fromLatLngZoom(firstPoint, 14f)
+        }
+    }
+
+    LaunchedEffect(boundsBuilder, mapLoaded) {
+        if (!mapLoaded) return@LaunchedEffect
+        boundsBuilder?.let { builder ->
+            runCatching {
+                cameraPositionState.animate(
+                    CameraUpdateFactory.newLatLngBounds(builder.build(), 90)
+                )
+            }
+        }
+    }
+
+    GoogleMap(
+        modifier = modifier,
+        cameraPositionState = cameraPositionState,
+        properties = MapProperties(),
+        uiSettings = MapUiSettings(
+            zoomControlsEnabled = true,
+            mapToolbarEnabled = true,
+            compassEnabled = true
+        ),
+        onMapLoaded = { mapLoaded = true }
+    ) {
+        runs.forEachIndexed { index, run ->
+            val polylinePoints = run.polyline.points.map { LatLng(it.lat, it.lon) }
+            if (polylinePoints.size >= 2) {
+                Polyline(
+                    points = polylinePoints,
+                    color = Color(run.color),
+                    width = if (index == mapComparison.baselineRunIndex) 10f else 7f,
+                    zIndex = if (index == mapComparison.baselineRunIndex) 2f else 1f
+                )
+            }
+        }
+
+        baselinePoints.firstOrNull()?.let { start ->
+            Marker(
+                state = MarkerState(LatLng(start.lat, start.lon)),
+                title = "Start",
+                icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
+            )
+        }
+        baselinePoints.lastOrNull()?.let { end ->
+            Marker(
+                state = MarkerState(LatLng(end.lat, end.lon)),
+                title = "Finish",
+                icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
+            )
+        }
+
+        // Sector markers (S1..Sn) based on baseline route.
+        mapComparison.sections.dropLast(1).forEach { section ->
+            findPointNearDistPct(baselinePoints, section.endDistPct)?.let { point ->
+                Marker(
+                    state = MarkerState(LatLng(point.lat, point.lon)),
+                    title = "S${section.sectionIndex}",
+                    snippet = "${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SplitDeltaTable(mapComparison: MapComparisonData) {
+    val horizontalScroll = rememberScrollState()
+    val baselineIndex = mapComparison.baselineRunIndex
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(horizontalScroll),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Section",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.width(132.dp)
+                )
+                mapComparison.runs.forEach { run ->
+                    Text(
+                        text = run.runLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(run.color),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.width(100.dp)
+                    )
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            mapComparison.sections.forEach { section ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .horizontalScroll(horizontalScroll),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "S${section.sectionIndex} (${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%)",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.width(132.dp)
+                    )
+
+                    section.sectionTimesMs.forEachIndexed { runIndex, splitMs ->
+                        val isBest = section.bestRunIndex == runIndex
+                        val delta = section.deltaVsBaselineMs.getOrNull(runIndex)
+                        val deltaText = when {
+                            runIndex == baselineIndex -> formatMs(splitMs)
+                            delta != null -> formatSignedDelta(delta)
+                            else -> "--"
+                        }
+                        val color = when {
+                            runIndex == baselineIndex -> MaterialTheme.colorScheme.onSurface
+                            delta == null -> MaterialTheme.colorScheme.outline
+                            delta < 0L -> GreenPositive
+                            delta > 0L -> RedNegative
+                            else -> MaterialTheme.colorScheme.onSurface
+                        }
+
+                        Column(
+                            modifier = Modifier.width(100.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = if (isBest) "* $deltaText" else deltaText,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = if (isBest) FontWeight.Bold else FontWeight.Normal,
+                                color = color,
+                                textAlign = TextAlign.Center
+                            )
+                            if (runIndex != baselineIndex) {
+                                Text(
+                                    text = formatMs(splitMs),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(horizontalScroll),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Total delta",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.width(132.dp)
+                )
+                mapComparison.totalDeltaVsBaselineMs.forEachIndexed { runIndex, delta ->
+                    val text = when {
+                        runIndex == baselineIndex -> "Baseline"
+                        delta == null -> "--"
+                        else -> formatSignedDelta(delta)
+                    }
+                    val color = when {
+                        runIndex == baselineIndex -> MaterialTheme.colorScheme.outline
+                        delta == null -> MaterialTheme.colorScheme.outline
+                        delta < 0L -> GreenPositive
+                        delta > 0L -> RedNegative
+                        else -> MaterialTheme.colorScheme.onSurface
+                    }
+
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = color,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.width(100.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MultiMetricRow(
+    comparison: MultiMetricComparison,
+    horizontalScroll: ScrollState
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .horizontalScroll(rememberScrollState()),
+            .horizontalScroll(horizontalScroll),
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = comparison.metricName,
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.width(100.dp)
+            modifier = Modifier.width(132.dp)
         )
         
         comparison.values.forEachIndexed { index, value ->
             val isBest = comparison.bestRunIndex == index
             val displayValue = if (comparison.metricName == "Duration" && value != null) {
                 formatDuration((value * 1000).toLong())
+            } else if (comparison.metricName.contains("(0-100)") && value != null) {
+                String.format(Locale.US, "%.0f", value)
             } else {
                 value?.let { String.format(Locale.US, "%.2f", it) } ?: "--"
             }
             
             Box(
-                modifier = Modifier.width(70.dp),
+                modifier = Modifier.width(80.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -439,4 +692,31 @@ private fun formatDuration(ms: Long): String {
     val secs = seconds % 60
     return String.format(Locale.US, "%d:%02d", minutes, secs)
 }
+
+private fun formatMs(value: Long?): String {
+    value ?: return "--"
+    return if (value >= 1000L) {
+        String.format(Locale.US, "%.2f s", value / 1000f)
+    } else {
+        "${value} ms"
+    }
+}
+
+private fun formatSignedDelta(deltaMs: Long): String {
+    if (deltaMs == 0L) return "0 ms"
+    val sign = if (deltaMs > 0) "+" else "-"
+    val absMs = abs(deltaMs)
+    val value = if (absMs >= 1000L) {
+        String.format(Locale.US, "%.2f s", absMs / 1000f)
+    } else {
+        "$absMs ms"
+    }
+    return sign + value
+}
+
+private fun findPointNearDistPct(points: List<GpsPoint>, targetPct: Float): GpsPoint? {
+    if (points.isEmpty()) return null
+    return points.minByOrNull { point -> abs(point.distPct - targetPct) }
+}
+
 

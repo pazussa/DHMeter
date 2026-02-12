@@ -13,6 +13,7 @@ import com.dhmeter.domain.usecase.GetRunSeriesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -40,11 +41,18 @@ class RunSummaryViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(RunSummaryUiState())
     val uiState: StateFlow<RunSummaryUiState> = _uiState.asStateFlow()
+    private var loadJob: Job? = null
+    private var compareJob: Job? = null
+    private var chartsJob: Job? = null
 
     fun loadRun(runId: String) {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        compareJob?.cancel()
+        chartsJob?.cancel()
+        loadJob = viewModelScope.launch {
             _uiState.update {
                 it.copy(
+                    run = null,
                     isLoading = true,
                     error = null,
                     comparableRuns = emptyList(),
@@ -62,16 +70,16 @@ class RunSummaryViewModel @Inject constructor(
                     _uiState.update { it.copy(run = run, isLoading = false, isChartsLoading = true) }
                     
                     // Load comparable runs
-                    viewModelScope.launch {
+                    compareJob = viewModelScope.launch {
                         loadComparableRuns(run.trackId, runId)
                     }
 
-                    viewModelScope.launch {
+                    chartsJob = viewModelScope.launch {
                         loadRunCharts(runId)
                     }
                 }
                 .onFailure { e ->
-                    _uiState.update { it.copy(error = e.message, isLoading = false) }
+                    _uiState.update { it.copy(run = null, error = e.message, isLoading = false) }
                 }
         }
     }

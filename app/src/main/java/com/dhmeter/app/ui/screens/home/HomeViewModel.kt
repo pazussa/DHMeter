@@ -3,7 +3,6 @@ package com.dhmeter.app.ui.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dhmeter.domain.model.Track
-import com.dhmeter.domain.repository.PreferencesRepository
 import com.dhmeter.domain.usecase.CreateTrackUseCase
 import com.dhmeter.domain.usecase.GetTracksUseCase
 import com.dhmeter.sensing.SensorAvailability
@@ -23,16 +22,14 @@ data class HomeUiState(
     val tracks: List<Track> = emptyList(),
     val sensorStatus: SensorStatus = SensorStatus(),
     val isLoading: Boolean = true,
-    val error: String? = null,
-    val includeInvalidRuns: Boolean = false
+    val error: String? = null
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val getTracksUseCase: GetTracksUseCase,
     private val createTrackUseCase: CreateTrackUseCase,
-    private val sensorAvailability: SensorAvailability,
-    private val preferencesRepository: PreferencesRepository
+    private val sensorAvailability: SensorAvailability
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -41,7 +38,6 @@ class HomeViewModel @Inject constructor(
     init {
         loadTracks()
         checkSensors()
-        observePreferences()
     }
 
     private fun loadTracks() {
@@ -64,18 +60,6 @@ class HomeViewModel @Inject constructor(
             hasGps = sensorAvailability.hasGps()
         )
         _uiState.update { it.copy(sensorStatus = status) }
-    }
-
-    private fun observePreferences() {
-        viewModelScope.launch {
-            preferencesRepository.includeInvalidRuns.collect { include ->
-                _uiState.update { it.copy(includeInvalidRuns = include) }
-            }
-        }
-    }
-
-    fun setIncludeInvalidRuns(value: Boolean) {
-        preferencesRepository.setIncludeInvalidRuns(value)
     }
 
     fun createTrack(name: String, locationHint: String?) {

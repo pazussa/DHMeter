@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dhmeter.app.ui.metrics.normalizeBurdenScore
 import com.dhmeter.charts.components.ComparisonLineChart
 import com.dhmeter.charts.components.EventMarkers
 import com.dhmeter.charts.components.HeatmapBar
@@ -28,6 +29,8 @@ import com.dhmeter.domain.model.RunSeries
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.EventType
 import com.dhmeter.domain.model.SeriesType
+import kotlin.math.abs
+import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -214,6 +217,11 @@ private fun MultiRunChartSection(
             text = title,
             style = MaterialTheme.typography.titleMedium
         )
+        Text(
+            text = "Burden score: 0 = smoother, 100 = more punishing (lower is better).",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline
+        )
 
         val chartSeriesList = runs.mapNotNull { run ->
             val series = seriesSelector(run)
@@ -244,6 +252,49 @@ private fun MultiRunChartSection(
                     xMax = 100f,
                     showLabels = false
                 )
+            }
+
+            // Delta chart gives higher precision for A/B comparisons.
+            if (runs.size == 2) {
+                val runA = runs[0]
+                val runB = runs[1]
+                val deltaPoints = buildDeltaPoints(
+                    pointsA = seriesSelector(runA)?.toChartPoints().orEmpty(),
+                    pointsB = seriesSelector(runB)?.toChartPoints().orEmpty()
+                )
+                if (deltaPoints.isNotEmpty()) {
+                    val maxAbsDelta = deltaPoints.maxOfOrNull { abs(it.y) } ?: 0f
+                    val axis = max(10f, (kotlin.math.ceil(maxAbsDelta / 10f) * 10f).toFloat())
+                        .coerceAtMost(100f)
+                    val peak = deltaPoints.maxByOrNull { abs(it.y) }
+
+                    Text(
+                        text = "Delta (${runB.runLabel} - ${runA.runLabel})",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    ComparisonLineChart(
+                        series = listOf(
+                            ChartSeries(
+                                label = "Delta",
+                                points = deltaPoints,
+                                color = Color(0xFF8E24AA)
+                            )
+                        ),
+                        xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
+                        yAxisConfig = AxisConfig(-axis, axis, label = "Delta"),
+                        showLegend = false,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                    )
+                    peak?.let {
+                        Text(
+                            text = "Peak delta ${String.format("%.1f", it.y)} at ${String.format("%.0f", it.x)}%. Positive = ${runB.runLabel} harsher.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
             }
         } else {
             Text(
@@ -276,13 +327,20 @@ private fun RunSeries.toHeatmapPoints(): List<HeatmapPoint> {
 }
 
 private fun normalizeToScore(seriesType: SeriesType, value: Float): Float {
-    val normalized = when (seriesType) {
-        SeriesType.IMPACT_DENSITY -> (value / 5f) * 100f
-        SeriesType.HARSHNESS -> (value / 3f) * 100f
-        SeriesType.STABILITY -> (value / 0.5f) * 100f
-        SeriesType.SPEED_TIME -> value
+    return normalizeBurdenScore(seriesType, value)
+}
+
+private fun buildDeltaPoints(
+    pointsA: List<ChartPoint>,
+    pointsB: List<ChartPoint>
+): List<ChartPoint> {
+    val size = minOf(pointsA.size, pointsB.size)
+    if (size == 0) return emptyList()
+    return (0 until size).map { index ->
+        val x = ((pointsA[index].x + pointsB[index].x) / 2f).coerceIn(0f, 100f)
+        val delta = (pointsB[index].y - pointsA[index].y).coerceIn(-100f, 100f)
+        ChartPoint(x = x, y = delta)
     }
-    return normalized.coerceIn(0f, 100f)
 }
 
 /**
@@ -334,4 +392,5 @@ private fun String.toMarkerColor(): Color {
         else -> Color(0xFF9C27B0)                        // Purple
     }
 }
+
 

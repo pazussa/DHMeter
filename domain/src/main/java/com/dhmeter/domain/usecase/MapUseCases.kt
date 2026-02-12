@@ -103,6 +103,17 @@ class GetRunMapDataUseCase @Inject constructor(
         percentiles: MetricPercentiles
     ): List<MapSegment> {
         if (polyline.points.size < 2) return emptyList()
+
+        if (values.isEmpty()) {
+            return polyline.points.zipWithNext { start, end ->
+                MapSegment(
+                    start = start,
+                    end = end,
+                    distPct = (start.distPct + end.distPct) / 2f,
+                    severity = SegmentSeverity.MEDIUM
+                )
+            }
+        }
         
         return polyline.points.zipWithNext { start, end ->
             val midPct = (start.distPct + end.distPct) / 2

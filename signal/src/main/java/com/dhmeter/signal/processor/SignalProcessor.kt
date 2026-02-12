@@ -62,9 +62,13 @@ class SignalProcessor @Inject constructor(
         // Calculate summary metrics
         // Sum all impact densities to get cumulative impact score for the run
         val impactScore = windowResults.impactDensity.sum()
-        val harshnessAvg = windowResults.harshnessRms.average().toFloat()
+        val harshnessAvg = if (windowResults.harshnessRms.isNotEmpty()) {
+            windowResults.harshnessRms.average().toFloat()
+        } else 0f
         val harshnessP90 = percentile(windowResults.harshnessRms, 90)
-        val stabilityScore = windowResults.stabilityVar.average().toFloat()
+        val stabilityScore = if (windowResults.stabilityVar.isNotEmpty()) {
+            windowResults.stabilityVar.average().toFloat()
+        } else 0f
         
         // Calculate landing quality score
         val landingEvents = events.filter { it.type == EventType.LANDING }
@@ -82,8 +86,6 @@ class SignalProcessor @Inject constructor(
             startedAt = currentTimeMs - durationMs,
             endedAt = currentTimeMs,
             durationMs = durationMs,
-            isValid = validation.isValid,
-            invalidReason = validation.issues.firstOrNull()?.description,
             deviceModel = handle.deviceModel,
             sampleRateAccelHz = handle.accelSampleRate,
             sampleRateGyroHz = handle.gyroSampleRate,
@@ -99,12 +101,19 @@ class SignalProcessor @Inject constructor(
             slopeClassAvg = null // No slope in MVP2
         )
 
-        // Create series (3 charts: Impact, Harshness, Stability - no Slope)
-        val series = listOf(
+        // Create series (3 burden charts + optional timing profile for split deltas)
+        val series = mutableListOf(
             createSeries(runId, SeriesType.IMPACT_DENSITY, windowResults.impactDensity, windowResults.distPcts),
             createSeries(runId, SeriesType.HARSHNESS, windowResults.harshnessRms, windowResults.distPcts),
             createSeries(runId, SeriesType.STABILITY, windowResults.stabilityVar, windowResults.distPcts)
         )
+        createTimingSeries(
+            runId = runId,
+            gpsSamples = gpsSamples,
+            totalDistanceM = totalDistance,
+            startTimeNs = handle.startTimeNs,
+            durationMs = durationMs
+        )?.let { series.add(it) }
 
         // Set runId on events
         val eventsWithRunId = events.map { it.copy(runId = runId) }
@@ -117,6 +126,64 @@ class SignalProcessor @Inject constructor(
         )
 
         ProcessedRun(run, series, eventsWithRunId, gpsPolyline)
+    }
+
+    private fun createTimingSeries(
+        runId: String,
+        gpsSamples: List<com.dhmeter.sensing.data.GpsSample>,
+        totalDistanceM: Float,
+        startTimeNs: Long,
+        durationMs: Long
+    ): RunSeries? {
+        if (durationMs <= 0L) return null
+        if (gpsSamples.size < 2 || totalDistanceM <= 0f) {
+            return createSeries(
+                runId = runId,
+                type = SeriesType.SPEED_TIME,
+                values = listOf(0f, durationMs / 1000f),
+                distPcts = listOf(0f, 100f)
+            )
+        }
+
+        val distPcts = ArrayList<Float>(gpsSamples.size)
+        val elapsedSec = ArrayList<Float>(gpsSamples.size)
+        var cumulativeDistanceM = 0.0
+
+        distPcts.add(0f)
+        elapsedSec.add(((gpsSamples.first().timestampNs - startTimeNs).coerceAtLeast(0L) / 1_000_000_000.0).toFloat())
+
+        for (i in 1 until gpsSamples.size) {
+            val prev = gpsSamples[i - 1]
+            val curr = gpsSamples[i]
+            cumulativeDistanceM += haversineDistance(
+                prev.latitude,
+                prev.longitude,
+                curr.latitude,
+                curr.longitude
+            )
+            val distPct = ((cumulativeDistanceM / totalDistanceM) * 100.0).toFloat().coerceIn(0f, 100f)
+            distPcts.add(distPct)
+            elapsedSec.add(((curr.timestampNs - startTimeNs).coerceAtLeast(0L) / 1_000_000_000.0).toFloat())
+        }
+
+        // Ensure the profile always spans full 0..100% and full duration for robust split interpolation.
+        val durationSec = durationMs / 1000f
+        if (distPcts.lastOrNull()?.let { it < 99.5f } != false) {
+            distPcts.add(100f)
+            elapsedSec.add(durationSec)
+        } else {
+            val lastIndex = elapsedSec.lastIndex
+            if (lastIndex >= 0) {
+                elapsedSec[lastIndex] = maxOf(elapsedSec[lastIndex], durationSec)
+            }
+        }
+
+        return createSeries(
+            runId = runId,
+            type = SeriesType.SPEED_TIME,
+            values = elapsedSec,
+            distPcts = distPcts
+        )
     }
 
     private fun processWindows(

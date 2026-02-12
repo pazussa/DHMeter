@@ -90,6 +90,19 @@ fun HistoryScreen(
             }
         }
     }
+
+    uiState.error?.let { message ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearError() },
+            title = { Text("Error") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearError() }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -164,3 +177,4 @@ private fun TrackHistoryCard(
         }
     }
 }
+

@@ -204,6 +204,17 @@ fun RecordingScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline
                 )
+                if (uiState.canRecoverFromProcessing) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    TextButton(
+                        onClick = { viewModel.resetStuckProcessing() },
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Icon(Icons.Default.RestartAlt, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Reset processing")
+                    }
+                }
             }
         }
     }
@@ -278,6 +289,13 @@ private fun AutoSegmentsCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (segmentCount > 0) {
+                Text(
+                    text = "Auto-start triggers near start, above ~9 km/h, and aligned direction.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
         }
     }
 }
@@ -441,8 +459,8 @@ private fun LiveMetricsBarsCard(
     impactLevel: Float,
     harshnessLevel: Float,
     stabilityLevel: Float,
-    isPreview: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isPreview: Boolean = false
 ) {
     Card(
         modifier = modifier,

@@ -8,7 +8,8 @@ data class MultiRunComparisonResult(
     val runs: List<RunWithColor>,
     val metricComparisons: List<MultiMetricComparison>,
     val verdict: MultiRunVerdict,
-    val sectionInsights: List<String> = emptyList()
+    val sectionInsights: List<String> = emptyList(),
+    val mapComparison: MapComparisonData? = null
 )
 
 /**
@@ -28,6 +29,34 @@ data class MultiMetricComparison(
     val values: List<Float?>, // One value per run, null if not available
     val bestRunIndex: Int?, // Index of the run with best value (null if no valid values)
     val lowerIsBetter: Boolean
+)
+
+/**
+ * Route overlay and split-time analysis for run-vs-run map comparison.
+ * Baseline is always run index 0 (Run 1).
+ */
+data class MapComparisonData(
+    val baselineRunIndex: Int = 0,
+    val runs: List<MapComparisonRun>,
+    val sections: List<MapSectionDelta>,
+    val totalDeltaVsBaselineMs: List<Long?>, // per run, baseline = 0
+    val hasMeasuredSplitTiming: Boolean
+)
+
+data class MapComparisonRun(
+    val runId: String,
+    val runLabel: String,
+    val color: Long,
+    val polyline: GpsPolyline
+)
+
+data class MapSectionDelta(
+    val sectionIndex: Int,
+    val startDistPct: Float,
+    val endDistPct: Float,
+    val sectionTimesMs: List<Long?>, // per run
+    val deltaVsBaselineMs: List<Long?>, // per run
+    val bestRunIndex: Int? // run with lowest section time
 )
 
 /**

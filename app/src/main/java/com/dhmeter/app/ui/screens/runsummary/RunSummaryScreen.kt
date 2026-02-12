@@ -1,6 +1,7 @@
 package com.dhmeter.app.ui.screens.runsummary
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,6 +17,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dhmeter.app.ui.metrics.formatScore0to100
+import com.dhmeter.app.ui.metrics.normalizeBurdenScore
+import com.dhmeter.app.ui.metrics.runMetricQualityScore
+import com.dhmeter.app.ui.metrics.runOverallQualityScore
 import com.dhmeter.app.ui.theme.*
 import com.dhmeter.charts.components.ComparisonLineChart
 import com.dhmeter.charts.components.EventMarkers
@@ -143,15 +148,6 @@ private fun RunSummaryContent(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
-        // Validity status
-        if (!run.isValid) {
-            InvalidRunBanner(
-                reason = run.invalidReason ?: "Unknown reason",
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
         // Run info header
         RunInfoHeader(run = run)
         
@@ -204,43 +200,6 @@ private fun RunSummaryContent(
             setupNote = run.setupNote,
             conditionsNote = run.conditionsNote
         )
-    }
-}
-
-@Composable
-private fun InvalidRunBanner(
-    reason: String,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = RedNegative.copy(alpha = 0.1f)
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Warning,
-                contentDescription = null,
-                tint = RedNegative
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "Invalid Run",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = RedNegative
-                )
-                Text(
-                    text = reason,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
     }
 }
 
@@ -342,26 +301,42 @@ private fun StatItem(
 
 @Composable
 private fun MetricsGrid(run: Run) {
+    val impactQuality = runMetricQualityScore(SeriesType.IMPACT_DENSITY, run.impactScore)
+    val harshnessQuality = runMetricQualityScore(SeriesType.HARSHNESS, run.harshnessAvg)
+    val stabilityQuality = runMetricQualityScore(SeriesType.STABILITY, run.stabilityScore)
+    val overallQuality = runOverallQualityScore(run)
+
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        QualityOverviewCard(
+            overallQuality = overallQuality,
+            impactQuality = impactQuality,
+            harshnessQuality = harshnessQuality,
+            stabilityQuality = stabilityQuality
+        )
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             MetricCard(
                 icon = Icons.Default.Bolt,
-                label = "Impact Score",
-                value = run.impactScore?.let { String.format(Locale.US, "%.1f", it) } ?: "--",
-                description = "Lower is smoother",
+                label = "Impact",
+                score = impactQuality,
+                rawValue = run.impactScore?.let { String.format(Locale.US, "%.2f", it) },
+                rawLabel = "raw density",
+                description = "Higher quality = smoother",
                 color = ChartImpact,
                 modifier = Modifier.weight(1f)
             )
             MetricCard(
                 icon = Icons.Default.Vibration,
                 label = "Harshness",
-                value = run.harshnessAvg?.let { String.format(Locale.US, "%.2f", it) } ?: "--",
-                description = "Avg RMS vibration",
+                score = harshnessQuality,
+                rawValue = run.harshnessAvg?.let { String.format(Locale.US, "%.2f", it) },
+                rawLabel = "raw RMS",
+                description = "Higher quality = less vibration",
                 color = ChartHarshness,
                 modifier = Modifier.weight(1f)
             )
@@ -371,8 +346,10 @@ private fun MetricsGrid(run: Run) {
         MetricCard(
             icon = Icons.Default.Balance,
             label = "Stability",
-            value = run.stabilityScore?.let { String.format(Locale.US, "%.1f", it) } ?: "--",
-            description = "Body/bike control (lower is better)",
+            score = stabilityQuality,
+            rawValue = run.stabilityScore?.let { String.format(Locale.US, "%.2f", it) },
+            rawLabel = "raw variance",
+            description = "Higher quality = steadier control",
             color = ChartStability,
             modifier = Modifier.fillMaxWidth()
         )
@@ -383,7 +360,9 @@ private fun MetricsGrid(run: Run) {
 private fun MetricCard(
     icon: ImageVector,
     label: String,
-    value: String,
+    score: Float?,
+    rawValue: String?,
+    rawLabel: String,
     description: String,
     color: Color,
     modifier: Modifier = Modifier
@@ -415,15 +394,73 @@ private fun MetricCard(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = value,
+                text = "${formatScore0to100(score)}/100",
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onSurface
             )
+            if (rawValue != null) {
+                Text(
+                    text = "$rawLabel: $rawValue",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
             Text(
                 text = description,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
             )
+        }
+    }
+}
+
+@Composable
+private fun QualityOverviewCard(
+    overallQuality: Float?,
+    impactQuality: Float?,
+    harshnessQuality: Float?,
+    stabilityQuality: Float?
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = "Ride Quality Index",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "${formatScore0to100(overallQuality)}/100",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Based on impact, harshness and stability (higher is better).",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AssistChip(
+                    onClick = {},
+                    label = { Text("Impact ${formatScore0to100(impactQuality)}") }
+                )
+                AssistChip(
+                    onClick = {},
+                    label = { Text("Harsh ${formatScore0to100(harshnessQuality)}") }
+                )
+                AssistChip(
+                    onClick = {},
+                    label = { Text("Stab ${formatScore0to100(stabilityQuality)}") }
+                )
+            }
         }
     }
 }
@@ -535,6 +572,11 @@ private fun RunChartsSection(
             text = "Charts",
             style = MaterialTheme.typography.titleMedium
         )
+        Text(
+            text = "Chart scale is burden score: 0 = smoother/cleaner, 100 = more punishing.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline
+        )
 
         when {
             isLoading -> {
@@ -642,6 +684,15 @@ private fun SingleRunChartSection(
                 .fillMaxWidth()
                 .height(200.dp)
         )
+
+        val peakPoint = points.maxByOrNull { it.y }
+        peakPoint?.let {
+            Text(
+                text = "Peak burden ${String.format(Locale.US, "%.0f", it.y)} at ${String.format(Locale.US, "%.0f", it.x)}% of run",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
     }
 }
 
@@ -660,13 +711,7 @@ private fun RunSeries.toHeatmapPoints(): List<HeatmapPoint> {
 }
 
 private fun normalizeToScore(seriesType: SeriesType, value: Float): Float {
-    val normalized = when (seriesType) {
-        SeriesType.IMPACT_DENSITY -> (value / 5f) * 100f
-        SeriesType.HARSHNESS -> (value / 3f) * 100f
-        SeriesType.STABILITY -> (value / 0.5f) * 100f
-        SeriesType.SPEED_TIME -> value
-    }
-    return normalized.coerceIn(0f, 100f)
+    return normalizeBurdenScore(seriesType, value)
 }
 
 private fun List<RunEvent>.toChartMarkers(): List<ChartEventMarker> {
@@ -720,34 +765,18 @@ private fun CompareRunDialog(
         onDismissRequest = onDismiss,
         title = { Text("Select run to compare") },
         text = {
-            Column {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 runs.forEach { run ->
                     ListItem(
                         headlineContent = { 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(dateFormat.format(Date(run.startedAt)))
-                                if (!run.isValid) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Icon(
-                                        Icons.Default.Warning,
-                                        contentDescription = "Invalid run",
-                                        tint = RedNegative,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
+                            Text(dateFormat.format(Date(run.startedAt)))
                         },
                         supportingContent = { 
-                            Column {
-                                Text("Duration: ${formatDuration(run.durationMs)}")
-                                if (!run.isValid) {
-                                    Text(
-                                        text = run.invalidReason ?: "Invalid",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = RedNegative
-                                    )
-                                }
-                            }
+                            Text("Duration: ${formatDuration(run.durationMs)}")
                         },
                         modifier = Modifier.clickable { onSelect(run.runId) }
                     )
@@ -768,4 +797,5 @@ private fun formatDuration(ms: Long): String {
     val secs = seconds % 60
     return String.format(Locale.US, "%d:%02d", minutes, secs)
 }
+
 

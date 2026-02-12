@@ -1,7 +1,6 @@
 package com.dhmeter.domain.usecase
 
 import com.dhmeter.domain.model.*
-import com.dhmeter.domain.repository.PreferencesRepository
 import com.dhmeter.domain.repository.RunRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -27,19 +26,15 @@ class GetRunByIdUseCase @Inject constructor(
 
 /**
  * Get comparable runs for a given track.
- * Returns runs according to the "include invalid runs" preference.
+ * Returns all runs except the currently opened run.
  */
 class GetComparableRunsUseCase @Inject constructor(
-    private val runRepository: RunRepository,
-    private val preferencesRepository: PreferencesRepository
+    private val runRepository: RunRepository
 ) {
     suspend operator fun invoke(trackId: String, excludeRunId: String): Result<List<Run>> {
         return try {
-            val includeInvalid = preferencesRepository.getIncludeInvalidRuns()
-
             val runs = runRepository.getRunsByTrack(trackId).first()
                 .filter { it.runId != excludeRunId }
-                .filter { includeInvalid || it.isValid }
                 .sortedByDescending { it.startedAt }
 
             Result.success(runs)

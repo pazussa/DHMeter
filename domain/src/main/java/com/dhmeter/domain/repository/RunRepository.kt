@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.Flow
 interface RunRepository {
     fun getRunsByTrack(trackId: String): Flow<List<Run>>
     suspend fun getRunById(runId: String): Run?
-    suspend fun getValidRunsByTrack(trackId: String): List<Run>
     suspend fun getRunCountByTrack(trackId: String): Int
     suspend fun insertRun(run: Run)
     suspend fun updateRun(run: Run)

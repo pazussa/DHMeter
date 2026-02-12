@@ -3,18 +3,17 @@ package com.dhmeter.app.ui.screens.trackdetail
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dhmeter.app.ui.theme.*
+import com.dhmeter.app.ui.metrics.formatScore0to100
+import com.dhmeter.app.ui.metrics.runOverallQualityScore
 import com.dhmeter.domain.model.Run
 import java.text.SimpleDateFormat
 import java.util.*
@@ -192,6 +191,19 @@ fun TrackDetailScreen(
             }
         }
     }
+
+    uiState.error?.let { message ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearError() },
+            title = { Text("Error") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearError() }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -265,20 +277,11 @@ private fun RunCard(
     onSelect: () -> Unit
 ) {
     val dateFormat = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
+    val overallQuality = runOverallQualityScore(run)
     
     Card(
         onClick = onSelect,
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (isCompareMode) {
-                    Modifier.selectable(
-                        selected = isSelected,
-                        onClick = onSelect,
-                        role = Role.Checkbox
-                    )
-                } else Modifier
-            ),
+        modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) {
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
@@ -294,16 +297,15 @@ private fun RunCard(
             if (isCompareMode) {
                 Checkbox(
                     checked = isSelected,
-                    onCheckedChange = null
+                    onCheckedChange = { onSelect() }
                 )
                 Spacer(modifier = Modifier.width(8.dp))
             }
             
-            // Validity indicator
             Icon(
-                imageVector = if (run.isValid) Icons.Default.CheckCircle else Icons.Default.Warning,
+                imageVector = Icons.Default.DirectionsBike,
                 contentDescription = null,
-                tint = if (run.isValid) GreenPositive else RedNegative,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(24.dp)
             )
             
@@ -321,22 +323,15 @@ private fun RunCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (!run.isValid) {
-                    Text(
-                        text = run.invalidReason ?: "Invalid",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = RedNegative
-                    )
-                }
             }
             
             // Quick metrics (shown for all runs)
             Column(
                 horizontalAlignment = Alignment.End
             ) {
-                run.impactScore?.let {
+                overallQuality?.let {
                     Text(
-                        text = "Impact: ${String.format(Locale.US, "%.1f", it)}",
+                        text = "Quality: ${formatScore0to100(it)}/100",
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
@@ -366,3 +361,4 @@ private fun formatDuration(ms: Long): String {
     val secs = seconds % 60
     return String.format(Locale.US, "%d:%02d", minutes, secs)
 }
+

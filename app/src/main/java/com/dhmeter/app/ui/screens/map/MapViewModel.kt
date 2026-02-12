@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.dhmeter.domain.model.*
 import com.dhmeter.domain.usecase.GetRunMapDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -35,11 +36,23 @@ class MapViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(MapUiState())
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()
+    private var loadJob: Job? = null
+    private var metricJob: Job? = null
 
     fun loadMapData(runId: String) {
-        _uiState.update { it.copy(runId = runId, isLoading = true) }
+        loadJob?.cancel()
+        metricJob?.cancel()
+        _uiState.update {
+            it.copy(
+                runId = runId,
+                mapData = null,
+                isLoading = true,
+                error = null,
+                selectedEvent = null
+            )
+        }
         
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             getRunMapDataUseCase(runId)
                 .onSuccess { mapData ->
                     _uiState.update { 
@@ -53,6 +66,7 @@ class MapViewModel @Inject constructor(
                 .onFailure { e ->
                     _uiState.update { 
                         it.copy(
+                            mapData = null,
                             isLoading = false,
                             error = e.message ?: "Failed to load map data"
                         )
@@ -64,24 +78,29 @@ class MapViewModel @Inject constructor(
     fun changeMetric(metric: MapMetricType) {
         val currentRunId = _uiState.value.runId
         if (currentRunId.isEmpty()) return
+        val previousMetric = _uiState.value.selectedMetric
+        metricJob?.cancel()
         
-        _uiState.update { it.copy(selectedMetric = metric, isLoading = true) }
+        _uiState.update { it.copy(selectedMetric = metric, isLoading = true, error = null) }
         
-        viewModelScope.launch {
+        metricJob = viewModelScope.launch {
             getRunMapDataUseCase.withMetric(currentRunId, metric)
                 .onSuccess { mapData ->
                     _uiState.update { 
                         it.copy(
                             mapData = mapData,
-                            isLoading = false
+                            isLoading = false,
+                            selectedEvent = null,
+                            error = if (mapData == null) "No GPS data available" else null
                         )
                     }
                 }
                 .onFailure { e ->
                     _uiState.update { 
                         it.copy(
+                            selectedMetric = previousMetric,
                             isLoading = false,
-                            error = e.message
+                            error = e.message ?: "Failed to load map data"
                         )
                     }
                 }

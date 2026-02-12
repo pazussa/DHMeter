@@ -2,7 +2,6 @@ package com.dhmeter.app.ui.screens.recording
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dhmeter.app.service.RecordingService
@@ -50,7 +49,9 @@ data class RecordingUiState(
     val liveHarshness: Float = 0f,
     val liveStability: Float = 0f,
     // Preview mode
-    val isPreviewActive: Boolean = false
+    val isPreviewActive: Boolean = false,
+    // Recovery action when processing appears stuck
+    val canRecoverFromProcessing: Boolean = false
 )
 
 @HiltViewModel
@@ -87,6 +88,9 @@ class RecordingViewModel @Inject constructor(
     private var isAutoStopInProgress: Boolean = false
     private var isStartingRecording: Boolean = false
     private var recordingStateJob: Job? = null
+    private var trackLoadJob: Job? = null
+    private var segmentLoadJob: Job? = null
+    private var processingRecoveryJob: Job? = null
     private var startCandidateSegment: TrackSegment? = null
     private var startCandidateHits: Int = 0
     private var lastPreviewLatitude: Double? = null
@@ -96,6 +100,9 @@ class RecordingViewModel @Inject constructor(
     private var lastDistanceToSegmentEndM: Double? = null
 
     fun initialize(trackId: String) {
+        trackLoadJob?.cancel()
+        segmentLoadJob?.cancel()
+        processingRecoveryJob?.cancel()
         localSegments = emptyList()
         activeAutoSegment = null
         isAutoStopInProgress = false
@@ -116,7 +123,8 @@ class RecordingViewModel @Inject constructor(
                 completedRunId = null,
                 error = null,
                 segmentCount = 0,
-                segmentStatus = "Loading local segments..."
+                segmentStatus = "Loading local segments...",
+                canRecoverFromProcessing = false
             )
         }
 
@@ -124,7 +132,7 @@ class RecordingViewModel @Inject constructor(
             recordingManager.cancelRecording()
         }
         
-        viewModelScope.launch {
+        trackLoadJob = viewModelScope.launch {
             getTrackByIdUseCase(trackId)
                 .onSuccess { track ->
                     _uiState.update { it.copy(trackName = track.name) }
@@ -134,25 +142,8 @@ class RecordingViewModel @Inject constructor(
                 }
         }
 
-        viewModelScope.launch {
-            getTrackSegmentsUseCase(trackId)
-                .onSuccess { segments ->
-                    localSegments = segments
-                    _uiState.update {
-                        it.copy(
-                            segmentCount = segments.size,
-                            segmentStatus = defaultSegmentStatus()
-                        )
-                    }
-                }
-                .onFailure { e ->
-                    _uiState.update {
-                        it.copy(
-                            error = e.message,
-                            segmentStatus = "Failed to load local segments"
-                        )
-                    }
-                }
+        segmentLoadJob = viewModelScope.launch {
+            loadLocalSegments(trackId, showLoadingStatus = true)
         }
 
         // Start live preview only if there is no active recording.
@@ -168,11 +159,13 @@ class RecordingViewModel @Inject constructor(
                     is RecordingState.Idle -> {
                         isStartingRecording = false
                         isAutoStopInProgress = false
+                        processingRecoveryJob?.cancel()
                         _uiState.update { 
                             it.copy(
                                 isRecording = false,
                                 isProcessing = false,
-                                canStartRecording = true
+                                canStartRecording = true,
+                                canRecoverFromProcessing = false
                             )
                         }
                         if (!_uiState.value.isRecording) {
@@ -181,6 +174,7 @@ class RecordingViewModel @Inject constructor(
                     }
                     is RecordingState.Recording -> {
                         isStartingRecording = false
+                        processingRecoveryJob?.cancel()
                         _uiState.update { 
                             it.copy(
                                 isRecording = true,
@@ -194,6 +188,7 @@ class RecordingViewModel @Inject constructor(
                                 liveHarshness = state.liveHarshness,
                                 liveStability = state.liveStability,
                                 isPreviewActive = false,
+                                canRecoverFromProcessing = false,
                                 segmentStatus = if (activeAutoSegment != null) {
                                     "Auto recording active on local segment"
                                 } else {
@@ -209,17 +204,21 @@ class RecordingViewModel @Inject constructor(
                                 isRecording = false,
                                 isProcessing = true,
                                 canStartRecording = false,
+                                canRecoverFromProcessing = false,
                                 segmentStatus = "Processing run data..."
                             )
                         }
+                        armProcessingRecovery()
                     }
                     is RecordingState.Completed -> {
+                        processingRecoveryJob?.cancel()
                         _uiState.update { 
                             it.copy(
                                 isRecording = false,
                                 isProcessing = false,
                                 canStartRecording = true,
                                 completedRunId = state.runId,
+                                canRecoverFromProcessing = false,
                                 segmentStatus = defaultSegmentStatus()
                             )
                         }
@@ -228,6 +227,7 @@ class RecordingViewModel @Inject constructor(
                         isStartingRecording = false
                         isAutoStopInProgress = false
                         activeAutoSegment = null
+                        processingRecoveryJob?.cancel()
                         stopForegroundRecordingService()
                         _uiState.update { 
                             it.copy(
@@ -235,6 +235,7 @@ class RecordingViewModel @Inject constructor(
                                 isProcessing = false,
                                 canStartRecording = true,
                                 error = state.message,
+                                canRecoverFromProcessing = false,
                                 segmentStatus = defaultSegmentStatus()
                             )
                         }
@@ -277,6 +278,7 @@ class RecordingViewModel @Inject constructor(
     }
 
     private fun startRecordingInternal(autoSegment: TrackSegment?) {
+        recoverFromStaleProcessingStateIfNeeded()
         if (_uiState.value.isRecording || _uiState.value.isProcessing || isStartingRecording) return
 
         activeAutoSegment = autoSegment
@@ -343,9 +345,11 @@ class RecordingViewModel @Inject constructor(
             it.copy(
                 isProcessing = true,
                 canStartRecording = false,
+                canRecoverFromProcessing = false,
                 segmentStatus = "Processing run data..."
             )
         }
+        armProcessingRecovery()
 
         viewModelScope.launch {
             val captureHandle = recordingManager.stopRecording()
@@ -363,6 +367,10 @@ class RecordingViewModel @Inject constructor(
                 .onSuccess { runId ->
                     isAutoStopInProgress = false
                     activeAutoSegment = null
+                    segmentLoadJob?.cancel()
+                    segmentLoadJob = viewModelScope.launch {
+                        loadLocalSegments(_uiState.value.trackId, showLoadingStatus = false)
+                    }
                     _uiState.update {
                         it.copy(
                             isProcessing = false,
@@ -394,6 +402,28 @@ class RecordingViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    fun resetStuckProcessing() {
+        if (!_uiState.value.isProcessing) return
+        processingRecoveryJob?.cancel()
+        isStartingRecording = false
+        isAutoStopInProgress = false
+        activeAutoSegment = null
+        timerJob?.cancel()
+        recordingManager.cancelRecording()
+        stopForegroundRecordingService()
+        _uiState.update {
+            it.copy(
+                isRecording = false,
+                isProcessing = false,
+                canStartRecording = true,
+                canRecoverFromProcessing = false,
+                error = null,
+                segmentStatus = defaultSegmentStatus()
+            )
+        }
+        startPreview()
     }
 
     private fun maybeAutoStartAtSegmentStart(location: PreviewLocation) {
@@ -572,6 +602,7 @@ class RecordingViewModel @Inject constructor(
     }
 
     private fun finishRecordingSession(resetToPreview: Boolean) {
+        processingRecoveryJob?.cancel()
         recordingManager.cancelRecording()
         stopForegroundRecordingService()
         lastDistanceToSegmentEndM = null
@@ -582,7 +613,8 @@ class RecordingViewModel @Inject constructor(
             it.copy(
                 isRecording = false,
                 isProcessing = false,
-                canStartRecording = true
+                canStartRecording = true,
+                canRecoverFromProcessing = false
             )
         }
 
@@ -598,11 +630,7 @@ class RecordingViewModel @Inject constructor(
                 action = RecordingService.ACTION_START_FOREGROUND
                 putExtra(RecordingService.EXTRA_TRACK_ID, trackId)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                appContext.startForegroundService(intent)
-            } else {
-                appContext.startService(intent)
-            }
+            appContext.startForegroundService(intent)
         }.onFailure { error ->
             _uiState.update { it.copy(error = error.message ?: "Failed to start recording service") }
         }
@@ -622,6 +650,62 @@ class RecordingViewModel @Inject constructor(
             "No local segments yet. Record a run to enable auto-segments."
         } else {
             "Auto-segments enabled (${localSegments.size} loaded)"
+        }
+    }
+
+    private suspend fun loadLocalSegments(trackId: String, showLoadingStatus: Boolean) {
+        if (showLoadingStatus) {
+            updateSegmentStatus("Loading local segments...")
+        }
+
+        getTrackSegmentsUseCase(trackId)
+            .onSuccess { segments ->
+                localSegments = segments.sortedByDescending { it.startedAt }
+                _uiState.update { state ->
+                    state.copy(
+                        segmentCount = localSegments.size,
+                        segmentStatus = if (state.isRecording || state.isProcessing) {
+                            state.segmentStatus
+                        } else {
+                            defaultSegmentStatus()
+                        }
+                    )
+                }
+            }
+            .onFailure { e ->
+                _uiState.update {
+                    it.copy(
+                        error = e.message,
+                        segmentStatus = "Failed to load local segments"
+                    )
+                }
+            }
+    }
+
+    private fun recoverFromStaleProcessingStateIfNeeded() {
+        if (_uiState.value.isProcessing && recordingManager.recordingState.value !is RecordingState.Processing) {
+            processingRecoveryJob?.cancel()
+            _uiState.update {
+                it.copy(
+                    isProcessing = false,
+                    canStartRecording = true,
+                    canRecoverFromProcessing = false,
+                    segmentStatus = defaultSegmentStatus()
+                )
+            }
+        }
+    }
+
+    private fun armProcessingRecovery() {
+        processingRecoveryJob?.cancel()
+        processingRecoveryJob = viewModelScope.launch {
+            delay(12_000)
+            if (_uiState.value.isProcessing) {
+                _uiState.update { state ->
+                    state.copy(canRecoverFromProcessing = true)
+                }
+                updateSegmentStatus("Processing is taking longer than expected")
+            }
         }
     }
 
@@ -713,6 +797,7 @@ class RecordingViewModel @Inject constructor(
         super.onCleared()
         timerJob?.cancel()
         recordingStateJob?.cancel()
+        processingRecoveryJob?.cancel()
         stopPreview()
         val state = recordingManager.recordingState.value
         if (state is RecordingState.Processing) {

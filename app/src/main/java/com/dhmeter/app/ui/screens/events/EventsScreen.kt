@@ -245,3 +245,4 @@ private fun getSeverityColor(severity: Float): androidx.compose.ui.graphics.Colo
         else -> RedNegative
     }
 }
+

@@ -7,6 +7,7 @@ import com.dhmeter.domain.model.Track
 import com.dhmeter.domain.usecase.GetRunsByTrackUseCase
 import com.dhmeter.domain.usecase.GetTrackByIdUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -26,10 +27,12 @@ class TrackDetailViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(TrackDetailUiState())
     val uiState: StateFlow<TrackDetailUiState> = _uiState.asStateFlow()
+    private var loadJob: Job? = null
 
     fun loadTrack(trackId: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
             
             // Load track info
             getTrackByIdUseCase(trackId)
@@ -49,5 +52,9 @@ class TrackDetailViewModel @Inject constructor(
                     _uiState.update { it.copy(runs = runs, isLoading = false) }
                 }
         }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
     }
 }

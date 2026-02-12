@@ -58,6 +58,76 @@ fun MapScreen(
                 .padding(paddingValues)
         ) {
             when {
+                uiState.mapData != null -> {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        MapContent(
+                            mapData = uiState.mapData!!,
+                            selectedMetric = uiState.selectedMetric,
+                            mapDisplayType = uiState.mapDisplayType,
+                            showTraffic = uiState.showTraffic,
+                            showEvents = uiState.showEvents,
+                            onMetricChange = viewModel::changeMetric,
+                            onMapDisplayTypeChange = viewModel::setMapDisplayType,
+                            onToggleTraffic = viewModel::toggleTraffic,
+                            onToggleEvents = viewModel::toggleEvents,
+                            onEventSelected = viewModel::selectEvent
+                        )
+
+                        if (uiState.isLoading) {
+                            Card(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Updating map...",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+
+                        uiState.error?.let { errorMessage ->
+                            Card(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .padding(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.95f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = errorMessage,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 uiState.isLoading -> {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center)
@@ -82,19 +152,24 @@ fun MapScreen(
                         )
                     }
                 }
-                uiState.mapData != null -> {
-                    MapContent(
-                        mapData = uiState.mapData!!,
-                        selectedMetric = uiState.selectedMetric,
-                        mapDisplayType = uiState.mapDisplayType,
-                        showTraffic = uiState.showTraffic,
-                        showEvents = uiState.showEvents,
-                        onMetricChange = viewModel::changeMetric,
-                        onMapDisplayTypeChange = viewModel::setMapDisplayType,
-                        onToggleTraffic = viewModel::toggleTraffic,
-                        onToggleEvents = viewModel::toggleEvents,
-                        onEventSelected = viewModel::selectEvent
-                    )
+                else -> {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            Icons.Default.LocationOff,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.outline
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "No map data available",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
                 }
             }
         }
@@ -148,10 +223,12 @@ private fun MapContent(
     LaunchedEffect(boundsBuilder, mapLoaded) {
         if (!mapLoaded) return@LaunchedEffect
         boundsBuilder?.let { builder ->
-            val bounds = builder.build()
-            cameraPositionState.animate(
-                CameraUpdateFactory.newLatLngBounds(bounds, 100)
-            )
+            runCatching {
+                val bounds = builder.build()
+                cameraPositionState.animate(
+                    CameraUpdateFactory.newLatLngBounds(bounds, 100)
+                )
+            }
         }
     }
 
@@ -248,10 +325,13 @@ private fun MapContent(
             onToggleTraffic = onToggleTraffic,
             onToggleEvents = onToggleEvents,
             onCenterRoute = {
+                if (!mapLoaded) return@MapControls
                 boundsBuilder?.let { builder ->
-                    cameraPositionState.move(
-                        CameraUpdateFactory.newLatLngBounds(builder.build(), 100)
-                    )
+                    runCatching {
+                        cameraPositionState.move(
+                            CameraUpdateFactory.newLatLngBounds(builder.build(), 100)
+                        )
+                    }
                 }
             },
             modifier = Modifier
@@ -428,6 +508,11 @@ private fun MapLegend(
     percentiles: MetricPercentiles,
     modifier: Modifier = Modifier
 ) {
+    val hasThresholds = percentiles.p20 != 0f ||
+            percentiles.p40 != 0f ||
+            percentiles.p60 != 0f ||
+            percentiles.p80 != 0f
+
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(
@@ -441,26 +526,33 @@ private fun MapLegend(
                 color = MaterialTheme.colorScheme.outline
             )
             Spacer(modifier = Modifier.height(4.dp))
-            LegendItem(
-                color = SegmentSeverity.VERY_LOW.toColor(),
-                label = "<= P20 (${formatMetricThreshold(percentiles.p20)})"
-            )
-            LegendItem(
-                color = SegmentSeverity.LOW.toColor(),
-                label = "P20-P40 (${formatMetricThreshold(percentiles.p40)})"
-            )
-            LegendItem(
-                color = SegmentSeverity.MEDIUM.toColor(),
-                label = "P40-P60 (${formatMetricThreshold(percentiles.p60)})"
-            )
-            LegendItem(
-                color = SegmentSeverity.HIGH.toColor(),
-                label = "P60-P80 (${formatMetricThreshold(percentiles.p80)})"
-            )
-            LegendItem(
-                color = SegmentSeverity.VERY_HIGH.toColor(),
-                label = "> P80"
-            )
+            if (hasThresholds) {
+                LegendItem(
+                    color = SegmentSeverity.VERY_LOW.toColor(),
+                    label = "<= P20 (${formatMetricThreshold(percentiles.p20)})"
+                )
+                LegendItem(
+                    color = SegmentSeverity.LOW.toColor(),
+                    label = "P20-P40 (${formatMetricThreshold(percentiles.p40)})"
+                )
+                LegendItem(
+                    color = SegmentSeverity.MEDIUM.toColor(),
+                    label = "P40-P60 (${formatMetricThreshold(percentiles.p60)})"
+                )
+                LegendItem(
+                    color = SegmentSeverity.HIGH.toColor(),
+                    label = "P60-P80 (${formatMetricThreshold(percentiles.p80)})"
+                )
+                LegendItem(
+                    color = SegmentSeverity.VERY_HIGH.toColor(),
+                    label = "> P80"
+                )
+            } else {
+                LegendItem(
+                    color = SegmentSeverity.MEDIUM.toColor(),
+                    label = "No metric samples (neutral coloring)"
+                )
+            }
         }
     }
 }
@@ -542,24 +634,24 @@ private fun EventBottomSheet(
             )
             Spacer(modifier = Modifier.height(12.dp))
 
-            event.meta["peakG"]?.let { peak ->
+            (event.meta["peakG"] as? Number)?.let { peak ->
                 MetricRow(
                     label = "Peak Force",
-                    value = "${String.format(Locale.US, "%.1f", (peak as Number).toFloat())} G"
+                    value = "${String.format(Locale.US, "%.1f", peak.toFloat())} G"
                 )
             }
             
-            event.meta["energy300ms"]?.let { energy ->
+            (event.meta["energy300ms"] as? Number)?.let { energy ->
                 MetricRow(
                     label = "Impact Energy",
-                    value = String.format(Locale.US, "%.2f", (energy as Number).toFloat())
+                    value = String.format(Locale.US, "%.2f", energy.toFloat())
                 )
             }
             
-            event.meta["recoveryMs"]?.let { recovery ->
+            (event.meta["recoveryMs"] as? Number)?.let { recovery ->
                 MetricRow(
                     label = "Recovery Time",
-                    value = "${(recovery as Number).toInt()} ms"
+                    value = "${recovery.toInt()} ms"
                 )
             }
 

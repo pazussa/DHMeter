@@ -3,7 +3,7 @@
     <string name="app_name">DH Meter</string>
     
     <!-- General -->
-    <string name="loading">Loading…</string>
+    <string name="loading">Loading...</string>
     <string name="error">Error</string>
     <string name="retry">Retry</string>
     <string name="cancel">Cancel</string>
@@ -44,7 +44,7 @@
     <string name="recording_distance">Distance</string>
     <string name="recording_speed">Current Speed</string>
     <string name="recording_gps_accuracy">GPS Accuracy</string>
-    <string name="recording_waiting_gps">Waiting for GPS signal…</string>
+    <string name="recording_waiting_gps">Waiting for GPS signal...</string>
     <string name="recording_poor_gps">Poor GPS signal</string>
     
     <!-- Run Summary -->
@@ -103,7 +103,7 @@
     
     <!-- Metrics -->
     <string name="metric_g">g</string>
-    <string name="metric_ms">m/s²</string>
+    <string name="metric_ms">m/s^2</string>
     <string name="metric_kmh">km/h</string>
     <string name="metric_m">m</string>
     <string name="metric_percent">%</string>

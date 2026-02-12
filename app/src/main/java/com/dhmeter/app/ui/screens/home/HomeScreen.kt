@@ -65,15 +65,6 @@ fun HomeScreen(
                 sensorStatus = uiState.sensorStatus,
                 modifier = Modifier.padding(16.dp)
             )
-            
-            // Include invalid runs toggle
-            IncludeInvalidRunsToggle(
-                checked = uiState.includeInvalidRuns,
-                onCheckedChange = { viewModel.setIncludeInvalidRuns(it) },
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
 
             // Tracks section
             if (uiState.tracks.isEmpty()) {
@@ -113,46 +104,18 @@ fun HomeScreen(
             }
         )
     }
-}
 
-@Composable
-private fun IncludeInvalidRunsToggle(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (checked) 
-                MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
-            else 
-                MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Include invalid runs",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = "Show in charts & comparisons",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
+    uiState.error?.let { message ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearError() },
+            title = { Text("Error") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearError() }) {
+                    Text("OK")
+                }
             }
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange
-            )
-        }
+        )
     }
 }
 

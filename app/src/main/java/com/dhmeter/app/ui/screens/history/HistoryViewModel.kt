@@ -43,6 +43,10 @@ class HistoryViewModel @Inject constructor(
         }
     }
 
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
+
     private suspend fun loadRunCounts(tracks: List<Track>) {
         val counts = mutableMapOf<String, Int>()
         tracks.forEach { track ->

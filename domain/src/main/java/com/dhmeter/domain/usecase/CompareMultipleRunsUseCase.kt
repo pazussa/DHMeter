@@ -1,17 +1,24 @@
 package com.dhmeter.domain.usecase
 
 import com.dhmeter.domain.model.*
-import com.dhmeter.domain.repository.PreferencesRepository
 import com.dhmeter.domain.repository.RunRepository
 import javax.inject.Inject
+import kotlin.math.abs
+import kotlin.math.roundToLong
 
 /**
  * Compares multiple runs on the same track and generates a multi-run comparison result.
  */
 class CompareMultipleRunsUseCase @Inject constructor(
-    private val runRepository: RunRepository,
-    private val preferencesRepository: PreferencesRepository
+    private val runRepository: RunRepository
 ) {
+    companion object {
+        private const val IMPACT_REF = 5f
+        private const val HARSHNESS_REF = 3f
+        private const val STABILITY_REF = 0.5f
+        private val KEY_SECTION_BOUNDS = listOf(0f, 20f, 40f, 60f, 80f, 100f)
+    }
+
     // Color palette for runs (stored as ARGB Long values)
     private val runColors = listOf(
         0xFF2196F3, // Blue
@@ -53,24 +60,19 @@ class CompareMultipleRunsUseCase @Inject constructor(
                 return Result.failure(Exception("All runs must be from the same track"))
             }
 
-            // Check validity
-            val includeInvalid = preferencesRepository.getIncludeInvalidRuns()
-            val invalidRuns = runs.filter { !it.run.isValid }
-            if (!includeInvalid && invalidRuns.isNotEmpty()) {
-                return Result.failure(Exception(
-                    "Some runs are invalid: ${invalidRuns.map { it.label }.joinToString()}. " +
-                    "Enable 'Include invalid runs' in settings to compare anyway."
-                ))
-            }
-
             // Build metric comparisons
             val metricComparisons = buildMetricComparisons(runs)
+
+            // Build map comparison (route overlay + split deltas vs Run 1)
+            val mapComparison = buildMapComparison(runs)
 
             // Determine verdict
             val verdict = determineVerdict(runs, metricComparisons)
 
             // Generate insights
-            val insights = generateInsights(runs, metricComparisons)
+            val insights = (generateInsights(metricComparisons) + generateSectionDeltaInsights(mapComparison))
+                .distinct()
+                .take(6)
 
             Result.success(
                 MultiRunComparisonResult(
@@ -78,7 +80,8 @@ class CompareMultipleRunsUseCase @Inject constructor(
                     runs = runs,
                     metricComparisons = metricComparisons,
                     verdict = verdict,
-                    sectionInsights = insights
+                    sectionInsights = insights,
+                    mapComparison = mapComparison
                 )
             )
         } catch (e: Exception) {
@@ -87,23 +90,27 @@ class CompareMultipleRunsUseCase @Inject constructor(
     }
 
     private fun buildMetricComparisons(runs: List<RunWithColor>): List<MultiMetricComparison> {
+        val impactScores = runs.map { it.run.impactScore?.let { value -> normalizeBurden(SeriesType.IMPACT_DENSITY, value) } }
+        val harshnessScores = runs.map { it.run.harshnessAvg?.let { value -> normalizeBurden(SeriesType.HARSHNESS, value) } }
+        val stabilityScores = runs.map { it.run.stabilityScore?.let { value -> normalizeBurden(SeriesType.STABILITY, value) } }
+
         return listOf(
             MultiMetricComparison(
-                metricName = "Impact Score",
-                values = runs.map { it.run.impactScore },
-                bestRunIndex = findBestRunIndex(runs.map { it.run.impactScore }, lowerIsBetter = true),
+                metricName = "Impact (0-100)",
+                values = impactScores,
+                bestRunIndex = findBestRunIndex(impactScores, lowerIsBetter = true),
                 lowerIsBetter = true
             ),
             MultiMetricComparison(
-                metricName = "Harshness",
-                values = runs.map { it.run.harshnessAvg },
-                bestRunIndex = findBestRunIndex(runs.map { it.run.harshnessAvg }, lowerIsBetter = true),
+                metricName = "Harshness (0-100)",
+                values = harshnessScores,
+                bestRunIndex = findBestRunIndex(harshnessScores, lowerIsBetter = true),
                 lowerIsBetter = true
             ),
             MultiMetricComparison(
-                metricName = "Stability",
-                values = runs.map { it.run.stabilityScore },
-                bestRunIndex = findBestRunIndex(runs.map { it.run.stabilityScore }, lowerIsBetter = true),
+                metricName = "Stability (0-100)",
+                values = stabilityScores,
+                bestRunIndex = findBestRunIndex(stabilityScores, lowerIsBetter = true),
                 lowerIsBetter = true
             ),
             MultiMetricComparison(
@@ -121,9 +128,19 @@ class CompareMultipleRunsUseCase @Inject constructor(
         )
     }
 
+    private fun normalizeBurden(type: SeriesType, value: Float): Float {
+        val normalized = when (type) {
+            SeriesType.IMPACT_DENSITY -> (value / IMPACT_REF) * 100f
+            SeriesType.HARSHNESS -> (value / HARSHNESS_REF) * 100f
+            SeriesType.STABILITY -> (value / STABILITY_REF) * 100f
+            SeriesType.SPEED_TIME -> value
+        }
+        return normalized.coerceIn(0f, 100f)
+    }
+
     private fun findBestRunIndex(values: List<Float?>, lowerIsBetter: Boolean): Int? {
         val validIndices = values.mapIndexedNotNull { index, value ->
-            if (value != null && value > 0) index to value else null
+            if (value != null && value.isFinite()) index to value else null
         }
         if (validIndices.isEmpty()) return null
         
@@ -169,46 +186,203 @@ class CompareMultipleRunsUseCase @Inject constructor(
 
     private fun buildWinnerHighlights(bestIndex: Int, comparisons: List<MultiMetricComparison>): String {
         val wonMetrics = comparisons.filter { it.bestRunIndex == bestIndex }
-        return wonMetrics.joinToString(". ") { "Best ${it.metricName.lowercase()}" } + "."
+        if (wonMetrics.isEmpty()) return "Most metrics are similar across runs."
+        return wonMetrics.joinToString(". ") { "Best ${it.metricName.cleanMetricName().lowercase()}" } + "."
     }
 
     private fun buildMixedHighlights(runs: List<RunWithColor>, comparisons: List<MultiMetricComparison>): String {
         val highlights = mutableListOf<String>()
         comparisons.forEach { comparison ->
             comparison.bestRunIndex?.let { bestIdx ->
-                highlights.add("${runs[bestIdx].label} has best ${comparison.metricName.lowercase()}")
+                highlights.add("${runs[bestIdx].label} has best ${comparison.metricName.cleanMetricName().lowercase()}")
             }
         }
+        if (highlights.isEmpty()) return "Metrics are too close to declare a clear advantage."
         return highlights.take(3).joinToString(". ") + "."
     }
 
-    private fun generateInsights(
-        runs: List<RunWithColor>,
-        comparisons: List<MultiMetricComparison>
-    ): List<String> {
+    private fun generateInsights(comparisons: List<MultiMetricComparison>): List<String> {
         val insights = mutableListOf<String>()
 
         // Find biggest differences
         comparisons.forEach { comparison ->
-            val validValues = comparison.values.filterNotNull().filter { it > 0 }
+            val validValues = comparison.values.filterNotNull().filter { it.isFinite() }
             if (validValues.size >= 2) {
                 val min = validValues.minOrNull() ?: 0f
                 val max = validValues.maxOrNull() ?: 0f
-                if (min > 0) {
+                if (min > 0f) {
                     val range = ((max - min) / min) * 100
                     if (range > 30) {
-                        insights.add("${comparison.metricName} varies by ${range.toInt()}% across runs")
+                        insights.add("${comparison.metricName.cleanMetricName()} varies by ${range.toInt()}% across runs")
                     }
+                } else if (max - min >= 10f) {
+                    insights.add("${comparison.metricName.cleanMetricName()} spread is ${String.format("%.0f", max - min)} points")
                 }
             }
         }
-
-        // Note invalid runs
-        val invalidRuns = runs.filter { !it.run.isValid }
-        if (invalidRuns.isNotEmpty()) {
-            insights.add("⚠️ ${invalidRuns.joinToString { it.label }} marked as invalid")
-        }
-
         return insights.take(5)
     }
+
+    private suspend fun buildMapComparison(runs: List<RunWithColor>): MapComparisonData? {
+        val mapRuns = runs.mapNotNull { runWithColor ->
+            val polyline = runRepository.getGpsPolyline(runWithColor.run.runId) ?: return@mapNotNull null
+            if (polyline.points.size < 2) return@mapNotNull null
+            MapComparisonRun(
+                runId = runWithColor.run.runId,
+                runLabel = runWithColor.label,
+                color = runWithColor.color,
+                polyline = polyline
+            )
+        }
+        if (mapRuns.size < 2) return null
+
+        val runById = runs.associateBy { it.run.runId }
+        val timingProfiles = mapRuns.map { mapRun ->
+            val baseRun = runById[mapRun.runId]?.run ?: return null
+            val timingSeries = runRepository.getSeries(mapRun.runId, SeriesType.SPEED_TIME)
+            RunTimingProfile(baseRun, timingSeries)
+        }
+        val hasMeasuredSplitTiming = timingProfiles.all { it.timingSeries != null && it.timingSeries.pointCount > 0 }
+
+        val sections = KEY_SECTION_BOUNDS.zipWithNext().mapIndexed { index, (startPct, endPct) ->
+            val sectionTimes = timingProfiles.map { profile ->
+                calculateSectionTimeMs(profile, startPct, endPct)
+            }
+
+            val baseline = sectionTimes.firstOrNull()
+            val deltas = sectionTimes.mapIndexed { runIndex, timeMs ->
+                when {
+                    timeMs == null || baseline == null -> null
+                    runIndex == 0 -> 0L
+                    else -> timeMs - baseline
+                }
+            }
+
+            MapSectionDelta(
+                sectionIndex = index + 1,
+                startDistPct = startPct,
+                endDistPct = endPct,
+                sectionTimesMs = sectionTimes,
+                deltaVsBaselineMs = deltas,
+                bestRunIndex = findBestSectionIndex(sectionTimes)
+            )
+        }
+
+        val baselineDuration = timingProfiles.first().run.durationMs
+        val totalDeltas = timingProfiles.mapIndexed { index, profile ->
+            if (index == 0) 0L else profile.run.durationMs - baselineDuration
+        }
+
+        return MapComparisonData(
+            baselineRunIndex = 0,
+            runs = mapRuns,
+            sections = sections,
+            totalDeltaVsBaselineMs = totalDeltas,
+            hasMeasuredSplitTiming = hasMeasuredSplitTiming
+        )
+    }
+
+    private fun calculateSectionTimeMs(
+        profile: RunTimingProfile,
+        startDistPct: Float,
+        endDistPct: Float
+    ): Long? {
+        val startMs = profile.elapsedMsAtDist(startDistPct) ?: return null
+        val endMs = profile.elapsedMsAtDist(endDistPct) ?: return null
+        return (endMs - startMs).coerceAtLeast(0L)
+    }
+
+    private fun findBestSectionIndex(sectionTimes: List<Long?>): Int? {
+        return sectionTimes
+            .mapIndexedNotNull { index, value -> value?.let { index to it } }
+            .minByOrNull { it.second }
+            ?.first
+    }
+
+    private fun generateSectionDeltaInsights(mapComparison: MapComparisonData?): List<String> {
+        mapComparison ?: return emptyList()
+        if (mapComparison.runs.size < 2 || mapComparison.sections.isEmpty()) return emptyList()
+
+        val challengerIndex = 1
+        val challengerLabel = mapComparison.runs[challengerIndex].runLabel
+        val deltas = mapComparison.sections.mapNotNull { section ->
+            section.deltaVsBaselineMs.getOrNull(challengerIndex)?.let { delta ->
+                section to delta
+            }
+        }
+        if (deltas.isEmpty()) return emptyList()
+
+        val biggestGain = deltas.minByOrNull { it.second }
+        val biggestLoss = deltas.maxByOrNull { it.second }
+        val insights = mutableListOf<String>()
+
+        biggestGain?.takeIf { it.second < 0L }?.let { (section, delta) ->
+            insights.add(
+                "$challengerLabel gained ${formatAbsDelta(delta)} in S${section.sectionIndex} (${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%)"
+            )
+        }
+        biggestLoss?.takeIf { it.second > 0L }?.let { (section, delta) ->
+            insights.add(
+                "$challengerLabel lost ${formatAbsDelta(delta)} in S${section.sectionIndex} (${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%)"
+            )
+        }
+
+        return insights
+    }
+
+    private fun formatAbsDelta(deltaMs: Long): String {
+        val absMs = abs(deltaMs)
+        return if (absMs >= 1000L) {
+            String.format("%.2f s", absMs / 1000f)
+        } else {
+            "$absMs ms"
+        }
+    }
+
+    private fun String.cleanMetricName(): String = replace(" (0-100)", "")
+
+    private data class RunTimingProfile(
+        val run: Run,
+        val timingSeries: RunSeries?
+    ) {
+        fun elapsedMsAtDist(distPct: Float): Long? {
+            val clampedPct = distPct.coerceIn(0f, 100f)
+            timingSeries?.takeIf { it.seriesType == SeriesType.SPEED_TIME && it.pointCount > 0 }?.let { series ->
+                val valueSec = interpolateSeriesValue(series, clampedPct) ?: return null
+                if (valueSec.isFinite()) {
+                    return (valueSec * 1000f).roundToLong().coerceAtLeast(0L)
+                }
+            }
+            val durationMs = run.durationMs
+            if (durationMs <= 0L) return null
+            return (durationMs * (clampedPct / 100f)).roundToLong()
+        }
+
+        private fun interpolateSeriesValue(series: RunSeries, targetX: Float): Float? {
+            if (series.pointCount <= 0) return null
+
+            var lowX = series.points[0]
+            var lowY = series.points[1]
+            if (targetX <= lowX) return lowY
+
+            for (i in 1 until series.pointCount) {
+                val hiX = series.points[i * 2]
+                val hiY = series.points[i * 2 + 1]
+                if (targetX <= hiX) {
+                    val dx = hiX - lowX
+                    return if (abs(dx) < 1e-6f) {
+                        hiY
+                    } else {
+                        val t = (targetX - lowX) / dx
+                        lowY + t * (hiY - lowY)
+                    }
+                }
+                lowX = hiX
+                lowY = hiY
+            }
+
+            return lowY
+        }
+    }
 }
+

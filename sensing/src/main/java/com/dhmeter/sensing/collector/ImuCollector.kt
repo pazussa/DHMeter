@@ -88,6 +88,9 @@ class ImuCollector @Inject constructor(
     }
 
     fun start(buffers: SensorBuffers): Boolean {
+        // Ensure previous session is fully stopped before starting again.
+        stopInternal(clearBuffers = false)
+
         this.buffers = buffers
         accelSampleCount = 0
         gyroSampleCount = 0
@@ -95,32 +98,48 @@ class ImuCollector @Inject constructor(
 
         // Create dedicated handler thread for sensor callbacks
         handlerThread = HandlerThread("SensorThread").apply { start() }
-        handler = Handler(handlerThread!!.looper)
+        val threadLooper = handlerThread?.looper
+        if (threadLooper == null) {
+            stopInternal(clearBuffers = true)
+            return false
+        }
+        handler = Handler(threadLooper)
 
         startTimeNs = System.nanoTime()
 
         // Register LINEAR_ACCELERATION (gravity already removed - ideal for impacts/vibration)
         val linearAccel = sensorManager.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
-        if (linearAccel == null) return false
-        sensorManager.registerListener(
+        if (linearAccel == null) {
+            stopInternal(clearBuffers = true)
+            return false
+        }
+        val accelRegistered = sensorManager.registerListener(
             linearAccelListener,
             linearAccel,
             SensorManager.SENSOR_DELAY_FASTEST,
             handler
         )
+        if (!accelRegistered) {
+            stopInternal(clearBuffers = true)
+            return false
+        }
 
         // Register gyroscope
         val gyro = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         if (gyro == null) {
-            stop()
+            stopInternal(clearBuffers = true)
             return false
         }
-        sensorManager.registerListener(
+        val gyroRegistered = sensorManager.registerListener(
             gyroListener,
             gyro,
             SensorManager.SENSOR_DELAY_FASTEST,
             handler
         )
+        if (!gyroRegistered) {
+            stopInternal(clearBuffers = true)
+            return false
+        }
 
         // Register ROTATION_VECTOR (for robust orientation alignment)
         val rotationVector = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
@@ -138,6 +157,34 @@ class ImuCollector @Inject constructor(
     }
 
     fun stop(): ImuCollectorStats {
+        stopInternal(clearBuffers = true)
+
+        val elapsedSec = if (startTimeNs > 0L) {
+            (System.nanoTime() - startTimeNs) / 1e9f
+        } else 0f
+
+        val accelRate = if (elapsedSec > 0f) accelSampleCount / elapsedSec else 0f
+        val gyroRate = if (elapsedSec > 0f) gyroSampleCount / elapsedSec else 0f
+        val rotationRate = if (elapsedSec > 0f) rotationSampleCount / elapsedSec else 0f
+
+        val stats = ImuCollectorStats(
+            accelSampleRate = accelRate,
+            gyroSampleRate = gyroRate,
+            rotationSampleRate = rotationRate,
+            accelSampleCount = accelSampleCount,
+            gyroSampleCount = gyroSampleCount,
+            rotationSampleCount = rotationSampleCount
+        )
+
+        accelSampleCount = 0
+        gyroSampleCount = 0
+        rotationSampleCount = 0
+        startTimeNs = 0L
+
+        return stats
+    }
+
+    private fun stopInternal(clearBuffers: Boolean) {
         sensorManager.unregisterListener(linearAccelListener)
         sensorManager.unregisterListener(gyroListener)
         sensorManager.unregisterListener(rotationListener)
@@ -145,17 +192,9 @@ class ImuCollector @Inject constructor(
         handlerThread?.quitSafely()
         handlerThread = null
         handler = null
-
-        val elapsedSec = (System.nanoTime() - startTimeNs) / 1e9f
-
-        return ImuCollectorStats(
-            accelSampleRate = if (elapsedSec > 0) accelSampleCount / elapsedSec else 0f,
-            gyroSampleRate = if (elapsedSec > 0) gyroSampleCount / elapsedSec else 0f,
-            rotationSampleRate = if (elapsedSec > 0) rotationSampleCount / elapsedSec else 0f,
-            accelSampleCount = accelSampleCount,
-            gyroSampleCount = gyroSampleCount,
-            rotationSampleCount = rotationSampleCount
-        )
+        if (clearBuffers) {
+            buffers = null
+        }
     }
 }
 

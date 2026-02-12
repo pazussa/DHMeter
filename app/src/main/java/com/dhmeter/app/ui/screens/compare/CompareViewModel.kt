@@ -25,14 +25,14 @@ class CompareViewModel @Inject constructor(
 
     fun loadComparison(trackId: String, runIds: List<String>) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(isLoading = true, error = null, comparison = null) }
             
             compareMultipleRunsUseCase(trackId, runIds)
                 .onSuccess { comparison ->
-                    _uiState.update { it.copy(comparison = comparison, isLoading = false) }
+                    _uiState.update { it.copy(comparison = comparison, isLoading = false, error = null) }
                 }
                 .onFailure { e ->
-                    _uiState.update { it.copy(error = e.message, isLoading = false) }
+                    _uiState.update { it.copy(error = e.message, isLoading = false, comparison = null) }
                 }
         }
     }

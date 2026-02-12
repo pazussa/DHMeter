@@ -22,10 +22,6 @@ class RunRepositoryImpl @Inject constructor(
         return runDao.getRunById(runId)?.toDomain()
     }
 
-    override suspend fun getValidRunsByTrack(trackId: String): List<Run> {
-        return runDao.getValidRunsByTrack(trackId).map { it.toDomain() }
-    }
-
     override suspend fun getRunCountByTrack(trackId: String): Int {
         return runDao.getRunCountByTrack(trackId)
     }

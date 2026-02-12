@@ -1,7 +1,6 @@
 package com.dhmeter.domain.usecase
 
 import com.dhmeter.domain.model.*
-import com.dhmeter.domain.repository.PreferencesRepository
 import com.dhmeter.domain.repository.RunRepository
 import javax.inject.Inject
 import kotlin.math.abs
@@ -10,8 +9,7 @@ import kotlin.math.abs
  * Compares two runs on the same track and generates a comparison result with verdict.
  */
 class CompareRunsUseCase @Inject constructor(
-    private val runRepository: RunRepository,
-    private val preferencesRepository: PreferencesRepository
+    private val runRepository: RunRepository
 ) {
     suspend operator fun invoke(
         trackId: String,
@@ -26,12 +24,6 @@ class CompareRunsUseCase @Inject constructor(
 
             if (runA.trackId != trackId || runB.trackId != trackId) {
                 return Result.failure(Exception("Runs must be from the same track"))
-            }
-
-            // Check validity unless user enabled "include invalid runs"
-            val includeInvalid = preferencesRepository.getIncludeInvalidRuns()
-            if (!includeInvalid && (!runA.isValid || !runB.isValid)) {
-                return Result.failure(Exception("Both runs must be valid for comparison. Enable 'Include invalid runs' in settings to compare anyway."))
             }
 
             val impactComparison = compareMetric(runA.impactScore, runB.impactScore)

@@ -17,9 +17,6 @@ interface RunDao {
     @Query("SELECT * FROM runs WHERE runId = :runId")
     suspend fun getRunById(runId: String): RunEntity?
     
-    @Query("SELECT * FROM runs WHERE trackId = :trackId AND isValid = 1 ORDER BY startedAt DESC")
-    suspend fun getValidRunsByTrack(trackId: String): List<RunEntity>
-    
     @Query("SELECT COUNT(*) FROM runs WHERE trackId = :trackId")
     suspend fun getRunCountByTrack(trackId: String): Int
     

@@ -64,7 +64,18 @@ class ChartsViewModel @Inject constructor(
 
     fun loadChartData(trackId: String, runIds: List<String>) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            if (trackId.isBlank()) {
+                _uiState.update {
+                    it.copy(
+                        runs = emptyList(),
+                        isLoading = false,
+                        error = "Invalid track"
+                    )
+                }
+                return@launch
+            }
+
+            _uiState.update { it.copy(isLoading = true, error = null, runs = emptyList()) }
             
             try {
                 // Load all data for all runs in parallel
@@ -90,11 +101,12 @@ class ChartsViewModel @Inject constructor(
                 _uiState.update { state ->
                     state.copy(
                         runs = runsData,
-                        isLoading = false
+                        isLoading = false,
+                        error = null
                     )
                 }
             } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message, isLoading = false) }
+                _uiState.update { it.copy(error = e.message, isLoading = false, runs = emptyList()) }
             }
         }
     }
