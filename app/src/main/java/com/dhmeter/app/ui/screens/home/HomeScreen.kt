@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
@@ -27,6 +29,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -64,6 +67,7 @@ fun HomeScreen(
     onStartRun: (trackId: String) -> Unit,
     onNavigateToHistory: () -> Unit,
     onNavigateToTrackDetail: (trackId: String) -> Unit,
+    onNavigateToCommunity: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -165,6 +169,17 @@ fun HomeScreen(
                 sensorStatus = uiState.sensorStatus,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
+
+            FilledTonalButton(
+                onClick = onNavigateToCommunity,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Icon(Icons.Default.Groups, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(tr("Community", "Comunidad"))
+            }
 
             if (uiState.tracks.isEmpty()) {
                 EmptyTracksContent(

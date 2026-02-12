@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.dhmeter.app.ui.screens.charts.ChartsScreen
+import com.dhmeter.app.ui.screens.community.CommunityScreen
 import com.dhmeter.app.ui.screens.compare.CompareScreen
 import com.dhmeter.app.ui.screens.events.EventsScreen
 import com.dhmeter.app.ui.screens.history.HistoryScreen
@@ -46,6 +47,7 @@ sealed class Screen(val route: String) {
         fun createRoute(runId: String) = "run_map/$runId"
     }
     data object History : Screen("history")
+    data object Community : Screen("community")
     data object TrackDetail : Screen("track_detail/{trackId}") {
         fun createRoute(trackId: String) = "track_detail/$trackId"
     }
@@ -69,6 +71,9 @@ fun DHMeterNavHost(
                 },
                 onNavigateToTrackDetail = { trackId ->
                     navController.navigate(Screen.TrackDetail.createRoute(trackId))
+                },
+                onNavigateToCommunity = {
+                    navController.navigate(Screen.Community.route)
                 }
             )
         }
@@ -189,6 +194,14 @@ fun DHMeterNavHost(
                 onTrackSelected = { trackId ->
                     navController.navigate(Screen.TrackDetail.createRoute(trackId))
                 },
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.Community.route) {
+            CommunityScreen(
                 onBack = {
                     navController.popBackStack()
                 }
