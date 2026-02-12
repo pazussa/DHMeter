@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dhmeter.domain.model.SensorSensitivitySettings
 import com.dhmeter.app.service.RecordingService
+import com.dhmeter.app.ui.i18n.tr
 import com.dhmeter.domain.model.TrackSegment
 import com.dhmeter.domain.usecase.GetTrackByIdUseCase
 import com.dhmeter.domain.usecase.GetTrackSegmentsUseCase
@@ -46,7 +47,7 @@ data class RecordingUiState(
     val completedRunId: String? = null,
     val error: String? = null,
     val segmentCount: Int = 0,
-    val segmentStatus: String = "Loading local segments...",
+    val segmentStatus: String = "",
     // Live metrics (0-1 normalized)
     val liveImpact: Float = 0f,
     val liveHarshness: Float = 0f,
@@ -71,6 +72,7 @@ class RecordingViewModel @Inject constructor(
 ) : ViewModel() {
 
     companion object {
+        private const val PREVIEW_CLIENT_ID = "recording_screen"
         private const val SEGMENT_START_ARM_RADIUS_M = 40.0
         private const val SEGMENT_START_TRIGGER_RADIUS_M = 24.0
         private const val SEGMENT_START_RELEASE_RADIUS_M = 55.0
@@ -100,6 +102,7 @@ class RecordingViewModel @Inject constructor(
     private var processingRecoveryJob: Job? = null
     private var manualStartDelayJob: Job? = null
     private var isManualStartForegroundArmed: Boolean = false
+    private var isPreviewForegroundArmed: Boolean = false
     private var startCandidateSegment: TrackSegment? = null
     private var startCandidateHits: Int = 0
     private var lastPreviewLatitude: Double? = null
@@ -144,7 +147,7 @@ class RecordingViewModel @Inject constructor(
                 completedRunId = null,
                 error = null,
                 segmentCount = 0,
-                segmentStatus = "Loading local segments...",
+                segmentStatus = msgLoadingSegments(),
                 canRecoverFromProcessing = false,
                 manualStartCountdownSeconds = 0
             )
@@ -217,9 +220,9 @@ class RecordingViewModel @Inject constructor(
                                 canRecoverFromProcessing = false,
                                 manualStartCountdownSeconds = 0,
                                 segmentStatus = if (activeAutoSegment != null) {
-                                    "Auto recording active on local segment"
+                                    msgAutoRecordingOnSegment()
                                 } else {
-                                    "Manual recording active"
+                                    msgManualRecordingActive()
                                 }
                             )
                         }
@@ -233,7 +236,7 @@ class RecordingViewModel @Inject constructor(
                                 canStartRecording = false,
                                 canRecoverFromProcessing = false,
                                 manualStartCountdownSeconds = 0,
-                                segmentStatus = "Processing run data..."
+                                segmentStatus = msgProcessingRunData()
                             )
                         }
                         armProcessingRecovery()
@@ -276,7 +279,9 @@ class RecordingViewModel @Inject constructor(
     }
 
     private fun startPreview() {
+        armForegroundForPreview()
         val started = previewManager.startPreview(
+            clientId = PREVIEW_CLIENT_ID,
             onMetrics = { metrics ->
                 // Only update if not recording (recording uses its own metrics)
                 if (!_uiState.value.isRecording) {
@@ -290,17 +295,23 @@ class RecordingViewModel @Inject constructor(
                 }
             },
             onLocation = { location ->
-                maybeAutoStartAtSegmentStart(location)
+                updateLastPreviewLocation(location)
             }
         )
-        if (!started) return
+        if (!started) {
+            disarmForegroundForPreview(forceStop = true)
+            return
+        }
 
         _uiState.update { it.copy(isPreviewActive = true) }
     }
     
-    private fun stopPreview() {
-        previewManager.stopPreview()
+    private fun stopPreview(keepForeground: Boolean = false) {
+        previewManager.stopPreview(PREVIEW_CLIENT_ID)
         _uiState.update { it.copy(isPreviewActive = false) }
+        if (!keepForeground) {
+            disarmForegroundForPreview(forceStop = false)
+        }
     }
 
     fun startRecording() {
@@ -308,10 +319,9 @@ class RecordingViewModel @Inject constructor(
         if (_uiState.value.isRecording || _uiState.value.isProcessing || isStartingRecording) return
         if (manualStartDelayJob?.isActive == true) return
 
-        if (!startForegroundRecordingService(_uiState.value.trackId)) {
+        if (!armForegroundForManualStart()) {
             return
         }
-        isManualStartForegroundArmed = true
 
         manualStartDelayJob = viewModelScope.launch {
             try {
@@ -322,7 +332,7 @@ class RecordingViewModel @Inject constructor(
                             completedRunId = null,
                             error = null,
                             manualStartCountdownSeconds = remaining,
-                            segmentStatus = "Manual start in ${remaining}s..."
+                            segmentStatus = msgManualStartCountdown(remaining)
                         )
                     }
                     delay(1000)
@@ -334,12 +344,11 @@ class RecordingViewModel @Inject constructor(
                     foregroundAlreadyArmed = true
                 )
                 if (!started && isManualStartForegroundArmed) {
-                    stopForegroundRecordingService()
+                    disarmForegroundForManualStart()
                 }
             } catch (_: CancellationException) {
                 if (isManualStartForegroundArmed) {
-                    stopForegroundRecordingService()
-                    isManualStartForegroundArmed = false
+                    disarmForegroundForManualStart()
                 }
                 _uiState.update { state ->
                     if (state.isRecording || state.isProcessing) {
@@ -375,11 +384,13 @@ class RecordingViewModel @Inject constructor(
         startCandidateHits = 0
 
         // Stop preview before starting real recording
-        stopPreview()
+        stopPreview(keepForeground = true)
+        previewManager.pauseAll()
         if (!foregroundAlreadyArmed && !startForegroundRecordingService(_uiState.value.trackId)) {
             isStartingRecording = false
             isAutoStopInProgress = false
             activeAutoSegment = null
+            previewManager.resumeAll()
             _uiState.update {
                 it.copy(
                     canStartRecording = true,
@@ -396,9 +407,9 @@ class RecordingViewModel @Inject constructor(
                 completedRunId = null,
                 error = null,
                 segmentStatus = if (autoSegment != null) {
-                    "Segment detected: auto recording started"
+                    msgSegmentDetectedAutoStarted()
                 } else {
-                    "Manual recording started"
+                    msgManualRecordingStarted()
                 }
             )
         }
@@ -415,6 +426,7 @@ class RecordingViewModel @Inject constructor(
                 timerJob?.cancel()
                 activeAutoSegment = null
                 isAutoStopInProgress = false
+                previewManager.resumeAll()
                 stopForegroundRecordingService()
                 _uiState.update {
                     it.copy(
@@ -446,7 +458,7 @@ class RecordingViewModel @Inject constructor(
                 isProcessing = true,
                 canStartRecording = false,
                 canRecoverFromProcessing = false,
-                segmentStatus = "Processing run data..."
+                segmentStatus = msgProcessingRunData()
             )
         }
         armProcessingRecovery()
@@ -580,20 +592,20 @@ class RecordingViewModel @Inject constructor(
 
         if (location.accuracy <= 0f || location.accuracy > maxPreviewAccuracy) {
             resetStartCandidate()
-            updateSegmentStatus("Waiting for good GPS to arm segments")
+            updateSegmentStatus(msgWaitingForGoodGps())
             updateLastPreviewLocation(location)
             return
         }
         if (location.speed < AUTO_START_MIN_SPEED_MPS) {
             resetStartCandidate()
-            updateSegmentStatus("Move faster to arm segment auto-start")
+            updateSegmentStatus(msgMoveFasterToArm())
             updateLastPreviewLocation(location)
             return
         }
 
         val now = System.currentTimeMillis()
         if (now < autoCooldownUntilMs) {
-            updateSegmentStatus("Auto-start cooldown active")
+            updateSegmentStatus(msgAutoStartCooldown())
             updateLastPreviewLocation(location)
             return
         }
@@ -617,7 +629,7 @@ class RecordingViewModel @Inject constructor(
         if (closestSegment == null || closestDistance > SEGMENT_START_ARM_RADIUS_M) {
             resetStartCandidate()
             if (closestDistance.isFinite()) {
-                updateSegmentStatus("Nearest segment start: ${formatMeters(closestDistance)}")
+                updateSegmentStatus(msgNearestSegment(formatMeters(closestDistance)))
             }
             updateLastPreviewLocation(location)
             return
@@ -630,7 +642,7 @@ class RecordingViewModel @Inject constructor(
 
         if (closestDistance > SEGMENT_START_RELEASE_RADIUS_M) {
             startCandidateHits = 0
-            updateSegmentStatus("Approaching segment: ${formatMeters(closestDistance)}")
+            updateSegmentStatus(msgApproachingSegment(formatMeters(closestDistance)))
             updateLastPreviewLocation(location)
             return
         }
@@ -646,11 +658,15 @@ class RecordingViewModel @Inject constructor(
         if (closestDistance <= SEGMENT_START_TRIGGER_RADIUS_M && movingInDirection) {
             startCandidateHits++
             updateSegmentStatus(
-                "Segment armed ($startCandidateHits/$MIN_START_CONFIRMATION_HITS) at ${formatMeters(closestDistance)}"
+                msgSegmentArmed(
+                    startCandidateHits,
+                    MIN_START_CONFIRMATION_HITS,
+                    formatMeters(closestDistance)
+                )
             )
         } else {
             startCandidateHits = max(0, startCandidateHits - 1)
-            updateSegmentStatus("Align with segment direction to auto-start")
+            updateSegmentStatus(msgAlignWithSegmentDirection())
         }
 
         if (startCandidateHits >= MIN_START_CONFIRMATION_HITS) {
@@ -687,7 +703,7 @@ class RecordingViewModel @Inject constructor(
             lat2 = segment.end.lat,
             lon2 = segment.end.lon
         )
-        updateSegmentStatus("Auto recording: ${formatMeters(distanceToEnd)} to segment end")
+        updateSegmentStatus(msgAutoRecordingToEnd(formatMeters(distanceToEnd)))
         val previousDistance = lastDistanceToSegmentEndM
         lastDistanceToSegmentEndM = distanceToEnd
 
@@ -712,7 +728,7 @@ class RecordingViewModel @Inject constructor(
             isAutoStopInProgress = true
             autoCooldownUntilMs = System.currentTimeMillis() + AUTO_TRIGGER_COOLDOWN_MS
             activeAutoSegment = null
-            updateSegmentStatus("Segment end reached. Stopping recording...")
+            updateSegmentStatus(msgSegmentEndStopping())
             stopRecordingInternal()
         }
     }
@@ -745,6 +761,7 @@ class RecordingViewModel @Inject constructor(
     private fun finishRecordingSession(resetToPreview: Boolean) {
         processingRecoveryJob?.cancel()
         recordingManager.cancelRecording()
+        previewManager.resumeAll()
         stopForegroundRecordingService()
         lastDistanceToSegmentEndM = null
         lastRecordingLatitude = null
@@ -773,13 +790,14 @@ class RecordingViewModel @Inject constructor(
             }
             appContext.startForegroundService(intent)
         }.onFailure { error ->
-            _uiState.update { it.copy(error = error.message ?: "Failed to start recording service") }
+            _uiState.update { it.copy(error = error.message ?: msgFailedStartService()) }
         }.isSuccess
         return started
     }
 
     private fun stopForegroundRecordingService() {
         isManualStartForegroundArmed = false
+        isPreviewForegroundArmed = false
         runCatching {
             val intent = Intent(appContext, RecordingService::class.java).apply {
                 action = RecordingService.ACTION_STOP_FOREGROUND
@@ -788,17 +806,50 @@ class RecordingViewModel @Inject constructor(
         }
     }
 
+    private fun armForegroundForPreview() {
+        if (isPreviewForegroundArmed || _uiState.value.trackId.isBlank()) return
+        if (startForegroundRecordingService(_uiState.value.trackId)) {
+            isPreviewForegroundArmed = true
+        }
+    }
+
+    private fun disarmForegroundForPreview(forceStop: Boolean) {
+        if (!isPreviewForegroundArmed) return
+        isPreviewForegroundArmed = false
+        if (forceStop || (!isManualStartForegroundArmed && !_uiState.value.isRecording && !_uiState.value.isProcessing)) {
+            stopForegroundRecordingService()
+        }
+    }
+
+    private fun armForegroundForManualStart(): Boolean {
+        if (isPreviewForegroundArmed) {
+            isManualStartForegroundArmed = false
+            return true
+        }
+        val started = startForegroundRecordingService(_uiState.value.trackId)
+        isManualStartForegroundArmed = started
+        return started
+    }
+
+    private fun disarmForegroundForManualStart() {
+        if (!isManualStartForegroundArmed) return
+        isManualStartForegroundArmed = false
+        if (!isPreviewForegroundArmed && !_uiState.value.isRecording && !_uiState.value.isProcessing) {
+            stopForegroundRecordingService()
+        }
+    }
+
     private fun defaultSegmentStatus(): String {
         return if (localSegments.isEmpty()) {
-            "No local segments yet. Record a run to enable auto-segments."
+            msgNoLocalSegments()
         } else {
-            "Auto-segments enabled (${localSegments.size} loaded)"
+            msgAutoSegmentsEnabled(localSegments.size)
         }
     }
 
     private suspend fun loadLocalSegments(trackId: String, showLoadingStatus: Boolean) {
         if (showLoadingStatus) {
-            updateSegmentStatus("Loading local segments...")
+            updateSegmentStatus(msgLoadingSegments())
         }
 
         getTrackSegmentsUseCase(trackId)
@@ -819,7 +870,7 @@ class RecordingViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         error = e.message,
-                        segmentStatus = "Failed to load local segments"
+                        segmentStatus = msgFailedLoadSegments()
                     )
                 }
             }
@@ -847,10 +898,93 @@ class RecordingViewModel @Inject constructor(
                 _uiState.update { state ->
                     state.copy(canRecoverFromProcessing = true)
                 }
-                updateSegmentStatus("Processing is taking longer than expected")
+                updateSegmentStatus(msgProcessingTakingLonger())
             }
         }
     }
+
+    private fun msgLoadingSegments(): String =
+        tr(appContext, "Loading local segments...", "Cargando segmentos locales...")
+
+    private fun msgAutoRecordingOnSegment(): String =
+        tr(appContext, "Auto recording active on local segment", "Grabacion automatica activa en segmento local")
+
+    private fun msgManualRecordingActive(): String =
+        tr(appContext, "Manual recording active", "Grabacion manual activa")
+
+    private fun msgProcessingRunData(): String =
+        tr(appContext, "Processing run data...", "Procesando datos de la bajada...")
+
+    private fun msgManualStartCountdown(remainingSeconds: Int): String =
+        tr(
+            appContext,
+            "Manual start in ${remainingSeconds}s...",
+            "Inicio manual en ${remainingSeconds}s..."
+        )
+
+    private fun msgSegmentDetectedAutoStarted(): String =
+        tr(
+            appContext,
+            "Segment detected: auto recording started",
+            "Segmento detectado: grabacion automatica iniciada"
+        )
+
+    private fun msgManualRecordingStarted(): String =
+        tr(appContext, "Manual recording started", "Grabacion manual iniciada")
+
+    private fun msgWaitingForGoodGps(): String =
+        tr(appContext, "Waiting for good GPS to arm segments", "Esperando buen GPS para activar segmentos")
+
+    private fun msgMoveFasterToArm(): String =
+        tr(appContext, "Move faster to arm segment auto-start", "Muevete mas rapido para activar el auto-inicio")
+
+    private fun msgAutoStartCooldown(): String =
+        tr(appContext, "Auto-start cooldown active", "En enfriamiento de auto-inicio")
+
+    private fun msgNearestSegment(distance: String): String =
+        tr(appContext, "Nearest segment start: $distance", "Inicio de segmento mas cercano: $distance")
+
+    private fun msgApproachingSegment(distance: String): String =
+        tr(appContext, "Approaching segment: $distance", "Acercandose al segmento: $distance")
+
+    private fun msgSegmentArmed(hits: Int, requiredHits: Int, distance: String): String =
+        tr(
+            appContext,
+            "Segment armed ($hits/$requiredHits) at $distance",
+            "Segmento activado ($hits/$requiredHits) a $distance"
+        )
+
+    private fun msgAlignWithSegmentDirection(): String =
+        tr(appContext, "Align with segment direction to auto-start", "Alineate con la direccion del segmento para auto-iniciar")
+
+    private fun msgAutoRecordingToEnd(distance: String): String =
+        tr(appContext, "Auto recording: $distance to segment end", "Grabacion automatica: $distance para fin de segmento")
+
+    private fun msgSegmentEndStopping(): String =
+        tr(appContext, "Segment end reached. Stopping recording...", "Fin de segmento alcanzado. Deteniendo grabacion...")
+
+    private fun msgFailedStartService(): String =
+        tr(appContext, "Failed to start recording service", "No se pudo iniciar el servicio de grabacion")
+
+    private fun msgNoLocalSegments(): String =
+        tr(
+            appContext,
+            "No local segments yet. Record a run to enable auto-segments.",
+            "Aun no hay segmentos locales. Graba una bajada para habilitarlos."
+        )
+
+    private fun msgAutoSegmentsEnabled(count: Int): String =
+        tr(appContext, "Auto-segments enabled ($count loaded)", "Auto-segmentos habilitados ($count cargados)")
+
+    private fun msgFailedLoadSegments(): String =
+        tr(appContext, "Failed to load local segments", "No se pudieron cargar los segmentos locales")
+
+    private fun msgProcessingTakingLonger(): String =
+        tr(
+            appContext,
+            "Processing is taking longer than expected",
+            "El procesamiento esta tardando mas de lo esperado"
+        )
 
     private fun updateSegmentStatus(message: String) {
         _uiState.update { state ->

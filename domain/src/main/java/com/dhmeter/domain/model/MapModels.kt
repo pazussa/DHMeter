@@ -56,7 +56,8 @@ enum class SegmentSeverity {
 enum class MapMetricType(val displayName: String) {
     IMPACT("Impact"),
     HARSHNESS("Harshness"),
-    STABILITY("Stability")
+    STABILITY("Stability"),
+    SPEED("Speed")
 }
 
 /**

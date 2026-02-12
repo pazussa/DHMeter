@@ -1,21 +1,62 @@
 package com.dhmeter.app.ui.screens.home
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Terrain
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dhmeter.app.ui.components.TrackCard
+import com.dhmeter.app.localization.AppLanguageManager
 import com.dhmeter.app.ui.components.NewTrackDialog
 import com.dhmeter.app.ui.components.PermissionHandler
+import com.dhmeter.app.ui.components.TrackCard
+import com.dhmeter.app.ui.i18n.tr
+import com.dhmeter.app.ui.theme.dhGlassCardColors
+import com.dhmeter.app.ui.theme.dhTopBarColors
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,21 +68,76 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showNewTrackDialog by remember { mutableStateOf(false) }
+    var showLanguageMenu by remember { mutableStateOf(false) }
+    var showHelpDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val currentLanguageCode = AppLanguageManager.getSavedLanguage(context)
 
     PermissionHandler()
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { 
-                    Text(
-                        text = "DH Meter",
-                        style = MaterialTheme.typography.headlineMedium
-                    )
+                colors = dhTopBarColors(),
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Default.Terrain, contentDescription = null)
+                        Text(
+                            text = "dropIn DH",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
                 },
                 actions = {
+                    IconButton(onClick = { showHelpDialog = true }) {
+                        Icon(
+                            Icons.Default.HelpOutline,
+                            contentDescription = tr("Help", "Ayuda")
+                        )
+                    }
+                    Box {
+                        IconButton(onClick = { showLanguageMenu = true }) {
+                            Text(
+                                text = currentLanguageCode.uppercase(Locale.US),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showLanguageMenu,
+                            onDismissRequest = { showLanguageMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(tr("English", "Ingles")) },
+                                onClick = {
+                                    showLanguageMenu = false
+                                    AppLanguageManager.setLanguage(
+                                        context,
+                                        AppLanguageManager.LANGUAGE_EN
+                                    )
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(tr("Spanish", "Espanol")) },
+                                onClick = {
+                                    showLanguageMenu = false
+                                    AppLanguageManager.setLanguage(
+                                        context,
+                                        AppLanguageManager.LANGUAGE_ES
+                                    )
+                                }
+                            )
+                        }
+                    }
                     IconButton(onClick = onNavigateToHistory) {
-                        Icon(Icons.Default.History, contentDescription = "History")
+                        Icon(
+                            Icons.Default.History,
+                            contentDescription = tr("History", "Historial")
+                        )
                     }
                 }
             )
@@ -50,7 +146,7 @@ fun HomeScreen(
             ExtendedFloatingActionButton(
                 onClick = { showNewTrackDialog = true },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("New Track") },
+                text = { Text(tr("New Track", "Nuevo track")) },
                 containerColor = MaterialTheme.colorScheme.primary
             )
         }
@@ -60,24 +156,27 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Sensor status card
-            SensorStatusCard(
-                sensorStatus = uiState.sensorStatus,
-                modifier = Modifier.padding(16.dp)
+            HomeHeroBanner(
+                trackCount = uiState.tracks.size,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
             )
 
-            // Tracks section
+            SensorStatusCard(
+                sensorStatus = uiState.sensorStatus,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+
             if (uiState.tracks.isEmpty()) {
                 EmptyTracksContent(
                     modifier = Modifier.weight(1f)
                 )
             } else {
                 Text(
-                    text = "Your Tracks",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = tr("Your Tracks", "Tus tracks"),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
-                
+
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -108,14 +207,83 @@ fun HomeScreen(
     uiState.error?.let { message ->
         AlertDialog(
             onDismissRequest = { viewModel.clearError() },
-            title = { Text("Error") },
+            title = { Text(tr("Error", "Error")) },
             text = { Text(message) },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearError() }) {
-                    Text("OK")
+                    Text(tr("OK", "Aceptar"))
                 }
             }
         )
+    }
+
+    if (showHelpDialog) {
+        AlertDialog(
+            onDismissRequest = { showHelpDialog = false },
+            title = { Text(tr("About dropIn DH", "Acerca de dropIn DH")) },
+            text = {
+                Text(
+                    tr(
+                        "dropIn DH is designed for downhill telemetry: it records your runs, compares sections, and analyzes impact, vibration, instability and speed so you can improve each descent.\n\nContact: dropindh@gmail.com",
+                        "dropIn DH esta pensada para telemetria downhill: graba tus bajadas, compara secciones y analiza impacto, vibracion, inestabilidad y velocidad para mejorar cada descenso.\n\nContacto: dropindh@gmail.com"
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showHelpDialog = false }) {
+                    Text(tr("OK", "Aceptar"))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun HomeHeroBanner(
+    trackCount: Int,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = dhGlassCardColors(emphasis = true)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.18f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .padding(horizontal = 18.dp, vertical = 16.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = tr("Downhill Telemetry", "Telemetria Downhill"),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = tr(
+                        "Rider, get the most out of every descent.",
+                        "Rider, saca el maximo de tus bajadas."
+                    ),
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Text(
+                    text = tr(
+                        "$trackCount tracks ready for analysis",
+                        "$trackCount tracks listos para analisis"
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 
@@ -126,20 +294,18 @@ private fun SensorStatusCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        colors = dhGlassCardColors()
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Sensor Status",
+                text = tr("Sensor Status", "Estado de sensores"),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
@@ -217,13 +383,16 @@ private fun EmptyTracksContent(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "No tracks yet",
+                text = tr("No tracks yet", "Aun no hay tracks"),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Create a track to start recording your downhill runs",
+                text = tr(
+                    "Create a track to start recording your downhill runs",
+                    "Crea un track para empezar a grabar tus bajadas"
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.outline,
                 textAlign = TextAlign.Center

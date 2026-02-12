@@ -1,13 +1,20 @@
 package com.dhmeter.app.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.dhmeter.app.ui.i18n.tr
+import com.dhmeter.app.ui.theme.dhGlassCardColors
 import com.dhmeter.domain.model.Track
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -19,18 +26,34 @@ fun TrackCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        onClick = onViewDetail
+        onClick = onViewDetail,
+        colors = dhGlassCardColors()
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Terrain,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(40.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.tertiary
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Terrain,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
             
             Spacer(modifier = Modifier.width(16.dp))
             
@@ -51,7 +74,11 @@ fun TrackCard(
             }
             
             FilledTonalButton(
-                onClick = onStartRun
+                onClick = onStartRun,
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
+                    contentColor = MaterialTheme.colorScheme.primary
+                )
             ) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
@@ -59,7 +86,7 @@ fun TrackCard(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Start")
+                Text(tr("Start", "Iniciar"))
             }
         }
     }
@@ -76,13 +103,13 @@ fun NewTrackDialog(
     
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New Track") },
+        title = { Text(tr("New Track", "Nuevo track")) },
         text = {
             Column {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Track name") },
+                    label = { Text(tr("Track name", "Nombre del track")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -90,8 +117,8 @@ fun NewTrackDialog(
                 OutlinedTextField(
                     value = locationHint,
                     onValueChange = { locationHint = it },
-                    label = { Text("Location (optional)") },
-                    placeholder = { Text("e.g., Bike Park, Trail name") },
+                    label = { Text(tr("Location (optional)", "Ubicacion (opcional)")) },
+                    placeholder = { Text(tr("e.g., Bike Park, Trail name", "ej. Bike Park, nombre del trail")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -104,12 +131,12 @@ fun NewTrackDialog(
                 },
                 enabled = name.isNotBlank()
             ) {
-                Text("Create")
+                Text(tr("Create", "Crear"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(tr("Cancel", "Cancelar"))
             }
         }
     )

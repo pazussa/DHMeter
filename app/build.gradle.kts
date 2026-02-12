@@ -9,6 +9,8 @@ android {
     namespace = "com.dhmeter.app"
     compileSdk = 34
 
+    val debugKeystoreFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+
     defaultConfig {
         applicationId = "com.dhmeter.app"
         minSdk = 26
@@ -25,10 +27,22 @@ android {
         manifestPlaceholders["MAPS_API_KEY"] = "AIzaSyCBLZIGOATZaeHpFtVNU4jZJtWRy8C8b60"
     }
 
+    signingConfigs {
+        create("devRelease") {
+            if (debugKeystoreFile.exists()) {
+                storeFile = debugKeystoreFile
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
+            signingConfig = signingConfigs.getByName("devRelease")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -76,6 +90,7 @@ dependencies {
 
     // AndroidX Core
     implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")

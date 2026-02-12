@@ -38,6 +38,13 @@ object HeatmapColors {
         Color(0xFFE57373)   // Red - poor
     )
 
+    val Speed = listOf(
+        Color(0xFF1E88E5),  // Blue - slower
+        Color(0xFF00ACC1),  // Cyan - moderate
+        Color(0xFFFFCA28),  // Amber - fast
+        Color(0xFFD32F2F)   // Red - very fast
+    )
+
     val Slope = listOf(
         Color(0xFF90CAF9),  // Light blue - flat
         Color(0xFF7986CB),  // Indigo - moderate

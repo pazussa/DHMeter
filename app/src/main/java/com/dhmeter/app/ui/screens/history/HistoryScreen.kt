@@ -9,9 +9,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dhmeter.app.ui.i18n.tr
+import com.dhmeter.app.ui.theme.dhGlassCardColors
+import com.dhmeter.app.ui.theme.dhTopBarColors
 import com.dhmeter.domain.model.Track
 import java.text.SimpleDateFormat
 import java.util.*
@@ -26,12 +30,14 @@ fun HistoryScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("History") },
+                colors = dhTopBarColors(),
+                title = { Text(tr("History", "Historial")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atras"))
                     }
                 }
             )
@@ -66,7 +72,7 @@ fun HistoryScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No tracks yet",
+                            text = tr("No tracks yet", "Aun no hay tracks"),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -94,11 +100,11 @@ fun HistoryScreen(
     uiState.error?.let { message ->
         AlertDialog(
             onDismissRequest = { viewModel.clearError() },
-            title = { Text("Error") },
+            title = { Text(tr("Error", "Error")) },
             text = { Text(message) },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearError() }) {
-                    Text("OK")
+                    Text(tr("OK", "Aceptar"))
                 }
             }
         )
@@ -116,7 +122,8 @@ private fun TrackHistoryCard(
     
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        colors = dhGlassCardColors()
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -146,7 +153,10 @@ private fun TrackHistoryCard(
                     )
                 }
                 Text(
-                    text = "Created ${dateFormat.format(Date(track.createdAt))}",
+                    text = tr(
+                        "Created ${dateFormat.format(Date(track.createdAt))}",
+                        "Creado ${dateFormat.format(Date(track.createdAt))}"
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -161,7 +171,7 @@ private fun TrackHistoryCard(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "runs",
+                    text = tr("runs", "bajadas"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

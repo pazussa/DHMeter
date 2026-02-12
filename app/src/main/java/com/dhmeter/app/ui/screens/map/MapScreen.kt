@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dhmeter.app.ui.i18n.tr
 import com.dhmeter.app.ui.theme.*
 import com.dhmeter.domain.model.*
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -41,12 +42,14 @@ fun MapScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("Run Map") },
+                colors = dhTopBarColors(),
+                title = { Text(tr("Run Map", "Mapa de bajada")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "Atras"))
                     }
                 }
             )
@@ -89,7 +92,7 @@ fun MapScreen(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Updating map...",
+                                        text = tr("Updating map...", "Actualizando mapa..."),
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
@@ -143,7 +146,7 @@ fun MapScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = uiState.error ?: "No map data",
+                            text = uiState.error ?: tr("No map data", "Sin datos de mapa"),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -162,7 +165,7 @@ fun MapScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No map data available",
+                            text = tr("No map data available", "No hay datos de mapa disponibles"),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -276,8 +279,8 @@ private fun MapContent(
             startPoint?.let { start ->
                 Marker(
                     state = MarkerState(position = LatLng(start.lat, start.lon)),
-                    title = "Start",
-                    snippet = "0% of run",
+                    title = tr("Start", "Inicio"),
+                    snippet = tr("0% of run", "0% de la bajada"),
                     icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
                 )
             }
@@ -285,8 +288,8 @@ private fun MapContent(
             endPoint?.let { end ->
                 Marker(
                     state = MarkerState(position = LatLng(end.lat, end.lon)),
-                    title = "Finish",
-                    snippet = "100% of run",
+                    title = tr("Finish", "Meta"),
+                    snippet = tr("100% of run", "100% de la bajada"),
                     icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
                 )
             }
@@ -298,8 +301,8 @@ private fun MapContent(
                         state = MarkerState(
                             position = LatLng(event.location.lat, event.location.lon)
                         ),
-                        title = event.type.displayName,
-                        snippet = "Tap for details",
+                        title = localizedMapEventTypeName(event.type),
+                        snippet = tr("Tap for details", "Toca para ver detalles"),
                         icon = BitmapDescriptorFactory.defaultMarker(event.toMarkerHue()),
                         onClick = {
                             onEventSelected(event)
@@ -370,7 +373,10 @@ private fun GpsQualityBanner(modifier: Modifier = Modifier) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "GPS imprecise. Map is approximate.\nUse charts for analysis.",
+                text = tr(
+                    "GPS imprecise. Map is approximate.\nUse charts for analysis.",
+                    "GPS impreciso. El mapa es aproximado.\nUsa las graficas para analizar."
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Black
             )
@@ -406,7 +412,7 @@ private fun MapControls(
                         FilterChip(
                             selected = selectedMetric == metric,
                             onClick = { onMetricChange(metric) },
-                            label = { Text(metric.displayName) }
+                            label = { Text(localizedMetricName(metric)) }
                         )
                     }
                 }
@@ -427,7 +433,7 @@ private fun MapControls(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Events",
+                        text = tr("Events", "Eventos"),
                         style = MaterialTheme.typography.labelMedium
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -445,7 +451,7 @@ private fun MapControls(
                         contentDescription = null
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Center Route")
+                    Text(tr("Center Route", "Centrar ruta"))
                 }
             }
         }
@@ -471,7 +477,7 @@ private fun MapLegend(
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
             Text(
-                text = metric.displayName,
+                text = localizedMetricName(metric),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
             )
@@ -479,28 +485,43 @@ private fun MapLegend(
             if (hasThresholds) {
                 LegendItem(
                     color = SegmentSeverity.VERY_LOW.toColor(),
-                    label = "<= P20 (${formatMetricThreshold(percentiles.p20)})"
+                    label = tr(
+                        "<= P20 (${formatMetricThreshold(percentiles.p20)})",
+                        "<= P20 (${formatMetricThreshold(percentiles.p20)})"
+                    )
                 )
                 LegendItem(
                     color = SegmentSeverity.LOW.toColor(),
-                    label = "P20-P40 (${formatMetricThreshold(percentiles.p40)})"
+                    label = tr(
+                        "P20-P40 (${formatMetricThreshold(percentiles.p40)})",
+                        "P20-P40 (${formatMetricThreshold(percentiles.p40)})"
+                    )
                 )
                 LegendItem(
                     color = SegmentSeverity.MEDIUM.toColor(),
-                    label = "P40-P60 (${formatMetricThreshold(percentiles.p60)})"
+                    label = tr(
+                        "P40-P60 (${formatMetricThreshold(percentiles.p60)})",
+                        "P40-P60 (${formatMetricThreshold(percentiles.p60)})"
+                    )
                 )
                 LegendItem(
                     color = SegmentSeverity.HIGH.toColor(),
-                    label = "P60-P80 (${formatMetricThreshold(percentiles.p80)})"
+                    label = tr(
+                        "P60-P80 (${formatMetricThreshold(percentiles.p80)})",
+                        "P60-P80 (${formatMetricThreshold(percentiles.p80)})"
+                    )
                 )
                 LegendItem(
                     color = SegmentSeverity.VERY_HIGH.toColor(),
-                    label = "> P80"
+                    label = tr("> P80", "> P80")
                 )
             } else {
                 LegendItem(
                     color = SegmentSeverity.MEDIUM.toColor(),
-                    label = "No metric samples (neutral coloring)"
+                    label = tr(
+                        "No metric samples (neutral coloring)",
+                        "Sin muestras de metrica (color neutro)"
+                    )
                 )
             }
         }
@@ -526,25 +547,37 @@ private fun SectionComparisonBottomSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Section Time Comparison",
+                text = tr("Section Time Comparison", "Comparacion de tiempos por seccion"),
                 style = MaterialTheme.typography.titleLarge
             )
             Text(
                 text = if (currentIsFastest) {
-                    "This run is the fastest reference on this track."
+                    tr(
+                        "This run is the fastest reference on this track.",
+                        "Esta bajada es la referencia mas rapida en este track."
+                    )
                 } else {
-                    "Compared against the fastest run on this track."
+                    tr(
+                        "Compared against the fastest run on this track.",
+                        "Comparada contra la bajada mas rapida de este track."
+                    )
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline
             )
             Text(
-                text = "Current: ${formatMsCompact(comparison.currentDurationMs)}   Fastest: ${formatMsCompact(comparison.fastestDurationMs)}",
+                text = tr(
+                    "Current: ${formatMsCompact(comparison.currentDurationMs)}   Fastest: ${formatMsCompact(comparison.fastestDurationMs)}",
+                    "Actual: ${formatMsCompact(comparison.currentDurationMs)}   Mas rapida: ${formatMsCompact(comparison.fastestDurationMs)}"
+                ),
                 style = MaterialTheme.typography.labelMedium
             )
             if (!comparison.hasMeasuredSplitTiming) {
                 Text(
-                    text = "Split timing is estimated from total duration for at least one run.",
+                    text = tr(
+                        "Split timing is estimated from total duration for at least one run.",
+                        "El tiempo por secciones se estima desde la duracion total en al menos una bajada."
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -566,12 +599,18 @@ private fun SectionComparisonBottomSheet(
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
-                            text = "Time: ${formatMs(section.currentSectionMs)}",
+                            text = tr(
+                                "Time: ${formatMs(section.currentSectionMs)}",
+                                "Tiempo: ${formatMs(section.currentSectionMs)}"
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline
                         )
                         Text(
-                            text = "Avg speed: ${formatSpeed(section.currentAvgSpeedMps)}",
+                            text = tr(
+                                "Avg speed: ${formatSpeed(section.currentAvgSpeedMps)}",
+                                "Velocidad prom.: ${formatSpeed(section.currentAvgSpeedMps)}"
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -652,12 +691,15 @@ private fun EventBottomSheet(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = event.type.displayName,
+                        text = localizedMapEventTypeName(event.type),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "At ${String.format(Locale.US, "%.1f", event.distPct)}% of run",
+                        text = tr(
+                            "At ${String.format(Locale.US, "%.1f", event.distPct)}% of run",
+                            "En ${String.format(Locale.US, "%.1f", event.distPct)}% de la bajada"
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -670,7 +712,7 @@ private fun EventBottomSheet(
 
             // Metrics
             Text(
-                text = "Event Metrics",
+                text = tr("Event Metrics", "Metricas del evento"),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.outline
             )
@@ -678,27 +720,27 @@ private fun EventBottomSheet(
 
             (event.meta["peakG"] as? Number)?.let { peak ->
                 MetricRow(
-                    label = "Peak Force",
+                    label = tr("Peak Force", "Fuerza pico"),
                     value = "${String.format(Locale.US, "%.1f", peak.toFloat())} G"
                 )
             }
             
             (event.meta["energy300ms"] as? Number)?.let { energy ->
                 MetricRow(
-                    label = "Impact Energy",
+                    label = tr("Impact Energy", "Energia de impacto"),
                     value = String.format(Locale.US, "%.2f", energy.toFloat())
                 )
             }
             
             (event.meta["recoveryMs"] as? Number)?.let { recovery ->
                 MetricRow(
-                    label = "Recovery Time",
+                    label = tr("Recovery Time", "Tiempo de recuperacion"),
                     value = "${recovery.toInt()} ms"
                 )
             }
 
             MetricRow(
-                label = "Severity",
+                label = tr("Severity", "Severidad"),
                 value = String.format(Locale.US, "%.1f", event.severity)
             )
 
@@ -745,6 +787,40 @@ private fun formatMetricThreshold(value: Float): String {
     return String.format(Locale.US, "%.2f", value)
 }
 
+private fun isSpanishLanguage(): Boolean {
+    return Locale.getDefault().language.lowercase(Locale.US).startsWith("es")
+}
+
+private fun localizedMetricName(metric: MapMetricType): String {
+    if (!isSpanishLanguage()) {
+        return when (metric) {
+            MapMetricType.IMPACT -> "Impact"
+            MapMetricType.HARSHNESS -> "Harshness"
+            MapMetricType.STABILITY -> "Instability"
+            MapMetricType.SPEED -> "Speed"
+        }
+    }
+    return when (metric) {
+        MapMetricType.IMPACT -> "Impacto"
+        MapMetricType.HARSHNESS -> "Vibracion"
+        MapMetricType.STABILITY -> "Inestabilidad"
+        MapMetricType.SPEED -> "Velocidad"
+    }
+}
+
+private fun localizedMapEventTypeName(type: MapEventType): String {
+    if (!isSpanishLanguage()) {
+        return when (type) {
+            MapEventType.IMPACT_PEAK -> "Strong Impact"
+            MapEventType.LANDING -> "Hard Landing"
+        }
+    }
+    return when (type) {
+        MapEventType.IMPACT_PEAK -> "Impacto fuerte"
+        MapEventType.LANDING -> "Aterrizaje duro"
+    }
+}
+
 private fun formatMs(value: Long?): String {
     value ?: return "--"
     return if (value >= 1000L) {
@@ -769,7 +845,7 @@ private fun formatMsCompact(valueMs: Long): String {
 
 private fun formatVsFastestDelta(deltaMs: Long?): String {
     deltaMs ?: return "--"
-    if (deltaMs == 0L) return "Same"
+    if (deltaMs == 0L) return if (isSpanishLanguage()) "Igual" else "Same"
     val absMs = kotlin.math.abs(deltaMs)
     val valueText = if (absMs >= 1000L) {
         String.format(Locale.US, "%.2f s", absMs / 1000f)
@@ -777,9 +853,9 @@ private fun formatVsFastestDelta(deltaMs: Long?): String {
         "$absMs ms"
     }
     return if (deltaMs < 0L) {
-        "-$valueText faster"
+        if (isSpanishLanguage()) "-$valueText mas rapido" else "-$valueText faster"
     } else {
-        "+$valueText slower"
+        if (isSpanishLanguage()) "+$valueText mas lento" else "+$valueText slower"
     }
 }
 

@@ -29,8 +29,8 @@ import com.dhmeter.domain.model.RunSeries
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.EventType
 import com.dhmeter.domain.model.SeriesType
-import kotlin.math.abs
-import kotlin.math.max
+import com.dhmeter.app.ui.i18n.tr
+import com.dhmeter.app.ui.theme.dhTopBarColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,12 +47,14 @@ fun ChartsScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("Charts (${runIds.size} runs)") },
+                colors = dhTopBarColors(),
+                title = { Text(tr("Charts (${runIds.size} runs)", "Graficas (${runIds.size} bajadas)")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atras"))
                     }
                 }
             )
@@ -77,7 +79,7 @@ fun ChartsScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = uiState.error ?: "Unknown error",
+                        text = uiState.error ?: tr("Unknown error", "Error desconocido"),
                         color = MaterialTheme.colorScheme.error
                     )
                 }
@@ -135,21 +137,21 @@ private fun ChartsContent(
 
         // Impact Density vs distPct
         MultiRunChartSection(
-            title = "Impact Density vs Distance %",
+            title = tr("Impact Density vs Distance %", "Densidad de impacto vs Distancia %"),
             runs = uiState.runs,
             seriesSelector = { it.impactSeries }
         )
 
         // Harshness vs distPct
         MultiRunChartSection(
-            title = "Harshness vs Distance %",
+            title = tr("Harshness vs Distance %", "Vibracion vs Distancia %"),
             runs = uiState.runs,
             seriesSelector = { it.harshnessSeries }
         )
 
         // Stability vs distPct
         MultiRunChartSection(
-            title = "Stability vs Distance %",
+            title = tr("Stability vs Distance %", "Estabilidad vs Distancia %"),
             runs = uiState.runs,
             seriesSelector = { it.stabilitySeries }
         )
@@ -159,14 +161,14 @@ private fun ChartsContent(
         // Events over distPct - Combined view
         if (uiState.runs.any { it.events.isNotEmpty() }) {
             Text(
-                text = "Events over Distance %",
+                text = tr("Events over Distance %", "Eventos sobre Distancia %"),
                 style = MaterialTheme.typography.titleMedium
             )
             
             uiState.runs.forEach { run ->
                 if (run.events.isNotEmpty()) {
                     Text(
-                        text = "${run.runLabel} Events",
+                        text = tr("${run.runLabel} Events", "Eventos de ${run.runLabel}"),
                         style = MaterialTheme.typography.labelMedium,
                         color = run.color
                     )
@@ -180,27 +182,34 @@ private fun ChartsContent(
             }
         }
 
-        // Heatmap lineal for each run
+        // Heatmap by speed for each run
         Text(
-            text = "Heatmap Comparison",
+            text = tr("Speed Heatmap Comparison", "Comparacion de mapa de calor por velocidad"),
             style = MaterialTheme.typography.titleMedium
         )
         
         uiState.runs.forEach { run ->
-            run.impactSeries?.let { series ->
-                if (series.pointCount > 0) {
-                    Text(
-                        text = "Impact Heatmap - ${run.runLabel}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = run.color
-                    )
-                    HeatmapBar(
-                        points = series.toHeatmapPoints(),
-                        colors = HeatmapColors.Impact,
-                        minValue = 0f,
-                        maxValue = 100f
-                    )
-                }
+            val speedPoints = run.speedSeries
+                ?.toSpeedHeatmapPoints(run.run?.distanceMeters)
+                .orEmpty()
+                .ifEmpty { fallbackSpeedHeatmapPoints(run.run?.avgSpeed) }
+
+            if (speedPoints.isNotEmpty()) {
+                val maxSpeed = speedPoints.maxOfOrNull { it.value } ?: 0f
+                Text(
+                    text = tr(
+                        "Speed Heatmap - ${run.runLabel}",
+                        "Mapa de calor de velocidad - ${run.runLabel}"
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = run.color
+                )
+                HeatmapBar(
+                    points = speedPoints,
+                    colors = HeatmapColors.Speed,
+                    minValue = 0f,
+                    maxValue = maxSpeed.coerceAtLeast(10f)
+                )
             }
         }
         
@@ -220,7 +229,10 @@ private fun MultiRunChartSection(
             style = MaterialTheme.typography.titleMedium
         )
         Text(
-            text = "Burden score: 0 = smoother, 100 = more punishing (lower is better).",
+            text = tr(
+                "Burden score: 0 = smoother, 100 = more punishing (lower is better).",
+                "Puntaje de carga: 0 = mas suave, 100 = mas castigador (menor es mejor)."
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
         )
@@ -235,8 +247,8 @@ private fun MultiRunChartSection(
         if (chartSeriesList.isNotEmpty()) {
             ComparisonLineChart(
                 series = chartSeriesList,
-                xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
-                yAxisConfig = AxisConfig(0f, 100f, label = "Score (0-100)"),
+                xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
+                yAxisConfig = AxisConfig(0f, 100f, label = tr("Score (0-100)", "Puntaje (0-100)")),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
@@ -256,51 +268,9 @@ private fun MultiRunChartSection(
                 )
             }
 
-            // Delta chart gives higher precision for A/B comparisons.
-            if (runs.size == 2) {
-                val runA = runs[0]
-                val runB = runs[1]
-                val deltaPoints = buildDeltaPoints(
-                    pointsA = seriesSelector(runA)?.toChartPoints().orEmpty(),
-                    pointsB = seriesSelector(runB)?.toChartPoints().orEmpty()
-                )
-                if (deltaPoints.isNotEmpty()) {
-                    val maxAbsDelta = deltaPoints.maxOfOrNull { abs(it.y) } ?: 0f
-                    val axis = max(10f, (kotlin.math.ceil(maxAbsDelta / 10f) * 10f).toFloat())
-                        .coerceAtMost(100f)
-                    val peak = deltaPoints.maxByOrNull { abs(it.y) }
-
-                    Text(
-                        text = "Delta (${runB.runLabel} - ${runA.runLabel})",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    ComparisonLineChart(
-                        series = listOf(
-                            ChartSeries(
-                                label = "Delta",
-                                points = deltaPoints,
-                                color = Color(0xFF8E24AA)
-                            )
-                        ),
-                        xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
-                        yAxisConfig = AxisConfig(-axis, axis, label = "Delta"),
-                        showLegend = false,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(160.dp)
-                    )
-                    peak?.let {
-                        Text(
-                            text = "Peak delta ${String.format("%.1f", it.y)} at ${String.format("%.0f", it.x)}%. Positive = ${runB.runLabel} harsher.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                }
-            }
         } else {
             Text(
-                text = "No data available",
+                text = tr("No data available", "No hay datos disponibles"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -314,11 +284,14 @@ private fun SpeedComparisonSection(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "Speed vs Distance %",
+            text = tr("Speed vs Distance %", "Velocidad vs Distancia %"),
             style = MaterialTheme.typography.titleMedium
         )
         Text(
-            text = "Speed derived from timing profile and total distance.",
+            text = tr(
+                "Speed derived from timing profile and total distance.",
+                "Velocidad derivada del perfil de tiempos y la distancia total."
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
         )
@@ -338,7 +311,7 @@ private fun SpeedComparisonSection(
 
         if (chartSeriesList.isEmpty()) {
             Text(
-                text = "No data available",
+                text = tr("No data available", "No hay datos disponibles"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -348,7 +321,7 @@ private fun SpeedComparisonSection(
 
             ComparisonLineChart(
                 series = chartSeriesList,
-                xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
+                xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
                 yAxisConfig = AxisConfig(0f, axisMax, label = "km/h"),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -402,31 +375,22 @@ private fun fallbackSpeedChartPoints(avgSpeedMps: Float?): List<ChartPoint> {
     )
 }
 
-/**
- * Extension function to convert RunSeries to list of HeatmapPoint
- */
-private fun RunSeries.toHeatmapPoints(): List<HeatmapPoint> {
-    return (0 until pointCount).mapNotNull { i ->
-        HeatmapPoint(points[i * 2], normalizeToScore(seriesType, points[i * 2 + 1]))
-            .takeIf { it.x.isFinite() && it.value.isFinite() }
-    }
+private fun RunSeries.toSpeedHeatmapPoints(distanceMeters: Float?): List<HeatmapPoint> {
+    return toSpeedChartPoints(distanceMeters)
+        .map { HeatmapPoint(x = it.x, value = it.y.coerceAtLeast(0f)) }
+}
+
+private fun fallbackSpeedHeatmapPoints(avgSpeedMps: Float?): List<HeatmapPoint> {
+    val speedMps = avgSpeedMps?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
+    val speedKmh = speedMps * 3.6f
+    return listOf(
+        HeatmapPoint(0f, speedKmh),
+        HeatmapPoint(100f, speedKmh)
+    )
 }
 
 private fun normalizeToScore(seriesType: SeriesType, value: Float): Float {
     return normalizeSeriesBurdenScore(seriesType, value)
-}
-
-private fun buildDeltaPoints(
-    pointsA: List<ChartPoint>,
-    pointsB: List<ChartPoint>
-): List<ChartPoint> {
-    val size = minOf(pointsA.size, pointsB.size)
-    if (size == 0) return emptyList()
-    return (0 until size).map { index ->
-        val x = ((pointsA[index].x + pointsB[index].x) / 2f).coerceIn(0f, 100f)
-        val delta = (pointsB[index].y - pointsA[index].y).coerceIn(-100f, 100f)
-        ChartPoint(x = x, y = delta)
-    }
 }
 
 /**

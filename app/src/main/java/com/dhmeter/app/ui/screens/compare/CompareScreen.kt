@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dhmeter.app.ui.i18n.tr
 import com.dhmeter.app.ui.theme.*
 import com.dhmeter.charts.components.ComparisonLineChart
 import com.dhmeter.charts.model.AxisConfig
@@ -60,18 +61,29 @@ fun CompareScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("Compare ${runIds.size} Runs") },
+                colors = dhTopBarColors(),
+                title = {
+                    Text(
+                        tr(
+                            "Compare ${runIds.size} Runs",
+                            "Comparar ${runIds.size} bajadas"
+                        )
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atras"))
                     }
                 }
             )
         },
         bottomBar = {
-            BottomAppBar {
+            BottomAppBar(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f)
+            ) {
                 Button(
                     onClick = onViewCharts,
                     modifier = Modifier
@@ -81,7 +93,12 @@ fun CompareScreen(
                 ) {
                     Icon(Icons.Default.ShowChart, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("View Charts (${runIds.size} runs)")
+                    Text(
+                        tr(
+                            "View Charts (${runIds.size} runs)",
+                            "Ver graficas (${runIds.size} bajadas)"
+                        )
+                    )
                 }
             }
         }
@@ -110,7 +127,7 @@ fun CompareScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(uiState.error ?: "Could not load comparison")
+                    Text(uiState.error ?: tr("Could not load comparison", "No se pudo cargar la comparacion"))
                 }
             }
         }
@@ -140,12 +157,15 @@ private fun MultiRunComparisonContent(
 
         // Metrics comparison table
         Text(
-            text = "Metrics Comparison",
+            text = tr("Metrics Comparison", "Comparacion de metricas"),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         Text(
-            text = "Lower score means smoother/less punishing.",
+            text = tr(
+                "Lower score means smoother/less punishing.",
+                "Menor puntaje significa mas suave/menos castigador."
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
         )
@@ -159,7 +179,7 @@ private fun MultiRunComparisonContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "Speed Comparison",
+            text = tr("Speed Comparison", "Comparacion de velocidad"),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(bottom = 12.dp)
         )
@@ -169,7 +189,7 @@ private fun MultiRunComparisonContent(
 
         comparison.mapComparison?.let { mapComparison ->
             Text(
-                text = "Route Comparison",
+                text = tr("Route Comparison", "Comparacion de ruta"),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
@@ -184,7 +204,7 @@ private fun MultiRunComparisonContent(
         // Section analysis
         if (comparison.sectionInsights.isNotEmpty()) {
             Text(
-                text = "Insights",
+                text = tr("Insights", "Insights"),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
@@ -234,7 +254,7 @@ private fun RunCard(
             Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = runWithColor.label,
+                    text = localizedRunLabel(runWithColor.label),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = Color(runWithColor.color)
@@ -289,14 +309,14 @@ private fun VerdictCard(verdict: MultiRunVerdict) {
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = verdict.title,
+                    text = localizedVerdictTitle(verdict),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = verdict.description,
+                text = localizedInsightText(verdict.description),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -310,7 +330,7 @@ private fun SpeedComparisonChart(comparison: MultiRunComparisonResult) {
 
     if (chartSeries.isEmpty()) {
         Text(
-            text = "No speed data available",
+            text = tr("No speed data available", "No hay datos de velocidad disponibles"),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -320,7 +340,7 @@ private fun SpeedComparisonChart(comparison: MultiRunComparisonResult) {
 
         ComparisonLineChart(
             series = chartSeries,
-            xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
+            xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
             yAxisConfig = AxisConfig(0f, axisMax, label = "km/h"),
             modifier = Modifier
                 .fillMaxWidth()
@@ -366,7 +386,7 @@ private fun buildSpeedComparisonSeries(comparison: MultiRunComparisonResult): Li
             null
         } else {
             ChartSeries(
-                label = runWithColor.label,
+                label = localizedRunLabel(runWithColor.label),
                 points = points,
                 color = Color(runWithColor.color)
             )
@@ -398,14 +418,14 @@ private fun MultiMetricsTable(
                 horizontalArrangement = Arrangement.Start
             ) {
                 Text(
-                    text = "Metric",
+                    text = tr("Metric", "Metrica"),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.width(132.dp)
                 )
                 runs.forEach { runWithColor ->
                     Text(
-                        text = runWithColor.label,
+                        text = localizedRunLabel(runWithColor.label),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(runWithColor.color),
                         textAlign = TextAlign.Center,
@@ -432,23 +452,34 @@ private fun MapComparisonSection(
     mapComparison: MapComparisonData,
     totalRunCount: Int
 ) {
+    var selectedSectionIndex by remember(mapComparison) { mutableStateOf<Int?>(null) }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (mapComparison.runs.size < totalRunCount) {
             Text(
-                text = "Showing ${mapComparison.runs.size}/$totalRunCount runs with GPS route data.",
+                text = tr(
+                    "Showing ${mapComparison.runs.size}/$totalRunCount runs with GPS route data.",
+                    "Mostrando ${mapComparison.runs.size}/$totalRunCount bajadas con ruta GPS."
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
             )
         }
 
         Text(
-            text = "Split deltas are versus ${mapComparison.runs.firstOrNull()?.runLabel ?: "Run 1"} (baseline), similar to live race sectors.",
+            text = tr(
+                "Tap an S marker on the map to highlight that section in the table.",
+                "Toca un marcador S en el mapa para resaltar esa seccion en la tabla."
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
         )
         if (!mapComparison.hasMeasuredSplitTiming) {
             Text(
-                text = "Some runs lack timing profile data; split deltas are estimated from total duration.",
+                text = tr(
+                    "Some runs lack timing profile data; section times are estimated from total duration.",
+                    "Algunas bajadas no tienen perfil de tiempos; los tiempos por seccion se estiman desde la duracion total."
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
             )
@@ -462,25 +493,32 @@ private fun MapComparisonSection(
         ) {
             RouteOverlayMap(
                 mapComparison = mapComparison,
+                selectedSectionIndex = selectedSectionIndex,
+                onSectionSelected = { selectedSectionIndex = it },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(260.dp)
             )
         }
 
-        SplitDeltaTable(mapComparison = mapComparison)
+        SplitSectionTable(
+            mapComparison = mapComparison,
+            selectedSectionIndex = selectedSectionIndex
+        )
     }
 }
 
 @Composable
 private fun RouteOverlayMap(
     mapComparison: MapComparisonData,
+    selectedSectionIndex: Int?,
+    onSectionSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val runs = mapComparison.runs
     if (runs.isEmpty()) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
-            Text("No route data available")
+            Text(tr("No route data available", "No hay datos de ruta disponibles"))
         }
     } else {
         val allPoints = remember(runs) {
@@ -537,14 +575,14 @@ private fun RouteOverlayMap(
             baselinePoints.firstOrNull()?.let { start ->
                 Marker(
                     state = MarkerState(LatLng(start.lat, start.lon)),
-                    title = "Start",
+                    title = tr("Start", "Inicio"),
                     icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
                 )
             }
             baselinePoints.lastOrNull()?.let { end ->
                 Marker(
                     state = MarkerState(LatLng(end.lat, end.lon)),
-                    title = "Finish",
+                    title = tr("Finish", "Meta"),
                     icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
                 )
             }
@@ -552,10 +590,19 @@ private fun RouteOverlayMap(
             // Sector markers (S1..Sn) based on baseline route.
             mapComparison.sections.dropLast(1).forEach { section ->
                 findPointNearDistPct(baselinePoints, section.endDistPct)?.let { point ->
+                    val isSelected = selectedSectionIndex == section.sectionIndex
                     Marker(
                         state = MarkerState(LatLng(point.lat, point.lon)),
                         title = "S${section.sectionIndex}",
-                        snippet = "${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%"
+                        snippet = "${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%",
+                        icon = BitmapDescriptorFactory.defaultMarker(
+                            if (isSelected) BitmapDescriptorFactory.HUE_YELLOW
+                            else BitmapDescriptorFactory.HUE_ORANGE
+                        ),
+                        onClick = {
+                            onSectionSelected(section.sectionIndex)
+                            false
+                        }
                     )
                 }
             }
@@ -564,9 +611,11 @@ private fun RouteOverlayMap(
 }
 
 @Composable
-private fun SplitDeltaTable(mapComparison: MapComparisonData) {
+private fun SplitSectionTable(
+    mapComparison: MapComparisonData,
+    selectedSectionIndex: Int?
+) {
     val horizontalScroll = rememberScrollState()
-    val baselineIndex = mapComparison.baselineRunIndex
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -582,14 +631,14 @@ private fun SplitDeltaTable(mapComparison: MapComparisonData) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Section",
+                    text = tr("Section", "Seccion"),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.width(132.dp)
                 )
                 mapComparison.runs.forEach { run ->
                     Text(
-                        text = run.runLabel,
+                        text = localizedRunLabel(run.runLabel),
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(run.color),
                         textAlign = TextAlign.Center,
@@ -601,54 +650,49 @@ private fun SplitDeltaTable(mapComparison: MapComparisonData) {
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             mapComparison.sections.forEach { section ->
+                val isSelected = selectedSectionIndex == section.sectionIndex
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp)
+                        .background(
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                            } else {
+                                Color.Transparent
+                            },
+                            shape = MaterialTheme.shapes.small
+                        )
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
                         .horizontalScroll(horizontalScroll),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "S${section.sectionIndex} (${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%)",
+                        text = buildString {
+                            if (isSelected) append("> ")
+                            append("S${section.sectionIndex} (${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%)")
+                        },
                         style = MaterialTheme.typography.bodySmall,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         modifier = Modifier.width(132.dp)
                     )
 
                     section.sectionTimesMs.forEachIndexed { runIndex, splitMs ->
                         val isBest = section.bestRunIndex == runIndex
-                        val delta = section.deltaVsBaselineMs.getOrNull(runIndex)
-                        val deltaText = when {
-                            runIndex == baselineIndex -> formatMs(splitMs)
-                            delta != null -> formatSignedDelta(delta)
-                            else -> "--"
-                        }
-                        val color = when {
-                            runIndex == baselineIndex -> MaterialTheme.colorScheme.onSurface
-                            delta == null -> MaterialTheme.colorScheme.outline
-                            delta < 0L -> GreenPositive
-                            delta > 0L -> RedNegative
-                            else -> MaterialTheme.colorScheme.onSurface
-                        }
+                        val timeText = formatMs(splitMs)
+                        val color = if (isBest) GreenPositive else MaterialTheme.colorScheme.onSurface
 
                         Column(
                             modifier = Modifier.width(100.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = if (isBest) "* $deltaText" else deltaText,
+                                text = if (isBest) "* $timeText" else timeText,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = if (isBest) FontWeight.Bold else FontWeight.Normal,
                                 color = color,
                                 textAlign = TextAlign.Center
                             )
-                            if (runIndex != baselineIndex) {
-                                Text(
-                                    text = formatMs(splitMs),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
                             Text(
                                 text = formatSpeed(section.sectionAvgSpeedMps.getOrNull(runIndex)),
                                 style = MaterialTheme.typography.labelSmall,
@@ -657,43 +701,6 @@ private fun SplitDeltaTable(mapComparison: MapComparisonData) {
                             )
                         }
                     }
-                }
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(horizontalScroll),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Total delta",
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.width(132.dp)
-                )
-                mapComparison.totalDeltaVsBaselineMs.forEachIndexed { runIndex, delta ->
-                    val text = when {
-                        runIndex == baselineIndex -> "Baseline"
-                        delta == null -> "--"
-                        else -> formatSignedDelta(delta)
-                    }
-                    val color = when {
-                        runIndex == baselineIndex -> MaterialTheme.colorScheme.outline
-                        delta == null -> MaterialTheme.colorScheme.outline
-                        delta < 0L -> GreenPositive
-                        delta > 0L -> RedNegative
-                        else -> MaterialTheme.colorScheme.onSurface
-                    }
-
-                    Text(
-                        text = text,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = color,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.width(100.dp)
-                    )
                 }
             }
         }
@@ -714,7 +721,7 @@ private fun MultiMetricRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = comparison.metricName,
+            text = localizedMetricName(comparison.metricName),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.width(132.dp)
         )
@@ -765,7 +772,7 @@ private fun SectionInsights(insights: List<String>) {
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = insight,
+                        text = localizedInsightText(insight),
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -781,6 +788,66 @@ private fun formatDuration(ms: Long): String {
     return String.format(Locale.US, "%d:%02d", minutes, secs)
 }
 
+private fun isSpanishLanguage(): Boolean {
+    return Locale.getDefault().language.lowercase(Locale.US).startsWith("es")
+}
+
+private fun localizedRunLabel(label: String): String {
+    if (!isSpanishLanguage()) return label
+    return if (label.startsWith("Run ")) {
+        "Bajada ${label.removePrefix("Run ").trim()}"
+    } else {
+        label
+    }
+}
+
+private fun localizedMetricName(metricName: String): String {
+    if (!isSpanishLanguage()) return metricName
+    return when (metricName) {
+        "Impact" -> "Impacto"
+        "Harshness" -> "Vibracion"
+        "Stability" -> "Inestabilidad"
+        "Landing Quality" -> "Calidad de aterrizaje"
+        "Duration" -> "Duracion"
+        "Max Speed" -> "Velocidad maxima"
+        else -> metricName
+    }
+}
+
+private fun localizedVerdictTitle(verdict: MultiRunVerdict): String {
+    if (!isSpanishLanguage()) return verdict.title
+    return when (verdict.type) {
+        MultiRunVerdict.Type.CLEAR_WINNER -> "${localizedRunLabel(verdict.bestRunLabel)} fue la mas suave"
+        MultiRunVerdict.Type.MIXED -> "Resultados mixtos"
+        MultiRunVerdict.Type.SIMILAR -> "Rendimiento similar"
+    }
+}
+
+private fun localizedInsightText(text: String): String {
+    if (!isSpanishLanguage()) return text
+    return text
+        .replace("Most metrics are similar across runs.", "La mayoria de metricas son similares entre bajadas.")
+        .replace("Metrics are too close to declare a clear advantage.", "Las metricas estan demasiado cerca para una ventaja clara.")
+        .replace("No significant differences detected between runs", "No se detectaron diferencias significativas entre bajadas")
+        .replace("Mixed results", "Resultados mixtos")
+        .replace("Similar performance", "Rendimiento similar")
+        .replace("Best ", "Mejor ")
+        .replace(" varies by ", " varia en ")
+        .replace("% across runs", "% entre bajadas")
+        .replace(" spread is ", " tiene un rango de ")
+        .replace(" points", " puntos")
+        .replace(" has best ", " tiene mejor ")
+        .replace(" gained ", " gano ")
+        .replace(" lost ", " perdio ")
+        .replace(" in S", " en S")
+        .replace("Impact", "Impacto")
+        .replace("Harshness", "Vibracion")
+        .replace("Stability", "Inestabilidad")
+        .replace("Landing Quality", "Calidad de aterrizaje")
+        .replace("Duration", "Duracion")
+        .replace("Max Speed", "Velocidad maxima")
+}
+
 private fun formatMs(value: Long?): String {
     value ?: return "--"
     return if (value >= 1000L) {
@@ -788,18 +855,6 @@ private fun formatMs(value: Long?): String {
     } else {
         "${value} ms"
     }
-}
-
-private fun formatSignedDelta(deltaMs: Long): String {
-    if (deltaMs == 0L) return "0 ms"
-    val sign = if (deltaMs > 0) "+" else "-"
-    val absMs = abs(deltaMs)
-    val value = if (absMs >= 1000L) {
-        String.format(Locale.US, "%.2f s", absMs / 1000f)
-    } else {
-        "$absMs ms"
-    }
-    return sign + value
 }
 
 private fun formatSpeed(speedMps: Float?): String {

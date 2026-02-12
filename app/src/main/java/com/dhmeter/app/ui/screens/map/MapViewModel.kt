@@ -1,10 +1,13 @@
 package com.dhmeter.app.ui.screens.map
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dhmeter.app.ui.i18n.tr
 import com.dhmeter.domain.model.*
 import com.dhmeter.domain.usecase.GetRunMapDataUseCase
 import com.dhmeter.domain.usecase.GetRunSectionComparisonUseCase
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -18,13 +21,14 @@ data class MapUiState(
     val showSectionComparison: Boolean = false,
     val isLoading: Boolean = true,
     val error: String? = null,
-    val selectedMetric: MapMetricType = MapMetricType.IMPACT,
+    val selectedMetric: MapMetricType = MapMetricType.SPEED,
     val showEvents: Boolean = true,
     val selectedEvent: MapEventMarker? = null
 )
 
 @HiltViewModel
 class MapViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val getRunMapDataUseCase: GetRunMapDataUseCase,
     private val getRunSectionComparisonUseCase: GetRunSectionComparisonUseCase
 ) : ViewModel() {
@@ -45,6 +49,7 @@ class MapViewModel @Inject constructor(
                 showSectionComparison = false,
                 isLoading = true,
                 error = null,
+                selectedMetric = MapMetricType.SPEED,
                 selectedEvent = null
             )
         }
@@ -61,7 +66,11 @@ class MapViewModel @Inject constructor(
                             sectionComparison = sectionResult.getOrNull(),
                             showSectionComparison = false,
                             isLoading = false,
-                            error = if (mapData == null) "No GPS data available" else null
+                            error = if (mapData == null) {
+                                tr(appContext, "No GPS data available", "No hay datos GPS disponibles")
+                            } else {
+                                null
+                            }
                         )
                     }
                 }
@@ -72,7 +81,11 @@ class MapViewModel @Inject constructor(
                             sectionComparison = null,
                             showSectionComparison = false,
                             isLoading = false,
-                            error = e.message ?: "Failed to load map data"
+                            error = e.message ?: tr(
+                                appContext,
+                                "Failed to load map data",
+                                "No se pudieron cargar los datos del mapa"
+                            )
                         )
                     }
                 }
@@ -95,7 +108,11 @@ class MapViewModel @Inject constructor(
                             mapData = mapData,
                             isLoading = false,
                             selectedEvent = null,
-                            error = if (mapData == null) "No GPS data available" else null
+                            error = if (mapData == null) {
+                                tr(appContext, "No GPS data available", "No hay datos GPS disponibles")
+                            } else {
+                                null
+                            }
                         )
                     }
                 }
@@ -104,7 +121,11 @@ class MapViewModel @Inject constructor(
                         it.copy(
                             selectedMetric = previousMetric,
                             isLoading = false,
-                            error = e.message ?: "Failed to load map data"
+                            error = e.message ?: tr(
+                                appContext,
+                                "Failed to load map data",
+                                "No se pudieron cargar los datos del mapa"
+                            )
                         )
                     }
                 }

@@ -1,7 +1,9 @@
 package com.dhmeter.app.ui.screens.runsummary
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dhmeter.app.ui.i18n.tr
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.RunSeries
 import com.dhmeter.domain.model.SeriesType
@@ -10,6 +12,7 @@ import com.dhmeter.domain.usecase.GetComparableRunsUseCase
 import com.dhmeter.domain.usecase.GetRunByIdUseCase
 import com.dhmeter.domain.usecase.GetRunEventsUseCase
 import com.dhmeter.domain.usecase.GetRunSeriesUseCase
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -34,6 +37,7 @@ data class RunSummaryUiState(
 
 @HiltViewModel
 class RunSummaryViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val getRunByIdUseCase: GetRunByIdUseCase,
     private val getComparableRunsUseCase: GetComparableRunsUseCase,
     private val getRunSeriesUseCase: GetRunSeriesUseCase,
@@ -130,7 +134,11 @@ class RunSummaryViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     isChartsLoading = false,
-                    chartsError = e.message ?: "Failed to load charts"
+                    chartsError = e.message ?: tr(
+                        appContext,
+                        "Failed to load charts",
+                        "No se pudieron cargar las graficas"
+                    )
                 )
             }
         }

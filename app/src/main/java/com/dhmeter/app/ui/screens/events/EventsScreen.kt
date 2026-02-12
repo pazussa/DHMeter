@@ -9,10 +9,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dhmeter.app.ui.i18n.tr
 import com.dhmeter.app.ui.theme.*
 import com.dhmeter.domain.model.RunEvent
 import java.util.Locale
@@ -31,12 +33,14 @@ fun EventsScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("Events") },
+                colors = dhTopBarColors(),
+                title = { Text(tr("Events", "Eventos")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atras"))
                     }
                 }
             )
@@ -71,7 +75,7 @@ fun EventsScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No events detected",
+                            text = tr("No events detected", "No se detectaron eventos"),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -108,15 +112,13 @@ private fun EventsSummary(events: List<RunEvent>) {
     
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-        )
+        colors = dhGlassCardColors(emphasis = true)
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
             Text(
-                text = "Summary",
+                text = tr("Summary", "Resumen"),
                 style = MaterialTheme.typography.titleSmall
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -127,17 +129,17 @@ private fun EventsSummary(events: List<RunEvent>) {
                 SummaryItem(
                     icon = Icons.Default.FlightLand,
                     count = landings,
-                    label = "Landings"
+                    label = tr("Landings", "Aterrizajes")
                 )
                 SummaryItem(
                     icon = Icons.Default.Bolt,
                     count = impacts,
-                    label = "Impacts"
+                    label = tr("Impacts", "Impactos")
                 )
                 SummaryItem(
                     icon = Icons.Default.Vibration,
                     count = harshnessBursts,
-                    label = "Harshness"
+                    label = tr("Harshness", "Vibracion")
                 )
             }
         }
@@ -175,17 +177,15 @@ private fun SummaryItem(
 @Composable
 private fun EventCard(event: RunEvent) {
     val (icon, color, label) = when (event.type) {
-        "LANDING" -> Triple(Icons.Default.FlightLand, ChartImpact, "Landing")
-        "IMPACT_PEAK" -> Triple(Icons.Default.Bolt, ChartHarshness, "Impact Peak")
-        "HARSHNESS_BURST" -> Triple(Icons.Default.Vibration, YellowWarning, "Harshness Burst")
+        "LANDING" -> Triple(Icons.Default.FlightLand, ChartImpact, tr("Landing", "Aterrizaje"))
+        "IMPACT_PEAK" -> Triple(Icons.Default.Bolt, ChartHarshness, tr("Impact Peak", "Pico de impacto"))
+        "HARSHNESS_BURST" -> Triple(Icons.Default.Vibration, YellowWarning, tr("Harshness Burst", "Rafaga de vibracion"))
         else -> Triple(Icons.Default.Info, MaterialTheme.colorScheme.outline, event.type)
     }
     
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        colors = dhGlassCardColors()
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -208,12 +208,18 @@ private fun EventCard(event: RunEvent) {
                     style = MaterialTheme.typography.titleSmall
                 )
                 Text(
-                    text = "At ${String.format(Locale.US, "%.1f", event.distPct)}% of track",
+                    text = tr(
+                        "At ${String.format(Locale.US, "%.1f", event.distPct)}% of track",
+                        "En ${String.format(Locale.US, "%.1f", event.distPct)}% del track"
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Time: ${String.format(Locale.US, "%.1f", event.timeSec)}s",
+                    text = tr(
+                        "Time: ${String.format(Locale.US, "%.1f", event.timeSec)}s",
+                        "Tiempo: ${String.format(Locale.US, "%.1f", event.timeSec)}s"
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -223,7 +229,7 @@ private fun EventCard(event: RunEvent) {
                 horizontalAlignment = Alignment.End
             ) {
                 Text(
-                    text = "Severity",
+                    text = tr("Severity", "Severidad"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )

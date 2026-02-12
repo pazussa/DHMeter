@@ -9,11 +9,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dhmeter.app.ui.i18n.tr
 import com.dhmeter.app.ui.metrics.formatScore0to100
 import com.dhmeter.app.ui.metrics.runOverallQualityScore
+import com.dhmeter.app.ui.theme.dhGlassCardColors
+import com.dhmeter.app.ui.theme.dhTopBarColors
 import com.dhmeter.domain.model.Run
 import java.text.SimpleDateFormat
 import java.util.*
@@ -37,14 +41,16 @@ fun TrackDetailScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = dhTopBarColors(),
                 title = { 
-                    Text(uiState.track?.name ?: "Track Details")
+                    Text(uiState.track?.name ?: tr("Track Details", "Detalle del track"))
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atras"))
                     }
                 },
                 actions = {
@@ -57,7 +63,7 @@ fun TrackDetailScreen(
                         ) {
                             Icon(
                                 imageVector = if (isCompareMode) Icons.Default.Close else Icons.Default.Compare,
-                                contentDescription = "Compare mode"
+                                contentDescription = tr("Compare mode", "Modo comparacion")
                             )
                         }
                     }
@@ -70,7 +76,7 @@ fun TrackDetailScreen(
                     onClick = onStartNewRun,
                     containerColor = MaterialTheme.colorScheme.primary
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = "Start new run")
+                    Icon(Icons.Default.PlayArrow, contentDescription = tr("Start new run", "Iniciar nueva bajada"))
                 }
             } else if (selectedRuns.size >= 2) {
                 ExtendedFloatingActionButton(
@@ -81,7 +87,7 @@ fun TrackDetailScreen(
                 ) {
                     Icon(Icons.Default.Compare, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Compare ${selectedRuns.size}")
+                    Text(tr("Compare ${selectedRuns.size}", "Comparar ${selectedRuns.size}"))
                 }
             }
         }
@@ -118,12 +124,13 @@ fun TrackDetailScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                            )
+                            colors = dhGlassCardColors(emphasis = true)
                         ) {
                             Text(
-                                text = "Select 2+ runs to compare (${selectedRuns.size} selected)",
+                                text = tr(
+                                    "Select 2+ runs to compare (${selectedRuns.size} selected)",
+                                    "Selecciona 2+ bajadas para comparar (${selectedRuns.size} seleccionadas)"
+                                ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.padding(12.dp)
                             )
@@ -150,12 +157,15 @@ fun TrackDetailScreen(
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    text = "No runs yet",
+                                    text = tr("No runs yet", "Aun no hay bajadas"),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = "Start your first run on this track",
+                                    text = tr(
+                                        "Start your first run on this track",
+                                        "Inicia tu primera bajada en este track"
+                                    ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )
@@ -195,11 +205,11 @@ fun TrackDetailScreen(
     uiState.error?.let { message ->
         AlertDialog(
             onDismissRequest = { viewModel.clearError() },
-            title = { Text("Error") },
+            title = { Text(tr("Error", "Error")) },
             text = { Text(message) },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearError() }) {
-                    Text("OK")
+                    Text(tr("OK", "Aceptar"))
                 }
             }
         )
@@ -214,9 +224,7 @@ private fun TrackInfoHeader(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+        colors = dhGlassCardColors()
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -259,7 +267,7 @@ private fun TrackInfoHeader(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "runs",
+                    text = tr("runs", "bajadas"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -282,13 +290,7 @@ private fun RunCard(
     Card(
         onClick = onSelect,
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
-        )
+        colors = dhGlassCardColors(emphasis = isSelected)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -319,7 +321,10 @@ private fun RunCard(
                     style = MaterialTheme.typography.titleSmall
                 )
                 Text(
-                    text = "Duration: ${formatDuration(run.durationMs)}",
+                    text = tr(
+                        "Duration: ${formatDuration(run.durationMs)}",
+                        "Duracion: ${formatDuration(run.durationMs)}"
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -331,7 +336,10 @@ private fun RunCard(
             ) {
                 overallQuality?.let {
                     Text(
-                        text = "Quality: ${formatScore0to100(it)}",
+                        text = tr(
+                            "Quality: ${formatScore0to100(it)}",
+                            "Calidad: ${formatScore0to100(it)}"
+                        ),
                         style = MaterialTheme.typography.labelSmall
                     )
                 }

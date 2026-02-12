@@ -15,10 +15,13 @@ import javax.inject.Singleton
 
 interface RecordingPreviewManager {
     fun startPreview(
+        clientId: String,
         onMetrics: (LiveMetrics) -> Unit,
         onLocation: ((PreviewLocation) -> Unit)? = null
     ): Boolean
-    fun stopPreview()
+    fun stopPreview(clientId: String)
+    fun pauseAll()
+    fun resumeAll()
 }
 
 data class PreviewLocation(
@@ -35,15 +38,57 @@ class RecordingPreviewManagerImpl @Inject constructor(
     private val liveMonitor: LiveMonitor
 ) : RecordingPreviewManager {
     private val previewScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val clients = LinkedHashMap<String, PreviewClient>()
+    private val lock = Any()
     private var previewJob: Job? = null
     private var previewBuffers: SensorBuffers? = null
+    private var isPaused: Boolean = false
 
     override fun startPreview(
+        clientId: String,
         onMetrics: (LiveMetrics) -> Unit,
         onLocation: ((PreviewLocation) -> Unit)?
     ): Boolean {
-        if (previewJob?.isActive == true) return true
+        synchronized(lock) {
+            clients[clientId] = PreviewClient(onMetrics, onLocation)
+            if (isPaused) return true
+        }
 
+        if (previewJob?.isActive == true) return true
+        return startCollectorsAndMonitoring()
+    }
+
+    override fun stopPreview(clientId: String) {
+        val shouldStop = synchronized(lock) {
+            clients.remove(clientId)
+            clients.isEmpty()
+        }
+        if (shouldStop) {
+            stopCollectorsAndMonitoring()
+        }
+    }
+
+    override fun pauseAll() {
+        synchronized(lock) {
+            isPaused = true
+        }
+        stopCollectorsAndMonitoring()
+    }
+
+    override fun resumeAll() {
+        val shouldStart = synchronized(lock) {
+            val canStart = isPaused && clients.isNotEmpty()
+            if (canStart) {
+                isPaused = false
+            }
+            canStart
+        }
+        if (shouldStart && previewJob?.isActive != true) {
+            startCollectorsAndMonitoring()
+        }
+    }
+
+    private fun startCollectorsAndMonitoring(): Boolean {
         val buffers = SensorBuffers()
         val imuStarted = imuCollector.start(buffers)
         if (!imuStarted) return false
@@ -57,11 +102,12 @@ class RecordingPreviewManagerImpl @Inject constructor(
         previewBuffers = buffers
         previewJob = previewScope.launch {
             liveMonitor.startMonitoring(buffers) { metrics ->
-                onMetrics(metrics)
-                if (onLocation != null) {
-                    val latestGps = buffers.gps.getAll().lastOrNull()
-                    if (latestGps != null) {
-                        onLocation(
+                val latestGps = buffers.gps.getAll().lastOrNull()
+                val snapshot = synchronized(lock) { clients.values.toList() }
+                snapshot.forEach { client ->
+                    client.onMetrics(metrics)
+                    if (client.onLocation != null && latestGps != null) {
+                        client.onLocation.invoke(
                             PreviewLocation(
                                 latitude = latestGps.latitude,
                                 longitude = latestGps.longitude,
@@ -76,7 +122,7 @@ class RecordingPreviewManagerImpl @Inject constructor(
         return true
     }
 
-    override fun stopPreview() {
+    private fun stopCollectorsAndMonitoring() {
         previewJob?.cancel()
         previewJob = null
         liveMonitor.stopMonitoring()
@@ -85,4 +131,9 @@ class RecordingPreviewManagerImpl @Inject constructor(
         previewBuffers?.clear()
         previewBuffers = null
     }
+
+    private data class PreviewClient(
+        val onMetrics: (LiveMetrics) -> Unit,
+        val onLocation: ((PreviewLocation) -> Unit)?
+    )
 }

@@ -1,8 +1,10 @@
 package com.dhmeter.app.ui.screens.charts
 
 import androidx.compose.ui.graphics.Color
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dhmeter.app.ui.i18n.tr
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.RunSeries
 import com.dhmeter.domain.model.SeriesType
@@ -10,6 +12,7 @@ import com.dhmeter.domain.model.Run
 import com.dhmeter.domain.usecase.GetRunEventsUseCase
 import com.dhmeter.domain.usecase.GetRunByIdUseCase
 import com.dhmeter.domain.usecase.GetRunSeriesUseCase
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -47,6 +50,7 @@ data class ChartsUiState(
 
 @HiltViewModel
 class ChartsViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val getRunByIdUseCase: GetRunByIdUseCase,
     private val getRunSeriesUseCase: GetRunSeriesUseCase,
     private val getRunEventsUseCase: GetRunEventsUseCase
@@ -74,7 +78,7 @@ class ChartsViewModel @Inject constructor(
                     it.copy(
                         runs = emptyList(),
                         isLoading = false,
-                        error = "Invalid track"
+                        error = tr(appContext, "Invalid track", "Track invalido")
                     )
                 }
                 return@launch
@@ -95,7 +99,11 @@ class ChartsViewModel @Inject constructor(
                         
                         RunChartData(
                             runId = runId,
-                            runLabel = "Run ${index + 1}",
+                            runLabel = tr(
+                                appContext,
+                                "Run ${index + 1}",
+                                "Bajada ${index + 1}"
+                            ),
                             color = runColors[index % runColors.size],
                             run = runDeferred.await(),
                             impactSeries = impact.await().getOrNull(),

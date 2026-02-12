@@ -17,16 +17,18 @@ class GetRunMapDataUseCase @Inject constructor(
         return try {
             val polyline = runRepository.getGpsPolyline(runId)
                 ?: return Result.success(null)
-            
+
             val events = runRepository.getEvents(runId)
-            val impactSeries = runRepository.getSeries(runId, SeriesType.IMPACT_DENSITY)
-            
-            // Calculate percentiles for impact (default metric)
-            val impactValues = impactSeries?.getYValues() ?: emptyList()
-            val percentiles = calculatePercentiles(impactValues)
-            
-            // Create segments colored by impact
-            val segments = createSegments(polyline, impactValues, percentiles)
+            val run = runRepository.getRunById(runId)
+            val speedSeries = runRepository.getSeries(runId, SeriesType.SPEED_TIME)
+
+            // Default map heatmap is speed.
+            val speedValues = extractSpeedValues(
+                speedSeries = speedSeries,
+                totalDistanceM = run?.distanceMeters
+            )
+            val percentiles = calculatePercentiles(speedValues)
+            val segments = createSegments(polyline, speedValues, percentiles)
             
             // Create event markers
             val eventMarkers = createEventMarkers(events, polyline)
@@ -38,7 +40,7 @@ class GetRunMapDataUseCase @Inject constructor(
                     segments = segments,
                     events = eventMarkers,
                     percentiles = percentiles,
-                    activeMetric = MapMetricType.IMPACT
+                    activeMetric = MapMetricType.SPEED
                 )
             )
         } catch (e: Exception) {
@@ -55,15 +57,23 @@ class GetRunMapDataUseCase @Inject constructor(
                 ?: return Result.success(null)
             
             val events = runRepository.getEvents(runId)
+            val run = runRepository.getRunById(runId)
             
             val seriesType = when (metric) {
                 MapMetricType.IMPACT -> SeriesType.IMPACT_DENSITY
                 MapMetricType.HARSHNESS -> SeriesType.HARSHNESS
                 MapMetricType.STABILITY -> SeriesType.STABILITY
+                MapMetricType.SPEED -> SeriesType.SPEED_TIME
             }
             
             val series = runRepository.getSeries(runId, seriesType)
-            val values = series?.getYValues() ?: emptyList()
+            val values = when (metric) {
+                MapMetricType.SPEED -> extractSpeedValues(
+                    speedSeries = series,
+                    totalDistanceM = run?.distanceMeters
+                )
+                else -> series?.getYValues().orEmpty()
+            }
             val percentiles = calculatePercentiles(values)
             val segments = createSegments(polyline, values, percentiles)
             val eventMarkers = createEventMarkers(events, polyline)
@@ -81,6 +91,32 @@ class GetRunMapDataUseCase @Inject constructor(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun extractSpeedValues(speedSeries: RunSeries?, totalDistanceM: Float?): List<Float> {
+        val series = speedSeries ?: return emptyList()
+        if (series.seriesType != SeriesType.SPEED_TIME) return emptyList()
+        val distance = totalDistanceM?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
+        if (series.pointCount < 2) return emptyList()
+
+        val values = ArrayList<Float>(series.pointCount - 1)
+        for (i in 1 until series.pointCount) {
+            val prevX = series.points[(i - 1) * 2]
+            val prevT = series.points[(i - 1) * 2 + 1]
+            val currX = series.points[i * 2]
+            val currT = series.points[i * 2 + 1]
+
+            val distPctDelta = (currX - prevX).coerceAtLeast(0f)
+            val timeDeltaSec = (currT - prevT).coerceAtLeast(0f)
+            if (timeDeltaSec <= 1e-3f) continue
+
+            val distM = distance * (distPctDelta / 100f)
+            val speedMps = distM / timeDeltaSec
+            if (speedMps.isFinite() && speedMps > 0f) {
+                values.add(speedMps * 3.6f)
+            }
+        }
+        return values
     }
     
     private fun calculatePercentiles(values: List<Float>): MetricPercentiles {

@@ -17,6 +17,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dhmeter.app.ui.i18n.tr
 import com.dhmeter.app.ui.metrics.formatScore0to100
 import com.dhmeter.app.ui.metrics.normalizeSeriesBurdenScore
 import com.dhmeter.app.ui.metrics.runMetricQualityScore
@@ -58,21 +59,23 @@ fun RunSummaryScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("Run Summary") },
+                colors = dhTopBarColors(),
+                title = { Text(tr("Run Summary", "Resumen de bajada")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atras"))
                     }
                 },
                 actions = {
                     uiState.run?.let {
                         IconButton(onClick = onViewMap) {
-                            Icon(Icons.Default.Map, contentDescription = "Map")
+                            Icon(Icons.Default.Map, contentDescription = tr("Map", "Mapa"))
                         }
                         IconButton(onClick = onViewEvents) {
-                            Icon(Icons.Default.List, contentDescription = "Events")
+                            Icon(Icons.Default.List, contentDescription = tr("Events", "Eventos"))
                         }
                     }
                 }
@@ -112,7 +115,7 @@ fun RunSummaryScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Run not found")
+                    Text(tr("Run not found", "No se encontro la bajada"))
                 }
             }
         }
@@ -157,7 +160,7 @@ private fun RunSummaryContent(
 
         // Main metrics (shown for all runs, valid or not)
         Text(
-            text = "Performance Metrics",
+            text = tr("Performance Metrics", "Metricas de rendimiento"),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(bottom = 12.dp)
         )
@@ -194,7 +197,7 @@ private fun RunSummaryContent(
             ) {
                 Icon(Icons.Default.Compare, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Compare with another run")
+                Text(tr("Compare with another run", "Comparar con otra bajada"))
             }
         }
 
@@ -226,7 +229,7 @@ private fun RunInfoHeader(run: Run) {
             // GPS quality badge
             AssistChip(
                 onClick = {},
-                label = { Text("GPS: ${run.gpsQuality}") },
+                label = { Text(tr("GPS: ${run.gpsQuality}", "GPS: ${run.gpsQuality}")) },
                 leadingIcon = {
                     Icon(
                         Icons.Default.GpsFixed,
@@ -254,13 +257,13 @@ private fun RunInfoHeader(run: Run) {
             ) {
                 // Duration
                 StatItem(
-                    label = "Time",
+                    label = tr("Time", "Tiempo"),
                     value = formatDuration(run.durationMs)
                 )
                 
                 // Distance
                 StatItem(
-                    label = "Distance",
+                    label = tr("Distance", "Distancia"),
                     value = run.distanceMeters?.let { 
                         if (it >= 1000) String.format(Locale.US, "%.2f km", it / 1000f)
                         else String.format(Locale.US, "%.0f m", it)
@@ -269,7 +272,7 @@ private fun RunInfoHeader(run: Run) {
                 
                 // Average speed
                 StatItem(
-                    label = "Avg Speed",
+                    label = tr("Avg Speed", "Velocidad prom."),
                     value = run.avgSpeed?.let { 
                         String.format(Locale.US, "%.0f km/h", it * 3.6f) 
                     } ?: "--"
@@ -277,7 +280,7 @@ private fun RunInfoHeader(run: Run) {
                 
                 // Pauses
                 StatItem(
-                    label = "Pauses",
+                    label = tr("Pauses", "Pausas"),
                     value = run.pauseCount.toString()
                 )
             }
@@ -327,21 +330,21 @@ private fun MetricsGrid(run: Run) {
         ) {
             MetricCard(
                 icon = Icons.Default.Bolt,
-                label = "Impact",
+                label = tr("Impact", "Impacto"),
                 score = impactQuality,
                 rawValue = run.impactScore?.let { String.format(Locale.US, "%.2f", it) },
-                rawLabel = "raw density",
-                description = "Higher quality = smoother",
+                rawLabel = tr("raw density", "densidad base"),
+                description = tr("Higher quality = smoother", "Mayor calidad = mas suave"),
                 color = ChartImpact,
                 modifier = Modifier.weight(1f)
             )
             MetricCard(
                 icon = Icons.Default.Vibration,
-                label = "Harshness",
+                label = tr("Harshness", "Vibracion"),
                 score = harshnessQuality,
                 rawValue = run.harshnessAvg?.let { String.format(Locale.US, "%.2f", it) },
-                rawLabel = "raw RMS",
-                description = "Higher quality = less vibration",
+                rawLabel = tr("raw RMS", "RMS base"),
+                description = tr("Higher quality = less vibration", "Mayor calidad = menos vibracion"),
                 color = ChartHarshness,
                 modifier = Modifier.weight(1f)
             )
@@ -350,20 +353,20 @@ private fun MetricsGrid(run: Run) {
         // Stability (full width - MVP2 has no slope)
         MetricCard(
             icon = Icons.Default.Balance,
-            label = "Stability",
+            label = tr("Instability", "Inestabilidad"),
             score = stabilityQuality,
             rawValue = run.stabilityScore?.let { String.format(Locale.US, "%.2f", it) },
-            rawLabel = "raw variance",
-            description = "Higher quality = steadier control",
+            rawLabel = tr("raw variance", "varianza base"),
+            description = tr("Higher quality = steadier control", "Mayor calidad = control mas estable"),
             color = ChartStability,
             modifier = Modifier.fillMaxWidth()
         )
 
         ValueMetricCard(
             icon = Icons.Default.Speed,
-            label = "Max Speed",
+            label = tr("Max Speed", "Velocidad maxima"),
             value = run.maxSpeed?.let { String.format(Locale.US, "%.1f km/h", it * 3.6f) } ?: "--",
-            description = "Highest GPS speed recorded",
+            description = tr("Highest GPS speed recorded", "Velocidad GPS mas alta registrada"),
             color = ChartSpeed,
             modifier = Modifier.fillMaxWidth()
         )
@@ -491,7 +494,7 @@ private fun QualityOverviewCard(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = "Ride Quality Index",
+                text = tr("Ride Quality Index", "Indice de calidad de bajada"),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -501,7 +504,10 @@ private fun QualityOverviewCard(
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "Based on impact, harshness and stability (higher is better).",
+                text = tr(
+                    "Based on impact, harshness and stability (higher is better).",
+                    "Basado en impacto, vibracion e inestabilidad (mas alto es mejor)."
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
             )
@@ -512,15 +518,36 @@ private fun QualityOverviewCard(
             ) {
                 AssistChip(
                     onClick = {},
-                    label = { Text("Impact ${formatScore0to100(impactQuality)}") }
+                    label = {
+                        Text(
+                            tr(
+                                "Impact ${formatScore0to100(impactQuality)}",
+                                "Impacto ${formatScore0to100(impactQuality)}"
+                            )
+                        )
+                    }
                 )
                 AssistChip(
                     onClick = {},
-                    label = { Text("Harsh ${formatScore0to100(harshnessQuality)}") }
+                    label = {
+                        Text(
+                            tr(
+                                "Harsh ${formatScore0to100(harshnessQuality)}",
+                                "Vibr ${formatScore0to100(harshnessQuality)}"
+                            )
+                        )
+                    }
                 )
                 AssistChip(
                     onClick = {},
-                    label = { Text("Stab ${formatScore0to100(stabilityQuality)}") }
+                    label = {
+                        Text(
+                            tr(
+                                "Instab ${formatScore0to100(stabilityQuality)}",
+                                "Inest ${formatScore0to100(stabilityQuality)}"
+                            )
+                        )
+                    }
                 )
             }
         }
@@ -548,7 +575,7 @@ private fun LandingQualityCard(score: Float) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Landing Quality",
+                    text = tr("Landing Quality", "Calidad de aterrizaje"),
                     style = MaterialTheme.typography.titleSmall
                 )
             }
@@ -559,7 +586,7 @@ private fun LandingQualityCard(score: Float) {
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "Lower score = smoother landings",
+                text = tr("Lower score = smoother landings", "Menor puntaje = aterrizajes mas suaves"),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
             )
@@ -574,7 +601,7 @@ private fun NotesSection(
 ) {
     if (setupNote != null || conditionsNote != null) {
         Text(
-            text = "Notes",
+            text = tr("Notes", "Notas"),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(bottom = 8.dp)
         )
@@ -585,7 +612,7 @@ private fun NotesSection(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
-                        text = "Setup",
+                        text = tr("Setup", "Configuracion"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -604,7 +631,7 @@ private fun NotesSection(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
-                        text = "Conditions",
+                        text = tr("Conditions", "Condiciones"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -634,11 +661,14 @@ private fun RunChartsSection(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = "Charts",
+            text = tr("Charts", "Graficas"),
             style = MaterialTheme.typography.titleMedium
         )
         Text(
-            text = "Chart scale is burden score: 0 = smoother/cleaner, 100 = more punishing.",
+            text = tr(
+                "Chart scale is burden score: 0 = smoother/cleaner, 100 = more punishing.",
+                "La escala de grafica es carga: 0 = mas suave/limpio, 100 = mas castigador."
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
         )
@@ -647,7 +677,7 @@ private fun RunChartsSection(
             isLoading -> {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 Text(
-                    text = "Loading charts...",
+                    text = tr("Loading charts...", "Cargando graficas..."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -663,25 +693,25 @@ private fun RunChartsSection(
 
             else -> {
                 SingleRunChartSection(
-                    title = "Impact Density vs Distance %",
+                    title = tr("Impact Density vs Distance %", "Densidad de impacto vs Distancia %"),
                     series = impactSeries,
                     color = ChartImpact
                 )
 
                 SingleRunChartSection(
-                    title = "Harshness vs Distance %",
+                    title = tr("Harshness vs Distance %", "Vibracion vs Distancia %"),
                     series = harshnessSeries,
                     color = ChartHarshness
                 )
 
                 SingleRunChartSection(
-                    title = "Stability vs Distance %",
+                    title = tr("Instability vs Distance %", "Inestabilidad vs Distancia %"),
                     series = stabilitySeries,
                     color = ChartStability
                 )
 
                 SpeedChartSection(
-                    title = "Speed vs Distance %",
+                    title = tr("Speed vs Distance %", "Velocidad vs Distancia %"),
                     series = speedSeries,
                     distanceMeters = distanceMeters,
                     fallbackAvgSpeedMps = avgSpeedMps,
@@ -690,7 +720,7 @@ private fun RunChartsSection(
 
                 if (events.isNotEmpty()) {
                     Text(
-                        text = "Events over Distance %",
+                        text = tr("Events over Distance %", "Eventos sobre Distancia %"),
                         style = MaterialTheme.typography.titleSmall
                     )
                     EventMarkers(
@@ -701,19 +731,22 @@ private fun RunChartsSection(
                     )
                 }
 
-                impactSeries?.let { series ->
-                    if (series.pointCount > 0) {
-                        Text(
-                            text = "Impact Heatmap",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        HeatmapBar(
-                            points = series.toHeatmapPoints(),
-                            colors = HeatmapColors.Impact,
-                            minValue = 0f,
-                            maxValue = 100f
-                        )
-                    }
+                val speedHeatmapPoints = speedSeries
+                    ?.toSpeedHeatmapPoints(distanceMeters)
+                    .orEmpty()
+                    .ifEmpty { fallbackSpeedHeatmapPoints(avgSpeedMps) }
+                if (speedHeatmapPoints.isNotEmpty()) {
+                    val maxSpeed = speedHeatmapPoints.maxOfOrNull { it.value } ?: 0f
+                    Text(
+                        text = tr("Speed Heatmap", "Mapa de calor de velocidad"),
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    HeatmapBar(
+                        points = speedHeatmapPoints,
+                        colors = HeatmapColors.Speed,
+                        minValue = 0f,
+                        maxValue = maxSpeed.coerceAtLeast(10f)
+                    )
                 }
             }
         }
@@ -735,7 +768,7 @@ private fun SingleRunChartSection(
         val points = series?.toChartPoints().orEmpty()
         if (points.isEmpty()) {
             Text(
-                text = "No data available",
+                text = tr("No data available", "No hay datos disponibles"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -743,13 +776,13 @@ private fun SingleRunChartSection(
             ComparisonLineChart(
                 series = listOf(
                     ChartSeries(
-                        label = "Run",
+                        label = tr("Run", "Bajada"),
                         points = points,
                         color = color
                     )
                 ),
-                xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
-                yAxisConfig = AxisConfig(0f, 100f, label = "Score (0-100)"),
+                xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
+                yAxisConfig = AxisConfig(0f, 100f, label = tr("Score (0-100)", "Puntaje (0-100)")),
                 showLegend = false,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -759,7 +792,10 @@ private fun SingleRunChartSection(
             val peakPoint = points.maxByOrNull { it.y }
             peakPoint?.let {
                 Text(
-                    text = "Peak burden ${String.format(Locale.US, "%.0f", it.y)} at ${String.format(Locale.US, "%.0f", it.x)}% of run",
+                    text = tr(
+                        "Peak burden ${String.format(Locale.US, "%.0f", it.y)} at ${String.format(Locale.US, "%.0f", it.x)}% of run",
+                        "Pico de carga ${String.format(Locale.US, "%.0f", it.y)} en ${String.format(Locale.US, "%.0f", it.x)}% de la bajada"
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -788,7 +824,7 @@ private fun SpeedChartSection(
             .ifEmpty { fallbackSpeedChartPoints(fallbackAvgSpeedMps) }
         if (points.isEmpty()) {
             Text(
-                text = "No data available",
+                text = tr("No data available", "No hay datos disponibles"),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -799,12 +835,12 @@ private fun SpeedChartSection(
             ComparisonLineChart(
                 series = listOf(
                     ChartSeries(
-                        label = "Speed",
+                        label = tr("Speed", "Velocidad"),
                         points = points,
                         color = color
                     )
                 ),
-                xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
+                xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
                 yAxisConfig = AxisConfig(0f, axisMax, label = "km/h"),
                 showLegend = false,
                 modifier = Modifier
@@ -856,11 +892,18 @@ private fun fallbackSpeedChartPoints(avgSpeedMps: Float?): List<ChartPoint> {
     )
 }
 
-private fun RunSeries.toHeatmapPoints(): List<HeatmapPoint> {
-    return (0 until pointCount).mapNotNull { i ->
-        HeatmapPoint(points[i * 2], normalizeToScore(seriesType, points[i * 2 + 1]))
-            .takeIf { it.x.isFinite() && it.value.isFinite() }
-    }
+private fun RunSeries.toSpeedHeatmapPoints(distanceMeters: Float?): List<HeatmapPoint> {
+    return toSpeedChartPoints(distanceMeters)
+        .map { HeatmapPoint(x = it.x, value = it.y.coerceAtLeast(0f)) }
+}
+
+private fun fallbackSpeedHeatmapPoints(avgSpeedMps: Float?): List<HeatmapPoint> {
+    val speedMps = avgSpeedMps?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
+    val speedKmh = speedMps * 3.6f
+    return listOf(
+        HeatmapPoint(0f, speedKmh),
+        HeatmapPoint(100f, speedKmh)
+    )
 }
 
 private fun normalizeToScore(seriesType: SeriesType, value: Float): Float {
@@ -916,7 +959,7 @@ private fun CompareRunDialog(
     
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select run to compare") },
+        title = { Text(tr("Select run to compare", "Selecciona bajada para comparar")) },
         text = {
             Column(
                 modifier = Modifier
@@ -929,7 +972,7 @@ private fun CompareRunDialog(
                             Text(dateFormat.format(Date(run.startedAt)))
                         },
                         supportingContent = { 
-                            Text("Duration: ${formatDuration(run.durationMs)}")
+                            Text(tr("Duration: ${formatDuration(run.durationMs)}", "Duracion: ${formatDuration(run.durationMs)}"))
                         },
                         modifier = Modifier.clickable { onSelect(run.runId) }
                     )
@@ -938,7 +981,7 @@ private fun CompareRunDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(tr("Cancel", "Cancelar"))
             }
         }
     )

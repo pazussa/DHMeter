@@ -1,18 +1,14 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Background circle -->
+    android:viewportWidth="960"
+    android:viewportHeight="960">
     <path
-        android:fillColor="#1B5E20"
-        android:pathData="M54,54m-50,0a50,50 0,1 1,100 0a50,50 0,1 1,-100 0"/>
-    <!-- Mountain shape -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M20,75 L40,40 L50,55 L65,30 L90,75 Z"/>
-    <!-- Speed indicator arrow -->
-    <path
-        android:fillColor="#4CAF50"
-        android:pathData="M54,85 L54,70 L48,78 L54,70 L60,78 Z"/>
+        android:fillColor="#0E5C2A"
+        android:pathData="M480,480m-430,0a430,430 0,1 1,860 0a430,430 0,1 1,-860 0" />
+    <group android:translateY="960">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M560,-240q100,0 170,-70t70,-170q0,-101 -73.5,-170.5T550,-720q-48,0 -93,11t-87,33l100,40q41,17 65.5,52.5T560,-504q0,60 -41.5,102T418,-360H162q-2,24 -2,54.5v65.5h400ZM176,-440h240q27,0 45.5,-18.5T480,-504q0,-19 -10.5,-34.5T440,-562l-148,-60q-42,37 -71.5,84T176,-440ZM560,-160H160q-33,0 -56.5,-23.5T80,-240v-90q0,-98 37,-183.5t100.5,-149Q281,-726 367,-763t183,-37q68,0 128,25t105,68.5Q828,-663 854,-605t26,125q0,66 -25,124.5t-68.5,102Q743,-210 684.5,-185T560,-160Z" />
+    </group>
 </vector>

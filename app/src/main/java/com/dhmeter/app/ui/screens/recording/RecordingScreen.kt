@@ -19,7 +19,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dhmeter.domain.model.SensorSensitivitySettings
+import com.dhmeter.app.ui.i18n.tr
 import com.dhmeter.app.ui.theme.RedNegative
+import com.dhmeter.app.ui.theme.dhGlassCardColors
+import com.dhmeter.app.ui.theme.dhTopBarColors
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,14 +49,16 @@ fun RecordingScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = dhTopBarColors(),
                 title = { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (uiState.isRecording) {
                             RecordingDot()
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("REC")
+                            Text(tr("REC", "REC"))
                             Spacer(modifier = Modifier.width(16.dp))
                             Text(
                                 text = formatDuration(uiState.elapsedSeconds),
@@ -61,7 +66,7 @@ fun RecordingScreen(
                                 fontWeight = FontWeight.Bold
                             )
                         } else {
-                            Text("Recording")
+                            Text(tr("Recording", "Grabando"))
                         }
                     }
                 },
@@ -72,7 +77,7 @@ fun RecordingScreen(
                                 !uiState.isProcessing &&
                                 uiState.manualStartCountdownSeconds == 0
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "Cancel")
+                        Icon(Icons.Default.Close, contentDescription = tr("Cancel", "Cancelar"))
                     }
                 },
                 actions = {
@@ -80,7 +85,7 @@ fun RecordingScreen(
                         onClick = { showSensitivityPanel = true },
                         enabled = !uiState.isProcessing
                     ) {
-                        Icon(Icons.Default.Tune, contentDescription = "Sensor sensitivity")
+                        Icon(Icons.Default.Tune, contentDescription = tr("Sensor sensitivity", "Sensibilidad de sensores"))
                     }
                 }
             )
@@ -103,7 +108,7 @@ fun RecordingScreen(
             Spacer(modifier = Modifier.height(4.dp))
             
             Text(
-                text = "Phone: Pocket (thigh)",
+                text = tr("Phone: Pocket (thigh)", "Telefono: Bolsillo (muslo)"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline
             )
@@ -133,9 +138,7 @@ fun RecordingScreen(
                 // Speed display
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
+                    colors = dhGlassCardColors()
                 ) {
                     Row(
                         modifier = Modifier
@@ -174,7 +177,7 @@ fun RecordingScreen(
                 ) {
                     Icon(Icons.Default.Stop, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("STOP")
+                    Text(tr("STOP", "DETENER"))
                 }
             } else {
                 Button(
@@ -187,9 +190,14 @@ fun RecordingScreen(
                     Icon(Icons.Default.FiberManualRecord, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     if (uiState.manualStartCountdownSeconds > 0) {
-                        Text("STARTING IN ${uiState.manualStartCountdownSeconds}s")
+                        Text(
+                            tr(
+                                "STARTING IN ${uiState.manualStartCountdownSeconds}s",
+                                "INICIANDO EN ${uiState.manualStartCountdownSeconds}s"
+                            )
+                        )
                     } else {
-                        Text("START RUN")
+                        Text(tr("START RUN", "INICIAR BAJADA"))
                     }
                 }
             }
@@ -199,7 +207,7 @@ fun RecordingScreen(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Processing run data...",
+                    text = tr("Processing run data...", "Procesando datos de la bajada..."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -211,7 +219,7 @@ fun RecordingScreen(
                     ) {
                         Icon(Icons.Default.RestartAlt, contentDescription = null)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Reset processing")
+                        Text(tr("Reset processing", "Reiniciar procesamiento"))
                     }
                 }
             }
@@ -221,8 +229,8 @@ fun RecordingScreen(
     if (showStopConfirmation) {
         AlertDialog(
             onDismissRequest = { showStopConfirmation = false },
-            title = { Text("Stop Recording?") },
-            text = { Text("Are you sure you want to stop recording this run?") },
+            title = { Text(tr("Stop Recording?", "Detener grabacion?")) },
+            text = { Text(tr("Are you sure you want to stop recording this run?", "Seguro que quieres detener esta grabacion?")) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -230,12 +238,12 @@ fun RecordingScreen(
                         viewModel.stopRecording()
                     }
                 ) {
-                    Text("Stop")
+                    Text(tr("Stop", "Detener"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showStopConfirmation = false }) {
-                    Text("Continue Recording")
+                    Text(tr("Continue Recording", "Continuar grabando"))
                 }
             }
         )
@@ -256,11 +264,11 @@ fun RecordingScreen(
     uiState.error?.let { message ->
         AlertDialog(
             onDismissRequest = { viewModel.clearError() },
-            title = { Text("Recording Error") },
+            title = { Text(tr("Recording Error", "Error de grabacion")) },
             text = { Text(message) },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearError() }) {
-                    Text("OK")
+                    Text(tr("OK", "Aceptar"))
                 }
             }
         )
@@ -275,9 +283,7 @@ private fun AutoSegmentsCard(
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
-        )
+        colors = dhGlassCardColors(emphasis = true)
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -291,7 +297,7 @@ private fun AutoSegmentsCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Local Segments: $segmentCount",
+                    text = tr("Local Segments: $segmentCount", "Segmentos locales: $segmentCount"),
                     style = MaterialTheme.typography.titleSmall
                 )
             }
@@ -302,7 +308,10 @@ private fun AutoSegmentsCard(
             )
             if (segmentCount > 0) {
                 Text(
-                    text = "Auto-start triggers near start, above ~9 km/h, and aligned direction.",
+                    text = tr(
+                        "Auto-start triggers near start, above ~9 km/h, and aligned direction.",
+                        "El auto-inicio se activa cerca del inicio, sobre ~9 km/h y con direccion alineada."
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -389,12 +398,7 @@ private fun LiveMetricsBarsCard(
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isPreview) 
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-            else 
-                MaterialTheme.colorScheme.surfaceVariant
-        )
+        colors = dhGlassCardColors(emphasis = isPreview)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -402,26 +406,26 @@ private fun LiveMetricsBarsCard(
         ) {
             if (isPreview) {
                 Text(
-                    text = "Sensor Preview",
+                    text = tr("Sensor Preview", "Vista previa de sensores"),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
             
             LiveMetricBar(
-                label = if (isPreview) "Impacts" else "Impacts (live)",
+                label = if (isPreview) tr("Impacts", "Impactos") else tr("Impacts (live)", "Impactos (en vivo)"),
                 level = impactLevel,
                 color = Color(0xFFE91E63) // Pink for impacts
             )
             
             LiveMetricBar(
-                label = if (isPreview) "Vibration" else "Vibration (live)",
+                label = if (isPreview) tr("Vibration", "Vibracion") else tr("Vibration (live)", "Vibracion (en vivo)"),
                 level = harshnessLevel,
                 color = Color(0xFFFF9800) // Orange for harshness
             )
             
             LiveMetricBar(
-                label = if (isPreview) "Instability" else "Instability (live)",
+                label = if (isPreview) tr("Instability", "Inestabilidad") else tr("Instability (live)", "Inestabilidad (en vivo)"),
                 level = stabilityLevel,
                 color = Color(0xFFD32F2F)
             )
@@ -500,6 +504,7 @@ private fun SensorSensitivitySheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
         modifier = Modifier.fillMaxSize(),
         sheetMaxWidth = Dp.Unspecified
     ) {
@@ -511,27 +516,30 @@ private fun SensorSensitivitySheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Sensor Sensitivity",
+                text = tr("Sensor Sensitivity", "Sensibilidad de sensores"),
                 style = MaterialTheme.typography.titleLarge
             )
             Text(
-                text = "Changes apply to preview and new recordings.",
+                text = tr(
+                    "Changes apply to preview and new recordings.",
+                    "Los cambios se aplican a la vista previa y nuevas grabaciones."
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline
             )
 
             SensitivitySliderRow(
-                label = "Impact (Accelerometer)",
+                label = tr("Impact (Accelerometer)", "Impacto (Acelerometro)"),
                 value = settings.impactSensitivity,
                 onValueChange = onImpactSensitivityChange
             )
             SensitivitySliderRow(
-                label = "Vibration (Accelerometer)",
+                label = tr("Vibration (Accelerometer)", "Vibracion (Acelerometro)"),
                 value = settings.harshnessSensitivity,
                 onValueChange = onHarshnessSensitivityChange
             )
             SensitivitySliderRow(
-                label = "Instability (Gyroscope)",
+                label = tr("Instability (Gyroscope)", "Inestabilidad (Giroscopio)"),
                 value = settings.stabilitySensitivity,
                 onValueChange = onStabilitySensitivityChange
             )
@@ -545,7 +553,7 @@ private fun SensorSensitivitySheet(
                 onClick = onResetDefaults,
                 modifier = Modifier.align(Alignment.End)
             ) {
-                Text("Reset defaults")
+                Text(tr("Reset defaults", "Restaurar valores"))
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -578,7 +586,12 @@ private fun SensitivitySliderRow(
         Slider(
             value = value,
             onValueChange = onValueChange,
-            valueRange = SensorSensitivitySettings.MIN_SENSITIVITY..SensorSensitivitySettings.MAX_SENSITIVITY
+            valueRange = SensorSensitivitySettings.MIN_SENSITIVITY..SensorSensitivitySettings.MAX_SENSITIVITY,
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
         )
     }
 }

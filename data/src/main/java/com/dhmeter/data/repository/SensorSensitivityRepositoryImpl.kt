@@ -54,19 +54,19 @@ class SensorSensitivityRepositoryImpl @Inject constructor(
         return SensorSensitivitySettings(
             impactSensitivity = prefs.getFloat(
                 KEY_IMPACT,
-                SensorSensitivitySettings.DEFAULT_SENSITIVITY
+                SensorSensitivitySettings.DEFAULT_IMPACT_SENSITIVITY
             ),
             harshnessSensitivity = prefs.getFloat(
                 KEY_HARSHNESS,
-                SensorSensitivitySettings.DEFAULT_SENSITIVITY
+                SensorSensitivitySettings.DEFAULT_HARSHNESS_SENSITIVITY
             ),
             stabilitySensitivity = prefs.getFloat(
                 KEY_STABILITY,
-                SensorSensitivitySettings.DEFAULT_SENSITIVITY
+                SensorSensitivitySettings.DEFAULT_STABILITY_SENSITIVITY
             ),
             gpsSensitivity = prefs.getFloat(
                 KEY_GPS,
-                SensorSensitivitySettings.DEFAULT_SENSITIVITY
+                SensorSensitivitySettings.DEFAULT_GPS_SENSITIVITY
             )
         ).normalized()
     }
@@ -82,4 +82,3 @@ class SensorSensitivityRepositoryImpl @Inject constructor(
         mutableSettings.value = normalized
     }
 }
-

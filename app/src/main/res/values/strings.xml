@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">DH Meter</string>
+    <string name="app_name">dropIn DH</string>
     
     <!-- General -->
     <string name="loading">Loading...</string>
@@ -18,7 +18,7 @@
     <string name="nav_settings">Settings</string>
     
     <!-- Home Screen -->
-    <string name="home_title">DH Meter</string>
+    <string name="home_title">dropIn DH</string>
     <string name="home_subtitle">Downhill Telemetry</string>
     <string name="home_no_tracks">No tracks yet</string>
     <string name="home_create_track">Create your first track to start recording runs</string>
@@ -110,7 +110,7 @@
     
     <!-- Permissions -->
     <string name="permission_location_title">Location Permission</string>
-    <string name="permission_location_message">DH Meter needs location permission to track your runs and measure distance.</string>
+    <string name="permission_location_message">dropIn DH needs location permission to track your runs and measure distance.</string>
     <string name="permission_location_denied">Location permission is required for recording runs.</string>
     <string name="permission_activity_title">Activity Recognition</string>
     <string name="permission_activity_message">This helps detect when you\'re moving.</string>
@@ -129,7 +129,7 @@
     <string name="validation_poor_signal">Sensor signal quality is poor</string>
     
     <!-- About -->
-    <string name="about_title">About DH Meter</string>
+    <string name="about_title">About dropIn DH</string>
     <string name="about_version">Version %s</string>
     <string name="about_description">Downhill mountain bike telemetry app for analyzing and comparing runs using phone sensors.</string>
 </resources>
