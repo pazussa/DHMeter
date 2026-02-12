@@ -15,4 +15,9 @@ interface PreferencesRepository {
      * Get current value of includeInvalidRuns synchronously.
      */
     fun getIncludeInvalidRuns(): Boolean
+
+    /**
+     * Update includeInvalidRuns preference.
+     */
+    fun setIncludeInvalidRuns(value: Boolean)
 }

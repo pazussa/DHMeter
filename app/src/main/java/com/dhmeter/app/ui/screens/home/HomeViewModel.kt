@@ -2,8 +2,8 @@ package com.dhmeter.app.ui.screens.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.dhmeter.app.data.AppPreferences
 import com.dhmeter.domain.model.Track
+import com.dhmeter.domain.repository.PreferencesRepository
 import com.dhmeter.domain.usecase.CreateTrackUseCase
 import com.dhmeter.domain.usecase.GetTracksUseCase
 import com.dhmeter.sensing.SensorAvailability
@@ -32,7 +32,7 @@ class HomeViewModel @Inject constructor(
     private val getTracksUseCase: GetTracksUseCase,
     private val createTrackUseCase: CreateTrackUseCase,
     private val sensorAvailability: SensorAvailability,
-    private val appPreferences: AppPreferences
+    private val preferencesRepository: PreferencesRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -68,14 +68,14 @@ class HomeViewModel @Inject constructor(
 
     private fun observePreferences() {
         viewModelScope.launch {
-            appPreferences.includeInvalidRuns.collect { include ->
+            preferencesRepository.includeInvalidRuns.collect { include ->
                 _uiState.update { it.copy(includeInvalidRuns = include) }
             }
         }
     }
 
     fun setIncludeInvalidRuns(value: Boolean) {
-        appPreferences.setIncludeInvalidRuns(value)
+        preferencesRepository.setIncludeInvalidRuns(value)
     }
 
     fun createTrack(name: String, locationHint: String?) {

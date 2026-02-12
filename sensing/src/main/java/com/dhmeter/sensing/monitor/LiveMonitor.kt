@@ -50,12 +50,13 @@ class LiveMonitor @Inject constructor() {
     private fun calculateMetrics(buffers: SensorBuffers): LiveMetrics {
         // Get recent GPS accuracy
         val recentGps = buffers.gps.getAll().takeLast(5)
+        val latestGps = recentGps.lastOrNull()
         val gpsAccuracy = if (recentGps.isNotEmpty()) {
             recentGps.map { it.accuracy }.average().toFloat()
         } else -1f
 
         // Get current speed
-        val currentSpeed = recentGps.lastOrNull()?.speed ?: 0f
+        val currentSpeed = latestGps?.speed ?: 0f
 
         // Check for movement (using GPS speed)
         val movementDetected = checkMovementDetected(buffers)
@@ -73,6 +74,8 @@ class LiveMonitor @Inject constructor() {
             movementDetected = movementDetected,
             signalStability = signalStability,
             currentSpeed = currentSpeed,
+            latitude = latestGps?.latitude,
+            longitude = latestGps?.longitude,
             liveImpact = liveImpact,
             liveHarshness = liveHarshness,
             liveStability = liveStability
@@ -212,6 +215,8 @@ data class LiveMetrics(
     val movementDetected: Boolean,
     val signalStability: Float,
     val currentSpeed: Float,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
     val liveImpact: Float = 0f,      // 0-1, higher = more impacts
     val liveHarshness: Float = 0f,   // 0-1, higher = more vibration
     val liveStability: Float = 0f    // 0-1, higher = less stable

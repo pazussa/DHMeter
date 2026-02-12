@@ -14,6 +14,8 @@ sealed class RecordingState {
         val movementDetected: Boolean, // Movement detected (speed > threshold)
         val signalStability: Float, // 0-1, where 1 is stable
         val currentSpeed: Float, // m/s
+        val currentLatitude: Double? = null,
+        val currentLongitude: Double? = null,
         // Live metrics (0-1 normalized)
         val liveImpact: Float = 0f,     // Current impact level
         val liveHarshness: Float = 0f,  // Current vibration level

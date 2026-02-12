@@ -7,8 +7,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.dhmeter.data.local.DHMeterDatabase
 import com.dhmeter.data.local.dao.RunDao
 import com.dhmeter.data.local.dao.TrackDao
+import com.dhmeter.data.preferences.AppPreferencesDataSource
 import com.dhmeter.data.repository.RunRepositoryImpl
 import com.dhmeter.data.repository.TrackRepositoryImpl
+import com.dhmeter.domain.repository.PreferencesRepository
 import com.dhmeter.domain.repository.RunRepository
 import com.dhmeter.domain.repository.TrackRepository
 import dagger.Module
@@ -77,4 +79,10 @@ object DataModule {
     fun provideRunRepository(runDao: RunDao): RunRepository {
         return RunRepositoryImpl(runDao)
     }
+
+    @Provides
+    @Singleton
+    fun providePreferencesRepository(
+        appPreferencesDataSource: AppPreferencesDataSource
+    ): PreferencesRepository = appPreferencesDataSource
 }

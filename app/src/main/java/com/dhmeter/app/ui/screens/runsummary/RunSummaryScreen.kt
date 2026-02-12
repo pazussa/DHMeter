@@ -17,7 +17,20 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dhmeter.app.ui.theme.*
+import com.dhmeter.charts.components.ComparisonLineChart
+import com.dhmeter.charts.components.EventMarkers
+import com.dhmeter.charts.components.HeatmapBar
+import com.dhmeter.charts.components.HeatmapColors
+import com.dhmeter.charts.model.AxisConfig
+import com.dhmeter.charts.model.ChartEventMarker
+import com.dhmeter.charts.model.ChartMarkerIcon
+import com.dhmeter.charts.model.ChartPoint
+import com.dhmeter.charts.model.ChartSeries
+import com.dhmeter.charts.model.HeatmapPoint
+import com.dhmeter.domain.model.EventType
+import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.Run
+import com.dhmeter.domain.model.RunSeries
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -75,9 +88,12 @@ fun RunSummaryScreen(
                 RunSummaryContent(
                     run = uiState.run!!,
                     comparableRuns = uiState.comparableRuns,
-                    onCompare = { otherRunId ->
-                        onCompare(uiState.run!!.trackId, runId, otherRunId)
-                    },
+                    impactSeries = uiState.impactSeries,
+                    harshnessSeries = uiState.harshnessSeries,
+                    stabilitySeries = uiState.stabilitySeries,
+                    events = uiState.events,
+                    isChartsLoading = uiState.isChartsLoading,
+                    chartsError = uiState.chartsError,
                     onShowCompareDialog = { showCompareDialog = true },
                     modifier = Modifier.padding(paddingValues)
                 )
@@ -111,7 +127,12 @@ fun RunSummaryScreen(
 private fun RunSummaryContent(
     run: Run,
     comparableRuns: List<Run>,
-    onCompare: (String) -> Unit,
+    impactSeries: RunSeries?,
+    harshnessSeries: RunSeries?,
+    stabilitySeries: RunSeries?,
+    events: List<RunEvent>,
+    isChartsLoading: Boolean,
+    chartsError: String?,
     onShowCompareDialog: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -144,6 +165,17 @@ private fun RunSummaryContent(
         
         MetricsGrid(run = run)
         
+        Spacer(modifier = Modifier.height(24.dp))
+
+        RunChartsSection(
+            impactSeries = impactSeries,
+            harshnessSeries = harshnessSeries,
+            stabilitySeries = stabilitySeries,
+            events = events,
+            isLoading = isChartsLoading,
+            error = chartsError
+        )
+
         Spacer(modifier = Modifier.height(24.dp))
 
         // Landing quality section
@@ -483,6 +515,200 @@ private fun NotesSection(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RunChartsSection(
+    impactSeries: RunSeries?,
+    harshnessSeries: RunSeries?,
+    stabilitySeries: RunSeries?,
+    events: List<RunEvent>,
+    isLoading: Boolean,
+    error: String?
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Charts",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        when {
+            isLoading -> {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Text(
+                    text = "Loading charts...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+
+            error != null -> {
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            else -> {
+                SingleRunChartSection(
+                    title = "Impact Density vs Distance %",
+                    series = impactSeries,
+                    yAxisLabel = "Impact (g²)",
+                    color = ChartImpact
+                )
+
+                SingleRunChartSection(
+                    title = "Harshness vs Distance %",
+                    series = harshnessSeries,
+                    yAxisLabel = "RMS",
+                    color = ChartHarshness
+                )
+
+                SingleRunChartSection(
+                    title = "Stability vs Distance %",
+                    series = stabilitySeries,
+                    yAxisLabel = "Variance",
+                    color = ChartStability
+                )
+
+                if (events.isNotEmpty()) {
+                    Text(
+                        text = "Events over Distance %",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    EventMarkers(
+                        markers = events.toChartMarkers(),
+                        xMin = 0f,
+                        xMax = 100f,
+                        showLabels = true
+                    )
+                }
+
+                impactSeries?.let { series ->
+                    if (series.pointCount > 0) {
+                        Text(
+                            text = "Impact Heatmap",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        HeatmapBar(
+                            points = series.toHeatmapPoints(),
+                            colors = HeatmapColors.Impact,
+                            minValue = 0f,
+                            maxValue = 5f
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SingleRunChartSection(
+    title: String,
+    series: RunSeries?,
+    yAxisLabel: String,
+    color: Color
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall
+        )
+
+        val points = series?.toChartPoints().orEmpty()
+        if (points.isEmpty()) {
+            Text(
+                text = "No data available",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@Column
+        }
+
+        val yValues = points.map { it.y }
+        val rawMin = yValues.minOrNull() ?: 0f
+        val rawMax = yValues.maxOrNull() ?: 1f
+        val hasFlatRange = (rawMax - rawMin) < 1e-6f
+        val padding = if (hasFlatRange) {
+            if (rawMax == 0f) 1f else kotlin.math.abs(rawMax) * 0.1f
+        } else {
+            0f
+        }
+        val yMin = rawMin - padding
+        val yMax = rawMax + padding
+
+        ComparisonLineChart(
+            series = listOf(
+                ChartSeries(
+                    label = "Run",
+                    points = points,
+                    color = color
+                )
+            ),
+            xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
+            yAxisConfig = AxisConfig(yMin, yMax, label = yAxisLabel),
+            showLegend = false,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+        )
+    }
+}
+
+private fun RunSeries.toChartPoints(): List<ChartPoint> {
+    return (0 until pointCount).mapNotNull { i ->
+        ChartPoint(points[i * 2], points[i * 2 + 1])
+            .takeIf { it.x.isFinite() && it.y.isFinite() }
+    }
+}
+
+private fun RunSeries.toHeatmapPoints(): List<HeatmapPoint> {
+    return (0 until pointCount).mapNotNull { i ->
+        HeatmapPoint(points[i * 2], points[i * 2 + 1])
+            .takeIf { it.x.isFinite() && it.value.isFinite() }
+    }
+}
+
+private fun List<RunEvent>.toChartMarkers(): List<ChartEventMarker> {
+    return map { event ->
+        ChartEventMarker(
+            x = event.distPct,
+            icon = event.type.toMarkerIcon(),
+            color = event.type.toMarkerColor(),
+            label = event.type.shortLabel()
+        )
+    }
+}
+
+private fun String.toMarkerIcon(): ChartMarkerIcon {
+    return when (this) {
+        EventType.IMPACT_PEAK -> ChartMarkerIcon.TRIANGLE
+        EventType.LANDING -> ChartMarkerIcon.DIAMOND
+        EventType.HARSHNESS_BURST -> ChartMarkerIcon.SQUARE
+        else -> ChartMarkerIcon.CIRCLE
+    }
+}
+
+private fun String.toMarkerColor(): Color {
+    return when (this) {
+        EventType.IMPACT_PEAK -> Color(0xFFF44336)
+        EventType.LANDING -> Color(0xFFFF9800)
+        EventType.HARSHNESS_BURST -> Color(0xFFFFEB3B)
+        else -> Color(0xFF9E9E9E)
+    }
+}
+
+private fun String.shortLabel(): String {
+    return when (this) {
+        EventType.IMPACT_PEAK -> "IMP"
+        EventType.LANDING -> "LDG"
+        EventType.HARSHNESS_BURST -> "HRS"
+        else -> "EVT"
     }
 }
 

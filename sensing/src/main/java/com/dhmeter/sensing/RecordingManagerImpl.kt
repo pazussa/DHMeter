@@ -64,6 +64,8 @@ class RecordingManagerImpl @Inject constructor(
                     movementDetected = metrics.movementDetected,
                     signalStability = metrics.signalStability,
                     currentSpeed = metrics.currentSpeed,
+                    currentLatitude = metrics.latitude,
+                    currentLongitude = metrics.longitude,
                     liveImpact = metrics.liveImpact,
                     liveHarshness = metrics.liveHarshness,
                     liveStability = metrics.liveStability
@@ -76,6 +78,8 @@ class RecordingManagerImpl @Inject constructor(
             movementDetected = false,
             signalStability = -1f,
             currentSpeed = 0f,
+            currentLatitude = null,
+            currentLongitude = null,
             liveImpact = 0f,
             liveHarshness = 0f,
             liveStability = 0f

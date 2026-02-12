@@ -8,11 +8,10 @@ import android.content.Intent
 import android.os.Binder
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.dhmeter.app.DHMeterApplication
 import com.dhmeter.app.ui.MainActivity
 import com.dhmeter.app.R
 import com.dhmeter.sensing.RecordingManager
-import com.dhmeter.sensing.monitor.LiveMonitor
-import com.dhmeter.sensing.monitor.LiveMetrics
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +31,7 @@ import javax.inject.Inject
 class RecordingService : Service() {
 
     companion object {
-        const val CHANNEL_ID = "dhmeter_recording"
+        const val CHANNEL_ID = DHMeterApplication.CHANNEL_RECORDING
         const val NOTIFICATION_ID = 1001
         const val ACTION_START = "com.dhmeter.action.START_RECORDING"
         const val ACTION_STOP = "com.dhmeter.action.STOP_RECORDING"
@@ -42,16 +41,13 @@ class RecordingService : Service() {
     @Inject
     lateinit var recordingManager: RecordingManager
 
-    @Inject
-    lateinit var liveMonitor: LiveMonitor
-
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val binder = RecordingBinder()
 
     private val _recordingState = MutableStateFlow<RecordingState>(RecordingState.Idle)
     val recordingState: StateFlow<RecordingState> = _recordingState.asStateFlow()
 
-    private var currentTrackId: Long = -1
+    private var currentTrackId: String? = null
     private var startTimeMs: Long = 0
 
     override fun onCreate() {
@@ -61,8 +57,8 @@ class RecordingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                val trackId = intent.getLongExtra(EXTRA_TRACK_ID, -1)
-                if (trackId != -1L) {
+                val trackId = intent.getStringExtra(EXTRA_TRACK_ID)
+                if (!trackId.isNullOrBlank()) {
                     startRecording(trackId)
                 }
             }
@@ -85,7 +81,7 @@ class RecordingService : Service() {
         serviceScope.cancel()
     }
 
-    fun startRecording(trackId: Long) {
+    fun startRecording(trackId: String) {
         currentTrackId = trackId
         startTimeMs = System.currentTimeMillis()
 
@@ -93,7 +89,7 @@ class RecordingService : Service() {
         startForeground(NOTIFICATION_ID, createNotification("Recording..."))
 
         serviceScope.launch {
-            recordingManager.startRecording(trackId.toString(), "POCKET_THIGH")
+            recordingManager.startRecording(trackId, "POCKET_THIGH")
             _recordingState.value = RecordingState.Recording(
                 trackId = trackId,
                 startTimeMs = startTimeMs
@@ -185,7 +181,7 @@ class RecordingService : Service() {
 
 sealed class RecordingState {
     data object Idle : RecordingState()
-    data class Recording(val trackId: Long, val startTimeMs: Long) : RecordingState()
+    data class Recording(val trackId: String, val startTimeMs: Long) : RecordingState()
     data object Stopping : RecordingState()
     data class Completed(val handle: com.dhmeter.domain.model.RawCaptureHandle) : RecordingState()
     data class Error(val message: String) : RecordingState()

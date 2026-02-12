@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.abs
 
 /**
  * Main signal processor that analyzes LINEAR_ACCELERATION + GYROSCOPE + GPS data.
@@ -206,21 +207,44 @@ class SignalProcessor @Inject constructor(
     ): RunSeries {
         val outputX = FloatArray(NUM_OUTPUT_POINTS) { it * 100f / (NUM_OUTPUT_POINTS - 1) }
         val outputY = FloatArray(NUM_OUTPUT_POINTS)
+        val samples = sanitizeSeriesSamples(values, distPcts)
 
-        if (values.isNotEmpty() && distPcts.isNotEmpty()) {
-            for (i in 0 until NUM_OUTPUT_POINTS) {
-                val targetPct = outputX[i]
-                var lowIdx = 0
-                for (j in distPcts.indices) {
-                    if (distPcts[j] <= targetPct) lowIdx = j
+        if (samples.isNotEmpty()) {
+            val firstSample = samples.first()
+            val lastSample = samples.last()
+
+            if (samples.size == 1) {
+                for (i in 0 until NUM_OUTPUT_POINTS) {
+                    outputY[i] = firstSample.y
                 }
-                val highIdx = (lowIdx + 1).coerceAtMost(distPcts.lastIndex)
+            } else {
+                var segmentIdx = 0
+                for (i in 0 until NUM_OUTPUT_POINTS) {
+                    val targetPct = outputX[i]
 
-                outputY[i] = if (lowIdx == highIdx || distPcts[highIdx] == distPcts[lowIdx]) {
-                    values[lowIdx]
-                } else {
-                    val fraction = (targetPct - distPcts[lowIdx]) / (distPcts[highIdx] - distPcts[lowIdx])
-                    values[lowIdx] + fraction * (values[highIdx] - values[lowIdx])
+                    outputY[i] = when {
+                        targetPct <= firstSample.x -> firstSample.y
+                        targetPct >= lastSample.x -> lastSample.y
+                        else -> {
+                            while (
+                                segmentIdx < samples.lastIndex - 1 &&
+                                samples[segmentIdx + 1].x < targetPct
+                            ) {
+                                segmentIdx++
+                            }
+
+                            val low = samples[segmentIdx]
+                            val high = samples[segmentIdx + 1]
+                            val dx = high.x - low.x
+
+                            if (abs(dx) < 1e-6f) {
+                                low.y
+                            } else {
+                                val fraction = (targetPct - low.x) / dx
+                                low.y + fraction * (high.y - low.y)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -232,6 +256,39 @@ class SignalProcessor @Inject constructor(
         }
 
         return RunSeries(runId, type, XAxisType.DIST_PCT, points, NUM_OUTPUT_POINTS)
+    }
+
+    private fun sanitizeSeriesSamples(
+        values: List<Float>,
+        distPcts: List<Float>
+    ): List<SeriesSample> {
+        if (values.isEmpty() || distPcts.isEmpty()) return emptyList()
+
+        val rawSamples = values.zip(distPcts).mapNotNull { (y, x) ->
+            if (!x.isFinite() || !y.isFinite()) {
+                null
+            } else {
+                SeriesSample(x = x.coerceIn(0f, 100f), y = y)
+            }
+        }
+        if (rawSamples.isEmpty()) return emptyList()
+
+        val sorted = rawSamples.sortedBy { it.x }
+        val merged = ArrayList<SeriesSample>(sorted.size)
+
+        sorted.forEach { sample ->
+            val last = merged.lastOrNull()
+            if (last != null && abs(last.x - sample.x) < 1e-5f) {
+                merged[merged.lastIndex] = SeriesSample(
+                    x = last.x,
+                    y = (last.y + sample.y) / 2f
+                )
+            } else {
+                merged.add(sample)
+            }
+        }
+
+        return merged
     }
 
     private fun percentile(values: List<Float>, p: Int): Float {
@@ -258,7 +315,6 @@ class SignalProcessor @Inject constructor(
         val minDistanceFactor = 0.5f
         
         var totalDistance = 0.0
-        var lastAccuracy = Float.MAX_VALUE
         
         gpsSamples.zipWithNext { a, b ->
             val segmentDist = haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude)
@@ -292,4 +348,9 @@ data class WindowResults(
     val harshnessRms: List<Float>,
     val stabilityVar: List<Float>,
     val distPcts: List<Float>
+)
+
+private data class SeriesSample(
+    val x: Float,
+    val y: Float
 )

@@ -2,19 +2,25 @@ package com.dhmeter.app.ui.screens.recording
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dhmeter.domain.model.TrackSegment
 import com.dhmeter.domain.usecase.GetTrackByIdUseCase
+import com.dhmeter.domain.usecase.GetTrackSegmentsUseCase
 import com.dhmeter.domain.usecase.ProcessRunUseCase
 import com.dhmeter.sensing.RecordingManager
 import com.dhmeter.sensing.RecordingState
-import com.dhmeter.sensing.collector.ImuCollector
-import com.dhmeter.sensing.data.SensorBuffers
-import com.dhmeter.sensing.monitor.LiveMonitor
+import com.dhmeter.sensing.preview.PreviewLocation
+import com.dhmeter.sensing.preview.RecordingPreviewManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 data class RecordingUiState(
     val trackId: String = "",
@@ -40,19 +46,31 @@ data class RecordingUiState(
 @HiltViewModel
 class RecordingViewModel @Inject constructor(
     private val getTrackByIdUseCase: GetTrackByIdUseCase,
+    private val getTrackSegmentsUseCase: GetTrackSegmentsUseCase,
     private val recordingManager: RecordingManager,
     private val processRunUseCase: ProcessRunUseCase,
-    private val imuCollector: ImuCollector,
-    private val liveMonitor: LiveMonitor
+    private val previewManager: RecordingPreviewManager
 ) : ViewModel() {
+
+    companion object {
+        private const val SEGMENT_START_RADIUS_M = 30.0
+        private const val SEGMENT_END_RADIUS_M = 30.0
+        private const val MAX_PREVIEW_ACCURACY_M = 25f
+        private const val AUTO_START_MIN_SPEED_MPS = 2.0f
+        private const val AUTO_TRIGGER_COOLDOWN_MS = 20_000L
+        private const val MIN_RECORDING_BEFORE_AUTO_STOP_MS = 5_000L
+    }
 
     private val _uiState = MutableStateFlow(RecordingUiState())
     val uiState: StateFlow<RecordingUiState> = _uiState.asStateFlow()
 
     private var timerJob: Job? = null
-    private var previewJob: Job? = null
-    private var previewBuffers: SensorBuffers? = null
     private var startTime: Long = 0
+    private var localSegments: List<TrackSegment> = emptyList()
+    private var activeAutoSegment: TrackSegment? = null
+    private var autoCooldownUntilMs: Long = 0L
+    private var isAutoStopInProgress: Boolean = false
+    private var isStartingRecording: Boolean = false
 
     fun initialize(trackId: String) {
         _uiState.update { it.copy(trackId = trackId) }
@@ -67,6 +85,16 @@ class RecordingViewModel @Inject constructor(
                 }
         }
 
+        viewModelScope.launch {
+            getTrackSegmentsUseCase(trackId)
+                .onSuccess { segments ->
+                    localSegments = segments
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(error = e.message) }
+                }
+        }
+
         // Start live preview immediately
         startPreview()
 
@@ -75,6 +103,7 @@ class RecordingViewModel @Inject constructor(
             recordingManager.recordingState.collect { state ->
                 when (state) {
                     is RecordingState.Idle -> {
+                        isStartingRecording = false
                         _uiState.update { 
                             it.copy(
                                 isRecording = false,
@@ -84,6 +113,7 @@ class RecordingViewModel @Inject constructor(
                         }
                     }
                     is RecordingState.Recording -> {
+                        isStartingRecording = false
                         _uiState.update { 
                             it.copy(
                                 isRecording = true,
@@ -99,6 +129,7 @@ class RecordingViewModel @Inject constructor(
                                 isPreviewActive = false
                             )
                         }
+                        maybeAutoStopAtSegmentEnd(state)
                     }
                     is RecordingState.Processing -> {
                         _uiState.update { 
@@ -119,6 +150,9 @@ class RecordingViewModel @Inject constructor(
                         }
                     }
                     is RecordingState.Error -> {
+                        isStartingRecording = false
+                        isAutoStopInProgress = false
+                        activeAutoSegment = null
                         _uiState.update { 
                             it.copy(
                                 isRecording = false,
@@ -134,17 +168,8 @@ class RecordingViewModel @Inject constructor(
     }
 
     private fun startPreview() {
-        if (previewJob?.isActive == true) return
-        
-        previewBuffers = SensorBuffers()
-        
-        val started = imuCollector.start(previewBuffers!!)
-        if (!started) return
-        
-        _uiState.update { it.copy(isPreviewActive = true) }
-        
-        previewJob = viewModelScope.launch {
-            liveMonitor.startMonitoring(previewBuffers!!) { metrics ->
+        val started = previewManager.startPreview(
+            onMetrics = { metrics ->
                 // Only update if not recording (recording uses its own metrics)
                 if (!_uiState.value.isRecording) {
                     _uiState.update { state ->
@@ -155,57 +180,152 @@ class RecordingViewModel @Inject constructor(
                         )
                     }
                 }
+            },
+            onLocation = { location ->
+                maybeAutoStartAtSegmentStart(location)
             }
-        }
+        )
+        if (!started) return
+
+        _uiState.update { it.copy(isPreviewActive = true) }
     }
     
     private fun stopPreview() {
-        previewJob?.cancel()
-        previewJob = null
-        liveMonitor.stopMonitoring()
-        imuCollector.stop()
-        previewBuffers?.clear()
-        previewBuffers = null
+        previewManager.stopPreview()
         _uiState.update { it.copy(isPreviewActive = false) }
     }
 
     fun startRecording() {
+        startRecordingInternal(autoSegment = null)
+    }
+
+    private fun startRecordingInternal(autoSegment: TrackSegment?) {
+        if (_uiState.value.isRecording || _uiState.value.isProcessing || isStartingRecording) return
+
+        activeAutoSegment = autoSegment
+        isAutoStopInProgress = false
+        isStartingRecording = true
+
         // Stop preview before starting real recording
         stopPreview()
-        
+
         viewModelScope.launch {
             startTime = System.currentTimeMillis()
             startTimer()
-            
+
             recordingManager.startRecording(
                 trackId = _uiState.value.trackId,
                 placement = "POCKET_THIGH"
-            )
+            ).onFailure { e ->
+                isStartingRecording = false
+                timerJob?.cancel()
+                activeAutoSegment = null
+                isAutoStopInProgress = false
+                _uiState.update {
+                    it.copy(
+                        canStartRecording = true,
+                        error = e.message
+                    )
+                }
+                startPreview()
+            }
         }
     }
 
     fun stopRecording() {
+        isStartingRecording = false
+        activeAutoSegment = null
+        isAutoStopInProgress = false
+        stopRecordingInternal()
+    }
+
+    private fun stopRecordingInternal() {
+        if (_uiState.value.isProcessing) return
         timerJob?.cancel()
-        
+
         viewModelScope.launch {
             val captureHandle = recordingManager.stopRecording()
-            
-            captureHandle?.let { handle ->
-                _uiState.update { it.copy(isProcessing = true) }
-                
-                processRunUseCase(handle)
-                    .onSuccess { runId ->
-                        _uiState.update { it.copy(completedRunId = runId) }
-                    }
-                    .onFailure { e ->
-                        _uiState.update { 
-                            it.copy(
-                                isProcessing = false,
-                                error = e.message
-                            )
-                        }
-                    }
+
+            if (captureHandle == null) {
+                isAutoStopInProgress = false
+                activeAutoSegment = null
+                return@launch
             }
+
+            _uiState.update { it.copy(isProcessing = true) }
+
+            processRunUseCase(captureHandle)
+                .onSuccess { runId ->
+                    isAutoStopInProgress = false
+                    activeAutoSegment = null
+                    _uiState.update { it.copy(completedRunId = runId) }
+                }
+                .onFailure { e ->
+                    isAutoStopInProgress = false
+                    activeAutoSegment = null
+                    _uiState.update { 
+                        it.copy(
+                            isProcessing = false,
+                            error = e.message
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun maybeAutoStartAtSegmentStart(location: PreviewLocation) {
+        val currentState = _uiState.value
+        if (currentState.isRecording || currentState.isProcessing) return
+        if (localSegments.isEmpty()) return
+        if (location.accuracy <= 0f || location.accuracy > MAX_PREVIEW_ACCURACY_M) return
+        if (location.speed < AUTO_START_MIN_SPEED_MPS) return
+
+        val now = System.currentTimeMillis()
+        if (now < autoCooldownUntilMs) return
+
+        var closestSegment: TrackSegment? = null
+        var closestDistance = Double.MAX_VALUE
+
+        for (segment in localSegments) {
+            val distance = haversineMeters(
+                lat1 = location.latitude,
+                lon1 = location.longitude,
+                lat2 = segment.start.lat,
+                lon2 = segment.start.lon
+            )
+            if (distance < closestDistance) {
+                closestDistance = distance
+                closestSegment = segment
+            }
+        }
+
+        if (closestSegment != null && closestDistance <= SEGMENT_START_RADIUS_M) {
+            autoCooldownUntilMs = now + AUTO_TRIGGER_COOLDOWN_MS
+            startRecordingInternal(autoSegment = closestSegment)
+        }
+    }
+
+    private fun maybeAutoStopAtSegmentEnd(state: RecordingState.Recording) {
+        if (isAutoStopInProgress) return
+        val segment = activeAutoSegment ?: return
+        val latitude = state.currentLatitude ?: return
+        val longitude = state.currentLongitude ?: return
+
+        val elapsedMs = System.currentTimeMillis() - startTime
+        if (elapsedMs < MIN_RECORDING_BEFORE_AUTO_STOP_MS) return
+
+        val distanceToEnd = haversineMeters(
+            lat1 = latitude,
+            lon1 = longitude,
+            lat2 = segment.end.lat,
+            lon2 = segment.end.lon
+        )
+
+        if (distanceToEnd <= SEGMENT_END_RADIUS_M) {
+            isAutoStopInProgress = true
+            autoCooldownUntilMs = System.currentTimeMillis() + AUTO_TRIGGER_COOLDOWN_MS
+            activeAutoSegment = null
+            stopRecordingInternal()
         }
     }
 
@@ -217,6 +337,22 @@ class RecordingViewModel @Inject constructor(
                 _uiState.update { it.copy(elapsedSeconds = elapsed) }
             }
         }
+    }
+
+    private fun haversineMeters(
+        lat1: Double,
+        lon1: Double,
+        lat2: Double,
+        lon2: Double
+    ): Double {
+        val r = 6371000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = sin(dLat / 2).pow(2) +
+                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
+                sin(dLon / 2).pow(2)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return r * c
     }
 
     private fun mapGpsSignal(accuracy: Float): GpsSignalLevel {

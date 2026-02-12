@@ -227,8 +227,25 @@ private fun MultiRunChartSection(
 
         if (chartSeriesList.isNotEmpty()) {
             val allYValues = chartSeriesList.flatMap { it.points.map { p -> p.y } }
-            val yMin = allYValues.minOrNull() ?: 0f
-            val yMax = allYValues.maxOrNull() ?: 1f
+            if (allYValues.isEmpty()) {
+                Text(
+                    text = "No data available",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                return@Column
+            }
+
+            val rawMin = allYValues.minOrNull() ?: 0f
+            val rawMax = allYValues.maxOrNull() ?: 1f
+            val hasFlatRange = (rawMax - rawMin) < 1e-6f
+            val padding = if (hasFlatRange) {
+                if (rawMax == 0f) 1f else kotlin.math.abs(rawMax) * 0.1f
+            } else {
+                0f
+            }
+            val yMin = rawMin - padding
+            val yMax = rawMax + padding
 
             ComparisonLineChart(
                 series = chartSeriesList,
@@ -266,8 +283,9 @@ private fun MultiRunChartSection(
  * Extension function to convert RunSeries to list of ChartPoint
  */
 private fun RunSeries.toChartPoints(): List<ChartPoint> {
-    return (0 until pointCount).map { i ->
+    return (0 until pointCount).mapNotNull { i ->
         ChartPoint(points[i * 2], points[i * 2 + 1])
+            .takeIf { it.x.isFinite() && it.y.isFinite() }
     }
 }
 
@@ -275,8 +293,9 @@ private fun RunSeries.toChartPoints(): List<ChartPoint> {
  * Extension function to convert RunSeries to list of HeatmapPoint
  */
 private fun RunSeries.toHeatmapPoints(): List<HeatmapPoint> {
-    return (0 until pointCount).map { i ->
+    return (0 until pointCount).mapNotNull { i ->
         HeatmapPoint(points[i * 2], points[i * 2 + 1])
+            .takeIf { it.x.isFinite() && it.value.isFinite() }
     }
 }
 
