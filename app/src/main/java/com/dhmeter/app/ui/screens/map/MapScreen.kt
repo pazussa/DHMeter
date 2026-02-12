@@ -309,7 +309,7 @@ private fun MapLegend(modifier: Modifier = Modifier) {
         )
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
-            LegendItem(color = GreenPositive, label = "Low (≤P50)")
+            LegendItem(color = GreenPositive, label = "Low (<=P50)")
             LegendItem(color = YellowWarning, label = "Medium")
             LegendItem(color = RedNegative, label = "High (>P75)")
         }
@@ -450,3 +450,4 @@ private fun SegmentSeverity.toColor(): Color = when (this) {
     SegmentSeverity.MEDIUM -> YellowWarning
     SegmentSeverity.HIGH -> RedNegative
 }
+

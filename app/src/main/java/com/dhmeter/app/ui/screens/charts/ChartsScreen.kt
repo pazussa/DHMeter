@@ -134,7 +134,7 @@ private fun ChartsContent(
             title = "Impact Density vs Distance %",
             runs = uiState.runs,
             seriesSelector = { it.impactSeries },
-            yAxisLabel = "Impact (g²)"
+            yAxisLabel = "Impact (g^2)"
         )
 
         // Harshness vs distPct
@@ -305,7 +305,7 @@ private fun RunSeries.toHeatmapPoints(): List<HeatmapPoint> {
 private fun List<RunEvent>.toChartMarkers(runColor: Color): List<ChartEventMarker> {
     return map { event ->
         ChartEventMarker(
-            x = event.distPct * 100f,
+            x = event.distPct,
             icon = event.type.toMarkerIcon(),
             color = runColor,
             label = event.type.take(3)
@@ -318,7 +318,7 @@ private fun List<RunEvent>.toChartMarkers(runColor: Color): List<ChartEventMarke
  */
 private fun RunEvent.toChartMarker(runColor: Color): ChartEventMarker {
     return ChartEventMarker(
-        x = distPct * 100f,
+        x = distPct,
         icon = type.toMarkerIcon(),
         color = runColor,
         label = ""
@@ -348,3 +348,4 @@ private fun String.toMarkerColor(): Color {
         else -> Color(0xFF9C27B0)                        // Purple
     }
 }
+

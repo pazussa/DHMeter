@@ -62,10 +62,8 @@ class RunSummaryViewModel @Inject constructor(
                     _uiState.update { it.copy(run = run, isLoading = false, isChartsLoading = true) }
                     
                     // Load comparable runs
-                    if (run.isValid) {
-                        viewModelScope.launch {
-                            loadComparableRuns(run.trackId, runId)
-                        }
+                    viewModelScope.launch {
+                        loadComparableRuns(run.trackId, runId)
                     }
 
                     viewModelScope.launch {

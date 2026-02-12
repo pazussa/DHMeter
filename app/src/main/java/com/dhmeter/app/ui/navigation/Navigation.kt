@@ -108,7 +108,11 @@ fun DHMeterNavHost(
                     navController.navigate(Screen.RunMap.createRoute(runId))
                 },
                 onBack = {
-                    navController.popBackStack(Screen.Home.route, inclusive = false)
+                    if (!navController.popBackStack()) {
+                        navController.navigate(Screen.Home.route) {
+                            launchSingleTop = true
+                        }
+                    }
                 }
             )
         }

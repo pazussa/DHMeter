@@ -179,7 +179,7 @@ private fun InvalidRunsWarningBanner(invalidRuns: List<RunWithColor>) {
                 Spacer(modifier = Modifier.height(4.dp))
                 invalidRuns.forEach { runWithColor ->
                     Text(
-                        text = "• ${runWithColor.label}: ${runWithColor.run.invalidReason ?: "Invalid"}",
+                        text = "- ${runWithColor.label}: ${runWithColor.run.invalidReason ?: "Invalid"}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -391,7 +391,7 @@ private fun MultiMetricRow(comparison: MultiMetricComparison) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (isBest) "★ $displayValue" else displayValue,
+                    text = if (isBest) "* $displayValue" else displayValue,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (isBest) FontWeight.Bold else FontWeight.Normal,
                     color = if (isBest) GreenPositive else MaterialTheme.colorScheme.onSurface,
@@ -439,3 +439,4 @@ private fun formatDuration(ms: Long): String {
     val secs = seconds % 60
     return String.format(Locale.US, "%d:%02d", minutes, secs)
 }
+

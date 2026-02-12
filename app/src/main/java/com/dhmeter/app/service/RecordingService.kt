@@ -11,6 +11,7 @@ import androidx.core.app.NotificationCompat
 import com.dhmeter.app.DHMeterApplication
 import com.dhmeter.app.ui.MainActivity
 import com.dhmeter.app.R
+import com.dhmeter.domain.usecase.ProcessRunUseCase
 import com.dhmeter.sensing.RecordingManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -34,12 +35,17 @@ class RecordingService : Service() {
         const val CHANNEL_ID = DHMeterApplication.CHANNEL_RECORDING
         const val NOTIFICATION_ID = 1001
         const val ACTION_START = "com.dhmeter.action.START_RECORDING"
+        const val ACTION_START_FOREGROUND = "com.dhmeter.action.START_FOREGROUND"
         const val ACTION_STOP = "com.dhmeter.action.STOP_RECORDING"
+        const val ACTION_STOP_FOREGROUND = "com.dhmeter.action.STOP_FOREGROUND"
         const val EXTRA_TRACK_ID = "track_id"
     }
 
     @Inject
     lateinit var recordingManager: RecordingManager
+
+    @Inject
+    lateinit var processRunUseCase: ProcessRunUseCase
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val binder = RecordingBinder()
@@ -49,6 +55,7 @@ class RecordingService : Service() {
 
     private var currentTrackId: String? = null
     private var startTimeMs: Long = 0
+    private var isForegroundActive: Boolean = false
 
     override fun onCreate() {
         super.onCreate()
@@ -62,8 +69,15 @@ class RecordingService : Service() {
                     startRecording(trackId)
                 }
             }
+            ACTION_START_FOREGROUND -> {
+                val trackId = intent.getStringExtra(EXTRA_TRACK_ID)
+                startForegroundOnly(trackId)
+            }
             ACTION_STOP -> {
                 stopRecording()
+            }
+            ACTION_STOP_FOREGROUND -> {
+                stopForegroundOnly()
             }
         }
         return START_STICKY
@@ -75,9 +89,6 @@ class RecordingService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        serviceScope.launch {
-            recordingManager.stopRecording()
-        }
         serviceScope.cancel()
     }
 
@@ -85,8 +96,7 @@ class RecordingService : Service() {
         currentTrackId = trackId
         startTimeMs = System.currentTimeMillis()
 
-        // Start foreground notification
-        startForeground(NOTIFICATION_ID, createNotification("Recording..."))
+        ensureForegroundNotification()
 
         serviceScope.launch {
             recordingManager.startRecording(trackId, "POCKET_THIGH")
@@ -97,21 +107,41 @@ class RecordingService : Service() {
         }
     }
 
+    fun startForegroundOnly(trackId: String?) {
+        currentTrackId = trackId
+        startTimeMs = System.currentTimeMillis()
+        ensureForegroundNotification()
+        _recordingState.value = RecordingState.Idle
+    }
+
     fun stopRecording() {
         serviceScope.launch {
             _recordingState.value = RecordingState.Stopping
 
             val handle = recordingManager.stopRecording()
             
-            _recordingState.value = if (handle != null) {
-                RecordingState.Completed(handle)
+            if (handle != null) {
+                val runResult = processRunUseCase(handle)
+                recordingManager.cancelRecording()
+                _recordingState.value = runResult.fold(
+                    onSuccess = { RecordingState.Completed(handle) },
+                    onFailure = { RecordingState.Error(it.message ?: "Failed to process run") }
+                )
             } else {
-                RecordingState.Error("Failed to stop recording")
+                _recordingState.value = RecordingState.Error("Failed to stop recording")
             }
 
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            stopForegroundOnly()
         }
+    }
+
+    fun stopForegroundOnly() {
+        if (isForegroundActive) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            isForegroundActive = false
+        }
+        _recordingState.value = RecordingState.Idle
+        stopSelf()
     }
 
     private fun createNotification(
@@ -156,6 +186,15 @@ class RecordingService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
+    }
+
+    private fun ensureForegroundNotification() {
+        if (!isForegroundActive) {
+            startForeground(NOTIFICATION_ID, createNotification("Recording..."))
+            isForegroundActive = true
+        } else {
+            updateNotification(createNotification("Recording..."))
+        }
     }
 
     private fun updateNotification(notification: Notification) {

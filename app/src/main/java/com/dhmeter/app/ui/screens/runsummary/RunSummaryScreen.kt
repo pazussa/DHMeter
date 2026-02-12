@@ -557,7 +557,7 @@ private fun RunChartsSection(
                 SingleRunChartSection(
                     title = "Impact Density vs Distance %",
                     series = impactSeries,
-                    yAxisLabel = "Impact (g²)",
+                    yAxisLabel = "Impact (g^2)",
                     color = ChartImpact
                 )
 
@@ -773,3 +773,4 @@ private fun formatDuration(ms: Long): String {
     val secs = seconds % 60
     return String.format(Locale.US, "%d:%02d", minutes, secs)
 }
+

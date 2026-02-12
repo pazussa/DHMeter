@@ -14,7 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -100,9 +99,9 @@ fun RecordingScreen(
             StatusIndicatorsCard(
                 gpsSignal = uiState.gpsSignal,
                 gpsAccuracyText = when (uiState.gpsSignal) {
-                    GpsSignalLevel.GOOD -> "OK (±5m)"
-                    GpsSignalLevel.MEDIUM -> "OK (±15m)"
-                    GpsSignalLevel.POOR -> "Poor (±25m+)"
+                    GpsSignalLevel.GOOD -> "OK (+/-5m)"
+                    GpsSignalLevel.MEDIUM -> "OK (+/-15m)"
+                    GpsSignalLevel.POOR -> "Poor (+/-25m+)"
                     GpsSignalLevel.NONE -> "No signal"
                 },
                 movementDetected = uiState.movementDetected,
@@ -215,6 +214,19 @@ fun RecordingScreen(
             dismissButton = {
                 TextButton(onClick = { showStopConfirmation = false }) {
                     Text("Continue Recording")
+                }
+            }
+        )
+    }
+
+    uiState.error?.let { message ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearError() },
+            title = { Text("Recording Error") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearError() }) {
+                    Text("OK")
                 }
             }
         )
@@ -488,3 +500,4 @@ private fun formatDuration(seconds: Long): String {
 
 enum class GpsSignalLevel { NONE, POOR, MEDIUM, GOOD }
 enum class SignalQuality { UNKNOWN, LOOSE, MODERATE, STABLE }
+

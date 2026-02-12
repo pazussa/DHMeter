@@ -177,10 +177,8 @@ fun TrackDetailScreen(
                                         if (isCompareMode) {
                                             selectedRuns = if (selectedRuns.contains(run.runId)) {
                                                 selectedRuns - run.runId
-                                            } else if (selectedRuns.size < 2) {
-                                                selectedRuns + run.runId
                                             } else {
-                                                selectedRuns
+                                                selectedRuns + run.runId
                                             }
                                         } else {
                                             onRunSelected(run.runId)
