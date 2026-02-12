@@ -39,6 +39,7 @@ fun RecordingScreen(
 
     LaunchedEffect(uiState.completedRunId) {
         uiState.completedRunId?.let { runId ->
+            viewModel.consumeCompletedRun()
             onRunCompleted(runId)
         }
     }
@@ -64,7 +65,10 @@ fun RecordingScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onCancel, enabled = !uiState.isRecording) {
+                    IconButton(
+                        onClick = onCancel,
+                        enabled = !uiState.isRecording && !uiState.isProcessing
+                    ) {
                         Icon(Icons.Default.Close, contentDescription = "Cancel")
                     }
                 }
@@ -94,6 +98,14 @@ fun RecordingScreen(
             )
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            AutoSegmentsCard(
+                segmentCount = uiState.segmentCount,
+                status = uiState.segmentStatus,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Status indicators card (Signal, GPS, Movement)
             StatusIndicatorsCard(
@@ -230,6 +242,43 @@ fun RecordingScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun AutoSegmentsCard(
+    segmentCount: Int,
+    status: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Map,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Local Segments: $segmentCount",
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
+            Text(
+                text = status,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

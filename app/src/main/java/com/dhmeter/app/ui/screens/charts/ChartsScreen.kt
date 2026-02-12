@@ -27,6 +27,7 @@ import com.dhmeter.charts.model.HeatmapPoint
 import com.dhmeter.domain.model.RunSeries
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.EventType
+import com.dhmeter.domain.model.SeriesType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -133,24 +134,21 @@ private fun ChartsContent(
         MultiRunChartSection(
             title = "Impact Density vs Distance %",
             runs = uiState.runs,
-            seriesSelector = { it.impactSeries },
-            yAxisLabel = "Impact (g^2)"
+            seriesSelector = { it.impactSeries }
         )
 
         // Harshness vs distPct
         MultiRunChartSection(
             title = "Harshness vs Distance %",
             runs = uiState.runs,
-            seriesSelector = { it.harshnessSeries },
-            yAxisLabel = "RMS"
+            seriesSelector = { it.harshnessSeries }
         )
 
         // Stability vs distPct
         MultiRunChartSection(
             title = "Stability vs Distance %",
             runs = uiState.runs,
-            seriesSelector = { it.stabilitySeries },
-            yAxisLabel = "Variance"
+            seriesSelector = { it.stabilitySeries }
         )
 
         // Events over distPct - Combined view
@@ -195,7 +193,7 @@ private fun ChartsContent(
                         points = series.toHeatmapPoints(),
                         colors = HeatmapColors.Impact,
                         minValue = 0f,
-                        maxValue = 5f
+                        maxValue = 100f
                     )
                 }
             }
@@ -209,8 +207,7 @@ private fun ChartsContent(
 private fun MultiRunChartSection(
     title: String,
     runs: List<RunChartData>,
-    seriesSelector: (RunChartData) -> RunSeries?,
-    yAxisLabel: String
+    seriesSelector: (RunChartData) -> RunSeries?
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -226,31 +223,10 @@ private fun MultiRunChartSection(
         }
 
         if (chartSeriesList.isNotEmpty()) {
-            val allYValues = chartSeriesList.flatMap { it.points.map { p -> p.y } }
-            if (allYValues.isEmpty()) {
-                Text(
-                    text = "No data available",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                return@Column
-            }
-
-            val rawMin = allYValues.minOrNull() ?: 0f
-            val rawMax = allYValues.maxOrNull() ?: 1f
-            val hasFlatRange = (rawMax - rawMin) < 1e-6f
-            val padding = if (hasFlatRange) {
-                if (rawMax == 0f) 1f else kotlin.math.abs(rawMax) * 0.1f
-            } else {
-                0f
-            }
-            val yMin = rawMin - padding
-            val yMax = rawMax + padding
-
             ComparisonLineChart(
                 series = chartSeriesList,
                 xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
-                yAxisConfig = AxisConfig(yMin, yMax, label = yAxisLabel),
+                yAxisConfig = AxisConfig(0f, 100f, label = "Score (0-100)"),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
@@ -284,7 +260,7 @@ private fun MultiRunChartSection(
  */
 private fun RunSeries.toChartPoints(): List<ChartPoint> {
     return (0 until pointCount).mapNotNull { i ->
-        ChartPoint(points[i * 2], points[i * 2 + 1])
+        ChartPoint(points[i * 2], normalizeToScore(seriesType, points[i * 2 + 1]))
             .takeIf { it.x.isFinite() && it.y.isFinite() }
     }
 }
@@ -294,9 +270,19 @@ private fun RunSeries.toChartPoints(): List<ChartPoint> {
  */
 private fun RunSeries.toHeatmapPoints(): List<HeatmapPoint> {
     return (0 until pointCount).mapNotNull { i ->
-        HeatmapPoint(points[i * 2], points[i * 2 + 1])
+        HeatmapPoint(points[i * 2], normalizeToScore(seriesType, points[i * 2 + 1]))
             .takeIf { it.x.isFinite() && it.value.isFinite() }
     }
+}
+
+private fun normalizeToScore(seriesType: SeriesType, value: Float): Float {
+    val normalized = when (seriesType) {
+        SeriesType.IMPACT_DENSITY -> (value / 5f) * 100f
+        SeriesType.HARSHNESS -> (value / 3f) * 100f
+        SeriesType.STABILITY -> (value / 0.5f) * 100f
+        SeriesType.SPEED_TIME -> value
+    }
+    return normalized.coerceIn(0f, 100f)
 }
 
 /**

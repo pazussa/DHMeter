@@ -31,6 +31,7 @@ import com.dhmeter.domain.model.EventType
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.Run
 import com.dhmeter.domain.model.RunSeries
+import com.dhmeter.domain.model.SeriesType
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -557,21 +558,18 @@ private fun RunChartsSection(
                 SingleRunChartSection(
                     title = "Impact Density vs Distance %",
                     series = impactSeries,
-                    yAxisLabel = "Impact (g^2)",
                     color = ChartImpact
                 )
 
                 SingleRunChartSection(
                     title = "Harshness vs Distance %",
                     series = harshnessSeries,
-                    yAxisLabel = "RMS",
                     color = ChartHarshness
                 )
 
                 SingleRunChartSection(
                     title = "Stability vs Distance %",
                     series = stabilitySeries,
-                    yAxisLabel = "Variance",
                     color = ChartStability
                 )
 
@@ -598,7 +596,7 @@ private fun RunChartsSection(
                             points = series.toHeatmapPoints(),
                             colors = HeatmapColors.Impact,
                             minValue = 0f,
-                            maxValue = 5f
+                            maxValue = 100f
                         )
                     }
                 }
@@ -611,7 +609,6 @@ private fun RunChartsSection(
 private fun SingleRunChartSection(
     title: String,
     series: RunSeries?,
-    yAxisLabel: String,
     color: Color
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -630,18 +627,6 @@ private fun SingleRunChartSection(
             return@Column
         }
 
-        val yValues = points.map { it.y }
-        val rawMin = yValues.minOrNull() ?: 0f
-        val rawMax = yValues.maxOrNull() ?: 1f
-        val hasFlatRange = (rawMax - rawMin) < 1e-6f
-        val padding = if (hasFlatRange) {
-            if (rawMax == 0f) 1f else kotlin.math.abs(rawMax) * 0.1f
-        } else {
-            0f
-        }
-        val yMin = rawMin - padding
-        val yMax = rawMax + padding
-
         ComparisonLineChart(
             series = listOf(
                 ChartSeries(
@@ -651,7 +636,7 @@ private fun SingleRunChartSection(
                 )
             ),
             xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
-            yAxisConfig = AxisConfig(yMin, yMax, label = yAxisLabel),
+            yAxisConfig = AxisConfig(0f, 100f, label = "Score (0-100)"),
             showLegend = false,
             modifier = Modifier
                 .fillMaxWidth()
@@ -662,16 +647,26 @@ private fun SingleRunChartSection(
 
 private fun RunSeries.toChartPoints(): List<ChartPoint> {
     return (0 until pointCount).mapNotNull { i ->
-        ChartPoint(points[i * 2], points[i * 2 + 1])
+        ChartPoint(points[i * 2], normalizeToScore(seriesType, points[i * 2 + 1]))
             .takeIf { it.x.isFinite() && it.y.isFinite() }
     }
 }
 
 private fun RunSeries.toHeatmapPoints(): List<HeatmapPoint> {
     return (0 until pointCount).mapNotNull { i ->
-        HeatmapPoint(points[i * 2], points[i * 2 + 1])
+        HeatmapPoint(points[i * 2], normalizeToScore(seriesType, points[i * 2 + 1]))
             .takeIf { it.x.isFinite() && it.value.isFinite() }
     }
+}
+
+private fun normalizeToScore(seriesType: SeriesType, value: Float): Float {
+    val normalized = when (seriesType) {
+        SeriesType.IMPACT_DENSITY -> (value / 5f) * 100f
+        SeriesType.HARSHNESS -> (value / 3f) * 100f
+        SeriesType.STABILITY -> (value / 0.5f) * 100f
+        SeriesType.SPEED_TIME -> value
+    }
+    return normalized.coerceIn(0f, 100f)
 }
 
 private fun List<RunEvent>.toChartMarkers(): List<ChartEventMarker> {

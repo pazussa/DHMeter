@@ -17,7 +17,6 @@ class GetTrackSegmentsUseCase @Inject constructor(
             val runs = runRepository.getRunsByTrack(trackId).first()
 
             val segments = runs
-                .filter { it.isValid }
                 .mapNotNull { run ->
                     val polyline = runRepository.getGpsPolyline(run.runId) ?: return@mapNotNull null
                     val start = polyline.points.firstOrNull() ?: return@mapNotNull null
