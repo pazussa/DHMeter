@@ -1,9 +1,7 @@
 package com.dhmeter.signal.metrics
 
 import com.dhmeter.sensing.data.AccelSample
-import com.dhmeter.signal.dsp.ButterworthFilter
-import com.dhmeter.signal.dsp.LowPassFilter
-import com.dhmeter.signal.dsp.SignalUtils
+import com.dhmeter.domain.repository.SensorSensitivityRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.pow
@@ -11,51 +9,30 @@ import kotlin.math.sqrt
 
 /**
  * Analyzes high-frequency vibration (chatter) in acceleration data.
- * Uses 15-40Hz bandpass filter to isolate vibration content.
+ * Uses a lightweight high-pass proxy (difference energy) aligned with live monitor.
  */
 @Singleton
-class HarshnessAnalyzer @Inject constructor() {
-
-    companion object {
-        const val LOW_CUTOFF_HZ = 15f
-        const val HIGH_CUTOFF_HZ = 40f
-        const val GRAVITY = 9.81f
-    }
+class HarshnessAnalyzer @Inject constructor(
+    private val sensitivityRepository: SensorSensitivityRepository
+) {
 
     /**
      * Analyze a window of accelerometer data and return harshness RMS.
      */
     fun analyzeWindow(samples: List<AccelSample>, sampleRate: Float): Float {
-        if (samples.size < 10) return 0f
+        if (sampleRate <= 0f) return 0f
+        if (samples.size < 50) return 0f
 
-        // Create bandpass filter for this sample rate
-        val filter = ButterworthFilter(
-            order = 4,
-            sampleRate = sampleRate,
-            lowCutoff = LOW_CUTOFF_HZ,
-            highCutoff = HIGH_CUTOFF_HZ
-        )
-
-        // Estimate gravity direction
-        val gravityFilter = LowPassFilter(alpha = 0.1f)
-        gravityFilter.reset()
-
-        // Compute vertical acceleration and filter it
-        val verticalAccel = samples.map { sample ->
-            val gVec = gravityFilter.filter(sample.x, sample.y, sample.z)
-            val gMag = sqrt(gVec[0].pow(2) + gVec[1].pow(2) + gVec[2].pow(2))
-            if (gMag < 0.1f) sample.magnitude - GRAVITY
-            else {
-                val dot = (sample.x * gVec[0] + sample.y * gVec[1] + sample.z * gVec[2]) / gMag
-                dot - GRAVITY
-            }
+        val magnitudes = samples.map { sample ->
+            sqrt(sample.x * sample.x + sample.y * sample.y + sample.z * sample.z)
         }
-
-        // Apply bandpass filter
-        filter.reset()
-        val filtered = verticalAccel.map { filter.filter(it) }.toFloatArray()
-
-        // Calculate RMS of filtered signal
-        return SignalUtils.rms(filtered)
+        val highFreq = magnitudes.zipWithNext { a, b -> (b - a).pow(2) }
+        val baseRms = if (highFreq.isNotEmpty()) {
+            sqrt(highFreq.average().toFloat())
+        } else {
+            0f
+        }
+        val sensitivity = sensitivityRepository.currentSettings.harshnessSensitivity
+        return baseRms * sensitivity
     }
 }

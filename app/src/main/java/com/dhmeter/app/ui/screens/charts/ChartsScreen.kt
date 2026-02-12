@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dhmeter.app.ui.metrics.normalizeBurdenScore
+import com.dhmeter.app.ui.metrics.normalizeSeriesBurdenScore
 import com.dhmeter.charts.components.ComparisonLineChart
 import com.dhmeter.charts.components.EventMarkers
 import com.dhmeter.charts.components.HeatmapBar
@@ -153,6 +153,8 @@ private fun ChartsContent(
             runs = uiState.runs,
             seriesSelector = { it.stabilitySeries }
         )
+
+        SpeedComparisonSection(runs = uiState.runs)
 
         // Events over distPct - Combined view
         if (uiState.runs.any { it.events.isNotEmpty() }) {
@@ -306,6 +308,56 @@ private fun MultiRunChartSection(
     }
 }
 
+@Composable
+private fun SpeedComparisonSection(
+    runs: List<RunChartData>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Speed vs Distance %",
+            style = MaterialTheme.typography.titleMedium
+        )
+        Text(
+            text = "Speed derived from timing profile and total distance.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline
+        )
+
+        val chartSeriesList = runs.mapNotNull { run ->
+            val distanceMeters = run.run?.distanceMeters
+            val points = run.speedSeries
+                ?.toSpeedChartPoints(distanceMeters)
+                .orEmpty()
+                .ifEmpty { fallbackSpeedChartPoints(run.run?.avgSpeed) }
+            if (points.isNotEmpty()) {
+                ChartSeries(run.runLabel, points, run.color)
+            } else {
+                null
+            }
+        }
+
+        if (chartSeriesList.isEmpty()) {
+            Text(
+                text = "No data available",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            val maxSpeed = chartSeriesList.flatMap { it.points }.maxOfOrNull { it.y } ?: 0f
+            val axisMax = (kotlin.math.ceil(maxSpeed / 5f) * 5f).coerceAtLeast(10f)
+
+            ComparisonLineChart(
+                series = chartSeriesList,
+                xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
+                yAxisConfig = AxisConfig(0f, axisMax, label = "km/h"),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+            )
+        }
+    }
+}
+
 /**
  * Extension function to convert RunSeries to list of ChartPoint
  */
@@ -314,6 +366,40 @@ private fun RunSeries.toChartPoints(): List<ChartPoint> {
         ChartPoint(points[i * 2], normalizeToScore(seriesType, points[i * 2 + 1]))
             .takeIf { it.x.isFinite() && it.y.isFinite() }
     }
+}
+
+private fun RunSeries.toSpeedChartPoints(distanceMeters: Float?): List<ChartPoint> {
+    if (seriesType != SeriesType.SPEED_TIME) return emptyList()
+    val totalDistanceM = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
+    if (pointCount < 2) return emptyList()
+
+    val result = ArrayList<ChartPoint>(pointCount - 1)
+    for (i in 1 until pointCount) {
+        val prevX = points[(i - 1) * 2]
+        val prevT = points[(i - 1) * 2 + 1]
+        val currX = points[i * 2]
+        val currT = points[i * 2 + 1]
+        val distPctDelta = (currX - prevX).coerceAtLeast(0f)
+        val timeDeltaSec = (currT - prevT).coerceAtLeast(0f)
+        if (timeDeltaSec <= 1e-3f) continue
+
+        val distM = totalDistanceM * (distPctDelta / 100f)
+        val speedMps = distM / timeDeltaSec
+        if (!speedMps.isFinite()) continue
+
+        val midX = (prevX + currX) / 2f
+        result.add(ChartPoint(midX, speedMps * 3.6f))
+    }
+    return result
+}
+
+private fun fallbackSpeedChartPoints(avgSpeedMps: Float?): List<ChartPoint> {
+    val speedMps = avgSpeedMps?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
+    val speedKmh = speedMps * 3.6f
+    return listOf(
+        ChartPoint(0f, speedKmh),
+        ChartPoint(100f, speedKmh)
+    )
 }
 
 /**
@@ -327,7 +413,7 @@ private fun RunSeries.toHeatmapPoints(): List<HeatmapPoint> {
 }
 
 private fun normalizeToScore(seriesType: SeriesType, value: Float): Float {
-    return normalizeBurdenScore(seriesType, value)
+    return normalizeSeriesBurdenScore(seriesType, value)
 }
 
 private fun buildDeltaPoints(

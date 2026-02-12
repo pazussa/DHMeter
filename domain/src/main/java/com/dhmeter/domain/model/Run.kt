@@ -24,6 +24,7 @@ data class Run(
     val stabilityScore: Float? = null,
     val landingQualityScore: Float? = null,
     val avgSpeed: Float? = null,
+    val maxSpeed: Float? = null,
     val slopeClassAvg: Int? = null, // 0=gentle, 1=medium, 2=steep
     
     // User tags

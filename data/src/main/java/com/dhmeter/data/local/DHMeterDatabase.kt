@@ -14,7 +14,7 @@ import com.dhmeter.data.local.entity.*
         EventEntity::class,
         GpsPolylineEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class DHMeterDatabase : RoomDatabase() {

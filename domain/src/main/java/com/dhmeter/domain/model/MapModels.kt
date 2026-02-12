@@ -100,3 +100,26 @@ data class MetricPercentiles(
     val p60: Float,
     val p80: Float
 )
+
+/**
+ * Split-time comparison for a single run against the fastest run of the same track.
+ */
+data class RunMapSectionComparison(
+    val currentRunId: String,
+    val fastestRunId: String,
+    val currentDurationMs: Long,
+    val fastestDurationMs: Long,
+    val sections: List<RunMapSectionDelta>,
+    val hasMeasuredSplitTiming: Boolean
+)
+
+data class RunMapSectionDelta(
+    val sectionIndex: Int,
+    val startDistPct: Float,
+    val endDistPct: Float,
+    val currentSectionMs: Long?,
+    val fastestSectionMs: Long?,
+    val deltaVsFastestMs: Long?,
+    val currentAvgSpeedMps: Float?,
+    val fastestAvgSpeedMps: Float?
+)

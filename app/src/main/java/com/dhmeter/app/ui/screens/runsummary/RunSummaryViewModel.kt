@@ -24,6 +24,7 @@ data class RunSummaryUiState(
     val impactSeries: RunSeries? = null,
     val harshnessSeries: RunSeries? = null,
     val stabilitySeries: RunSeries? = null,
+    val speedSeries: RunSeries? = null,
     val events: List<RunEvent> = emptyList(),
     val isChartsLoading: Boolean = false,
     val chartsError: String? = null,
@@ -59,6 +60,7 @@ class RunSummaryViewModel @Inject constructor(
                     impactSeries = null,
                     harshnessSeries = null,
                     stabilitySeries = null,
+                    speedSeries = null,
                     events = emptyList(),
                     isChartsLoading = false,
                     chartsError = null
@@ -105,6 +107,9 @@ class RunSummaryViewModel @Inject constructor(
                 val stabilityDeferred = async {
                     getRunSeriesUseCase(runId, SeriesType.STABILITY).getOrNull()
                 }
+                val speedDeferred = async {
+                    getRunSeriesUseCase(runId, SeriesType.SPEED_TIME).getOrNull()
+                }
                 val eventsDeferred = async {
                     getRunEventsUseCase(runId).getOrDefault(emptyList())
                 }
@@ -114,6 +119,7 @@ class RunSummaryViewModel @Inject constructor(
                         impactSeries = impactDeferred.await(),
                         harshnessSeries = harshnessDeferred.await(),
                         stabilitySeries = stabilityDeferred.await(),
+                        speedSeries = speedDeferred.await(),
                         events = eventsDeferred.await(),
                         isChartsLoading = false,
                         chartsError = null

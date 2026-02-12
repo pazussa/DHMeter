@@ -56,6 +56,7 @@ data class MapSectionDelta(
     val endDistPct: Float,
     val sectionTimesMs: List<Long?>, // per run
     val deltaVsBaselineMs: List<Long?>, // per run
+    val sectionAvgSpeedMps: List<Float?>, // per run
     val bestRunIndex: Int? // run with lowest section time
 )
 

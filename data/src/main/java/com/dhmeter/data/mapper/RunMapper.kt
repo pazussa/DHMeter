@@ -31,6 +31,7 @@ fun RunEntity.toDomain(): Run = Run(
     stabilityScore = stabilityScore,
     landingQualityScore = landingQualityScore,
     avgSpeed = avgSpeed,
+    maxSpeed = maxSpeed,
     slopeClassAvg = slopeClassAvg,
     setupNote = setupNote,
     conditionsNote = conditionsNote
@@ -58,6 +59,7 @@ fun Run.toEntity(): RunEntity = RunEntity(
     stabilityScore = stabilityScore,
     landingQualityScore = landingQualityScore,
     avgSpeed = avgSpeed,
+    maxSpeed = maxSpeed,
     slopeClassAvg = slopeClassAvg,
     setupNote = setupNote,
     conditionsNote = conditionsNote
@@ -65,19 +67,23 @@ fun Run.toEntity(): RunEntity = RunEntity(
 
 // Series Mapping
 fun RunSeriesEntity.toDomain(): RunSeries {
-    // Unpack float array from bytes
+    // Unpack safely: tolerate malformed rows (older/corrupted data) without crashing UI.
+    val maxReadableFloats = points.size / 4
+    val requestedFloats = (pointCount * 2).coerceAtLeast(0)
+    val safeFloats = minOf(maxReadableFloats, requestedFloats)
+    val safePointCount = safeFloats / 2
+    val floatArray = FloatArray(safePointCount * 2)
     val buffer = ByteBuffer.wrap(points).order(ByteOrder.LITTLE_ENDIAN)
-    val floatArray = FloatArray(pointCount * 2)
     for (i in floatArray.indices) {
         floatArray[i] = buffer.float
     }
-    
+
     return RunSeries(
         runId = runId,
         seriesType = SeriesType.valueOf(seriesType),
         xType = XAxisType.valueOf(xType),
         points = floatArray,
-        pointCount = pointCount
+        pointCount = safePointCount
     )
 }
 

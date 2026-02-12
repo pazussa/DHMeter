@@ -2,7 +2,10 @@ package com.dhmeter.domain.usecase
 
 import com.dhmeter.domain.model.*
 import com.dhmeter.domain.repository.RunRepository
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
+import kotlin.math.abs
+import kotlin.math.roundToLong
 
 /**
  * Gets all data needed for map visualization of a run.
@@ -169,6 +172,157 @@ class GetRunMapDataUseCase @Inject constructor(
                     event.meta?.recoveryMs?.let { put("recoveryMs", it) }
                 }
             )
+        }
+    }
+}
+
+/**
+ * Builds section split deltas for an individual run against the fastest run on the same track.
+ */
+class GetRunSectionComparisonUseCase @Inject constructor(
+    private val runRepository: RunRepository
+) {
+    companion object {
+        private val KEY_SECTION_BOUNDS = listOf(0f, 20f, 40f, 60f, 80f, 100f)
+    }
+
+    suspend operator fun invoke(runId: String): Result<RunMapSectionComparison?> {
+        return try {
+            val currentRun = runRepository.getRunById(runId) ?: return Result.success(null)
+            val runsOnTrack = runRepository.getRunsByTrack(currentRun.trackId).first()
+            if (runsOnTrack.isEmpty()) return Result.success(null)
+
+            val fastestRun = runsOnTrack.minByOrNull { it.durationMs } ?: return Result.success(null)
+            val currentProfile = buildTimingProfile(currentRun)
+            val fastestProfile = if (fastestRun.runId == currentRun.runId) {
+                currentProfile
+            } else {
+                buildTimingProfile(fastestRun)
+            }
+
+            val hasMeasuredSplitTiming = currentProfile.timingSeries != null &&
+                    fastestProfile.timingSeries != null
+
+            val sections = KEY_SECTION_BOUNDS.zipWithNext().mapIndexed { index, (startPct, endPct) ->
+                val currentSection = calculateSectionTimeMs(currentProfile, startPct, endPct)
+                val fastestSection = calculateSectionTimeMs(fastestProfile, startPct, endPct)
+                val delta = if (currentSection == null || fastestSection == null) {
+                    null
+                } else {
+                    currentSection - fastestSection
+                }
+                val currentAvgSpeed = calculateSectionAvgSpeed(
+                    run = currentRun,
+                    sectionMs = currentSection,
+                    startPct = startPct,
+                    endPct = endPct
+                )
+                val fastestAvgSpeed = calculateSectionAvgSpeed(
+                    run = fastestRun,
+                    sectionMs = fastestSection,
+                    startPct = startPct,
+                    endPct = endPct
+                )
+
+                RunMapSectionDelta(
+                    sectionIndex = index + 1,
+                    startDistPct = startPct,
+                    endDistPct = endPct,
+                    currentSectionMs = currentSection,
+                    fastestSectionMs = fastestSection,
+                    deltaVsFastestMs = delta,
+                    currentAvgSpeedMps = currentAvgSpeed,
+                    fastestAvgSpeedMps = fastestAvgSpeed
+                )
+            }
+
+            Result.success(
+                RunMapSectionComparison(
+                    currentRunId = currentRun.runId,
+                    fastestRunId = fastestRun.runId,
+                    currentDurationMs = currentRun.durationMs,
+                    fastestDurationMs = fastestRun.durationMs,
+                    sections = sections,
+                    hasMeasuredSplitTiming = hasMeasuredSplitTiming
+                )
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun buildTimingProfile(run: Run): RunTimingProfile {
+        val timingSeries = runRepository.getSeries(run.runId, SeriesType.SPEED_TIME)
+            ?.takeIf { it.seriesType == SeriesType.SPEED_TIME && it.pointCount > 0 }
+        return RunTimingProfile(run, timingSeries)
+    }
+
+    private fun calculateSectionTimeMs(
+        profile: RunTimingProfile,
+        startDistPct: Float,
+        endDistPct: Float
+    ): Long? {
+        val startMs = profile.elapsedMsAtDist(startDistPct) ?: return null
+        val endMs = profile.elapsedMsAtDist(endDistPct) ?: return null
+        return (endMs - startMs).coerceAtLeast(0L)
+    }
+
+    private fun calculateSectionAvgSpeed(
+        run: Run,
+        sectionMs: Long?,
+        startPct: Float,
+        endPct: Float
+    ): Float? {
+        val totalDistanceM = run.distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return null
+        val durationMs = sectionMs?.takeIf { it > 0L } ?: return null
+        val sectionDistanceM = totalDistanceM * ((endPct - startPct) / 100f)
+        if (sectionDistanceM <= 0f) return null
+        val speedMps = sectionDistanceM / (durationMs / 1000f)
+        return speedMps.takeIf { it.isFinite() }
+    }
+
+    private data class RunTimingProfile(
+        val run: Run,
+        val timingSeries: RunSeries?
+    ) {
+        fun elapsedMsAtDist(distPct: Float): Long? {
+            val clampedPct = distPct.coerceIn(0f, 100f)
+            timingSeries?.let { series ->
+                val valueSec = interpolateSeriesValue(series, clampedPct) ?: return null
+                if (valueSec.isFinite()) {
+                    return (valueSec * 1000f).roundToLong().coerceAtLeast(0L)
+                }
+            }
+
+            val durationMs = run.durationMs
+            if (durationMs <= 0L) return null
+            return (durationMs * (clampedPct / 100f)).roundToLong()
+        }
+
+        private fun interpolateSeriesValue(series: RunSeries, targetX: Float): Float? {
+            if (series.pointCount <= 0) return null
+
+            var lowX = series.points[0]
+            var lowY = series.points[1]
+            if (targetX <= lowX) return lowY
+
+            for (i in 1 until series.pointCount) {
+                val hiX = series.points[i * 2]
+                val hiY = series.points[i * 2 + 1]
+                if (targetX <= hiX) {
+                    val dx = hiX - lowX
+                    return if (abs(dx) < 1e-6f) {
+                        hiY
+                    } else {
+                        val t = (targetX - lowX) / dx
+                        lowY + t * (hiY - lowY)
+                    }
+                }
+                lowX = hiX
+                lowY = hiY
+            }
+
+            return lowY
         }
     }
 }

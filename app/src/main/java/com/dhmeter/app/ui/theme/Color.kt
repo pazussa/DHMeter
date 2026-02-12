@@ -28,6 +28,7 @@ val ChartRunB = Color(0xFF00BFA5)  // Teal
 val ChartImpact = Color(0xFFF44336)
 val ChartHarshness = Color(0xFFFF9800)
 val ChartStability = Color(0xFF4CAF50)
+val ChartSpeed = Color(0xFF2196F3)
 val ChartSlope = Color(0xFF9E9E9E)
 
 // Heatmap gradient

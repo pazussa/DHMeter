@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dhmeter.domain.model.*
 import com.dhmeter.domain.usecase.GetRunMapDataUseCase
+import com.dhmeter.domain.usecase.GetRunSectionComparisonUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -13,25 +14,19 @@ import javax.inject.Inject
 data class MapUiState(
     val runId: String = "",
     val mapData: RunMapData? = null,
+    val sectionComparison: RunMapSectionComparison? = null,
+    val showSectionComparison: Boolean = false,
     val isLoading: Boolean = true,
     val error: String? = null,
     val selectedMetric: MapMetricType = MapMetricType.IMPACT,
-    val mapDisplayType: MapDisplayType = MapDisplayType.TERRAIN,
-    val showTraffic: Boolean = false,
     val showEvents: Boolean = true,
     val selectedEvent: MapEventMarker? = null
 )
 
-enum class MapDisplayType(val displayName: String) {
-    TERRAIN("Terrain"),
-    NORMAL("Normal"),
-    SATELLITE("Satellite"),
-    HYBRID("Hybrid")
-}
-
 @HiltViewModel
 class MapViewModel @Inject constructor(
-    private val getRunMapDataUseCase: GetRunMapDataUseCase
+    private val getRunMapDataUseCase: GetRunMapDataUseCase,
+    private val getRunSectionComparisonUseCase: GetRunSectionComparisonUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MapUiState())
@@ -46,6 +41,8 @@ class MapViewModel @Inject constructor(
             it.copy(
                 runId = runId,
                 mapData = null,
+                sectionComparison = null,
+                showSectionComparison = false,
                 isLoading = true,
                 error = null,
                 selectedEvent = null
@@ -53,20 +50,27 @@ class MapViewModel @Inject constructor(
         }
         
         loadJob = viewModelScope.launch {
-            getRunMapDataUseCase(runId)
+            val mapResult = getRunMapDataUseCase(runId)
+            val sectionResult = getRunSectionComparisonUseCase(runId)
+
+            mapResult
                 .onSuccess { mapData ->
-                    _uiState.update { 
+                    _uiState.update {
                         it.copy(
                             mapData = mapData,
+                            sectionComparison = sectionResult.getOrNull(),
+                            showSectionComparison = false,
                             isLoading = false,
                             error = if (mapData == null) "No GPS data available" else null
                         )
                     }
                 }
                 .onFailure { e ->
-                    _uiState.update { 
+                    _uiState.update {
                         it.copy(
                             mapData = null,
+                            sectionComparison = null,
+                            showSectionComparison = false,
                             isLoading = false,
                             error = e.message ?: "Failed to load map data"
                         )
@@ -111,19 +115,20 @@ class MapViewModel @Inject constructor(
         _uiState.update { it.copy(showEvents = !it.showEvents) }
     }
 
-    fun setMapDisplayType(type: MapDisplayType) {
-        _uiState.update { it.copy(mapDisplayType = type) }
-    }
-
-    fun toggleTraffic() {
-        _uiState.update { it.copy(showTraffic = !it.showTraffic) }
-    }
-
     fun selectEvent(event: MapEventMarker?) {
         _uiState.update { it.copy(selectedEvent = event) }
     }
 
     fun dismissEventSheet() {
         _uiState.update { it.copy(selectedEvent = null) }
+    }
+
+    fun showSectionComparison() {
+        if (_uiState.value.sectionComparison == null) return
+        _uiState.update { it.copy(showSectionComparison = true) }
+    }
+
+    fun dismissSectionComparison() {
+        _uiState.update { it.copy(showSectionComparison = false) }
     }
 }

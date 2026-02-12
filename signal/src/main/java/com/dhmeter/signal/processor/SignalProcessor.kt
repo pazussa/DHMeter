@@ -1,6 +1,7 @@
 package com.dhmeter.signal.processor
 
 import com.dhmeter.domain.model.*
+import com.dhmeter.domain.repository.SensorSensitivityRepository
 import com.dhmeter.domain.usecase.RunProcessor
 import com.dhmeter.sensing.data.SensorBuffers
 import com.dhmeter.signal.metrics.*
@@ -11,6 +12,7 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Main signal processor that analyzes LINEAR_ACCELERATION + GYROSCOPE + GPS data.
@@ -25,7 +27,8 @@ class SignalProcessor @Inject constructor(
     private val landingDetector: LandingDetector,
     private val distanceMapper: DistanceMapper,
     private val runValidator: RunValidator,
-    private val gpsPolylineProcessor: GpsPolylineProcessor
+    private val gpsPolylineProcessor: GpsPolylineProcessor,
+    private val sensitivityRepository: SensorSensitivityRepository
 ) : RunProcessor {
 
     companion object {
@@ -80,6 +83,7 @@ class SignalProcessor @Inject constructor(
         val runId = UUID.randomUUID().toString()
         // Use actual wall-clock time for startedAt/endedAt (not nanoTime which is boot-relative)
         val currentTimeMs = System.currentTimeMillis()
+        val maxSpeed = gpsSamples.maxOfOrNull { it.speed }?.takeIf { it.isFinite() }
         val run = Run(
             runId = runId,
             trackId = handle.trackId,
@@ -98,6 +102,7 @@ class SignalProcessor @Inject constructor(
             stabilityScore = stabilityScore,
             landingQualityScore = landingQualityScore,
             avgSpeed = if (durationMs > 0) totalDistance / (durationMs / 1000f) else 0f,
+            maxSpeed = maxSpeed,
             slopeClassAvg = null // No slope in MVP2
         )
 
@@ -201,14 +206,16 @@ class SignalProcessor @Inject constructor(
             return WindowResults(impactDensities, harshnessValues, stabilityValues, distPcts)
         }
 
-        val sampleRate = handle.accelSampleRate
-        val windowSamples = (WINDOW_SIZE_SEC * sampleRate).toInt()
-        val hopSamples = (HOP_SIZE_SEC * sampleRate).toInt()
+        val sampleRate = resolveSampleRate(handle.accelSampleRate, accelSamples)
+        val windowSamples = (WINDOW_SIZE_SEC * sampleRate).roundToInt().coerceAtLeast(1)
+        val hopSamples = (HOP_SIZE_SEC * sampleRate).roundToInt().coerceAtLeast(1)
 
         var windowStart = 0
-        while (windowStart + windowSamples <= accelSamples.size) {
-            val windowAccel = accelSamples.subList(windowStart, windowStart + windowSamples)
-            val centerTimeNs = windowAccel[windowSamples / 2].timestampNs
+        while (windowStart < accelSamples.size) {
+            val windowEnd = (windowStart + windowSamples).coerceAtMost(accelSamples.size)
+            if (windowEnd - windowStart < 3) break
+            val windowAccel = accelSamples.subList(windowStart, windowEnd)
+            val centerTimeNs = windowAccel[windowAccel.size / 2].timestampNs
             val distPct = distMapping.getDistPct(centerTimeNs)
 
             val windowGyro = gyroSamples.filter { sample ->
@@ -225,6 +232,7 @@ class SignalProcessor @Inject constructor(
             stabilityValues.add(stability.stabilityIndex)
             distPcts.add(distPct)
 
+            if (windowEnd >= accelSamples.size) break
             windowStart += hopSamples
         }
 
@@ -238,7 +246,7 @@ class SignalProcessor @Inject constructor(
     ): List<RunEvent> {
         val events = mutableListOf<RunEvent>()
         val startTimeNs = handle.startTimeNs
-        val sampleRate = handle.accelSampleRate
+        val sampleRate = resolveSampleRate(handle.accelSampleRate, accelSamples)
 
         val landings = landingDetector.detectLandings(accelSamples, sampleRate)
         landings.forEach { landing ->
@@ -264,6 +272,25 @@ class SignalProcessor @Inject constructor(
         }
 
         return events.sortedBy { it.distPct }
+    }
+
+    private fun resolveSampleRate(
+        declaredSampleRate: Float,
+        accelSamples: List<com.dhmeter.sensing.data.AccelSample>
+    ): Float {
+        if (declaredSampleRate.isFinite() && declaredSampleRate >= 5f) {
+            return declaredSampleRate
+        }
+        if (accelSamples.size < 2) return 200f
+
+        val durationNs = (accelSamples.last().timestampNs - accelSamples.first().timestampNs).coerceAtLeast(1L)
+        val intervals = (accelSamples.size - 1).coerceAtLeast(1)
+        val estimated = intervals * 1_000_000_000f / durationNs.toFloat()
+        return if (estimated.isFinite()) {
+            estimated.coerceIn(20f, 500f)
+        } else {
+            200f
+        }
     }
 
     private fun createSeries(
@@ -376,9 +403,10 @@ class SignalProcessor @Inject constructor(
         gpsSamples: List<com.dhmeter.sensing.data.GpsSample>
     ): Float {
         if (gpsSamples.size < 2) return 0f
-        
+
+        val gpsSensitivity = sensitivityRepository.currentSettings.gpsSensitivity
         val minSpeedMps = 0.5f
-        val maxAccuracyM = 20f
+        val maxAccuracyM = (20f / gpsSensitivity.coerceAtLeast(0.01f)).coerceIn(10f, 60f)
         val minDistanceFactor = 0.5f
         
         var totalDistance = 0.0

@@ -1,6 +1,7 @@
 package com.dhmeter.signal.metrics
 
 import com.dhmeter.sensing.data.GyroSample
+import com.dhmeter.domain.repository.SensorSensitivityRepository
 import com.dhmeter.signal.dsp.SignalUtils
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -10,7 +11,9 @@ import javax.inject.Singleton
  * High variance in rotation rates indicates instability.
  */
 @Singleton
-class StabilityAnalyzer @Inject constructor() {
+class StabilityAnalyzer @Inject constructor(
+    private val sensitivityRepository: SensorSensitivityRepository
+) {
 
     companion object {
         // Stability thresholds
@@ -37,7 +40,8 @@ class StabilityAnalyzer @Inject constructor() {
 
         // Combined stability index (X and Y are most relevant for rider motion)
         // Z-axis (vertical rotation/yaw) is less indicative of instability
-        val stabilityIndex = varX + varY
+        val sensitivity = sensitivityRepository.currentSettings.stabilitySensitivity
+        val stabilityIndex = (varX + varY) * sensitivity
 
         return StabilityResult(
             stabilityIndex = stabilityIndex,

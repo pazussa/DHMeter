@@ -59,11 +59,13 @@ object GpsPolylineMapper {
     
     private fun unpackPoints(data: ByteArray, count: Int): List<GpsPoint> {
         if (data.isEmpty() || count == 0) return emptyList()
+        val safeCount = minOf(count.coerceAtLeast(0), data.size / BYTES_PER_POINT)
+        if (safeCount == 0) return emptyList()
         
         val buffer = ByteBuffer.wrap(data)
         buffer.order(ByteOrder.LITTLE_ENDIAN)
         
-        return (0 until count).map {
+        return (0 until safeCount).map {
             GpsPoint(
                 lat = buffer.getDouble(),
                 lon = buffer.getDouble(),

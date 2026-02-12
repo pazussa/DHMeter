@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dhmeter.app.ui.metrics.formatScore0to100
-import com.dhmeter.app.ui.metrics.normalizeBurdenScore
+import com.dhmeter.app.ui.metrics.normalizeSeriesBurdenScore
 import com.dhmeter.app.ui.metrics.runMetricQualityScore
 import com.dhmeter.app.ui.metrics.runOverallQualityScore
 import com.dhmeter.app.ui.theme.*
@@ -97,6 +97,7 @@ fun RunSummaryScreen(
                     impactSeries = uiState.impactSeries,
                     harshnessSeries = uiState.harshnessSeries,
                     stabilitySeries = uiState.stabilitySeries,
+                    speedSeries = uiState.speedSeries,
                     events = uiState.events,
                     isChartsLoading = uiState.isChartsLoading,
                     chartsError = uiState.chartsError,
@@ -136,6 +137,7 @@ private fun RunSummaryContent(
     impactSeries: RunSeries?,
     harshnessSeries: RunSeries?,
     stabilitySeries: RunSeries?,
+    speedSeries: RunSeries?,
     events: List<RunEvent>,
     isChartsLoading: Boolean,
     chartsError: String?,
@@ -168,6 +170,9 @@ private fun RunSummaryContent(
             impactSeries = impactSeries,
             harshnessSeries = harshnessSeries,
             stabilitySeries = stabilitySeries,
+            speedSeries = speedSeries,
+            distanceMeters = run.distanceMeters,
+            avgSpeedMps = run.avgSpeed,
             events = events,
             isLoading = isChartsLoading,
             error = chartsError
@@ -353,6 +358,15 @@ private fun MetricsGrid(run: Run) {
             color = ChartStability,
             modifier = Modifier.fillMaxWidth()
         )
+
+        ValueMetricCard(
+            icon = Icons.Default.Speed,
+            label = "Max Speed",
+            value = run.maxSpeed?.let { String.format(Locale.US, "%.1f km/h", it * 3.6f) } ?: "--",
+            description = "Highest GPS speed recorded",
+            color = ChartSpeed,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -394,7 +408,7 @@ private fun MetricCard(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "${formatScore0to100(score)}/100",
+                text = formatScore0to100(score),
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -415,6 +429,54 @@ private fun MetricCard(
 }
 
 @Composable
+private fun ValueMetricCard(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    description: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+    }
+}
+@Composable
 private fun QualityOverviewCard(
     overallQuality: Float?,
     impactQuality: Float?,
@@ -434,7 +496,7 @@ private fun QualityOverviewCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = "${formatScore0to100(overallQuality)}/100",
+                text = formatScore0to100(overallQuality),
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -561,6 +623,9 @@ private fun RunChartsSection(
     impactSeries: RunSeries?,
     harshnessSeries: RunSeries?,
     stabilitySeries: RunSeries?,
+    speedSeries: RunSeries?,
+    distanceMeters: Float?,
+    avgSpeedMps: Float?,
     events: List<RunEvent>,
     isLoading: Boolean,
     error: String?
@@ -615,6 +680,14 @@ private fun RunChartsSection(
                     color = ChartStability
                 )
 
+                SpeedChartSection(
+                    title = "Speed vs Distance %",
+                    series = speedSeries,
+                    distanceMeters = distanceMeters,
+                    fallbackAvgSpeedMps = avgSpeedMps,
+                    color = ChartSpeed
+                )
+
                 if (events.isNotEmpty()) {
                     Text(
                         text = "Events over Distance %",
@@ -666,31 +739,77 @@ private fun SingleRunChartSection(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            return@Column
-        }
+        } else {
+            ComparisonLineChart(
+                series = listOf(
+                    ChartSeries(
+                        label = "Run",
+                        points = points,
+                        color = color
+                    )
+                ),
+                xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
+                yAxisConfig = AxisConfig(0f, 100f, label = "Score (0-100)"),
+                showLegend = false,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+            )
 
-        ComparisonLineChart(
-            series = listOf(
-                ChartSeries(
-                    label = "Run",
-                    points = points,
-                    color = color
+            val peakPoint = points.maxByOrNull { it.y }
+            peakPoint?.let {
+                Text(
+                    text = "Peak burden ${String.format(Locale.US, "%.0f", it.y)} at ${String.format(Locale.US, "%.0f", it.x)}% of run",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
                 )
-            ),
-            xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
-            yAxisConfig = AxisConfig(0f, 100f, label = "Score (0-100)"),
-            showLegend = false,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpeedChartSection(
+    title: String,
+    series: RunSeries?,
+    distanceMeters: Float?,
+    fallbackAvgSpeedMps: Float?,
+    color: Color
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall
         )
 
-        val peakPoint = points.maxByOrNull { it.y }
-        peakPoint?.let {
+        val points = series
+            ?.toSpeedChartPoints(distanceMeters)
+            .orEmpty()
+            .ifEmpty { fallbackSpeedChartPoints(fallbackAvgSpeedMps) }
+        if (points.isEmpty()) {
             Text(
-                text = "Peak burden ${String.format(Locale.US, "%.0f", it.y)} at ${String.format(Locale.US, "%.0f", it.x)}% of run",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline
+                text = "No data available",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            val maxSpeed = points.maxOfOrNull { it.y } ?: 0f
+            val axisMax = (kotlin.math.ceil(maxSpeed / 5f) * 5f).coerceAtLeast(10f)
+
+            ComparisonLineChart(
+                series = listOf(
+                    ChartSeries(
+                        label = "Speed",
+                        points = points,
+                        color = color
+                    )
+                ),
+                xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
+                yAxisConfig = AxisConfig(0f, axisMax, label = "km/h"),
+                showLegend = false,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
             )
         }
     }
@@ -703,6 +822,40 @@ private fun RunSeries.toChartPoints(): List<ChartPoint> {
     }
 }
 
+private fun RunSeries.toSpeedChartPoints(distanceMeters: Float?): List<ChartPoint> {
+    if (seriesType != SeriesType.SPEED_TIME) return emptyList()
+    val totalDistanceM = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
+    if (pointCount < 2) return emptyList()
+
+    val result = ArrayList<ChartPoint>(pointCount - 1)
+    for (i in 1 until pointCount) {
+        val prevX = points[(i - 1) * 2]
+        val prevT = points[(i - 1) * 2 + 1]
+        val currX = points[i * 2]
+        val currT = points[i * 2 + 1]
+        val distPctDelta = (currX - prevX).coerceAtLeast(0f)
+        val timeDeltaSec = (currT - prevT).coerceAtLeast(0f)
+        if (timeDeltaSec <= 1e-3f) continue
+
+        val distM = totalDistanceM * (distPctDelta / 100f)
+        val speedMps = distM / timeDeltaSec
+        if (!speedMps.isFinite()) continue
+
+        val midX = (prevX + currX) / 2f
+        result.add(ChartPoint(midX, speedMps * 3.6f))
+    }
+    return result
+}
+
+private fun fallbackSpeedChartPoints(avgSpeedMps: Float?): List<ChartPoint> {
+    val speedMps = avgSpeedMps?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
+    val speedKmh = speedMps * 3.6f
+    return listOf(
+        ChartPoint(0f, speedKmh),
+        ChartPoint(100f, speedKmh)
+    )
+}
+
 private fun RunSeries.toHeatmapPoints(): List<HeatmapPoint> {
     return (0 until pointCount).mapNotNull { i ->
         HeatmapPoint(points[i * 2], normalizeToScore(seriesType, points[i * 2 + 1]))
@@ -711,7 +864,7 @@ private fun RunSeries.toHeatmapPoints(): List<HeatmapPoint> {
 }
 
 private fun normalizeToScore(seriesType: SeriesType, value: Float): Float {
-    return normalizeBurdenScore(seriesType, value)
+    return normalizeSeriesBurdenScore(seriesType, value)
 }
 
 private fun List<RunEvent>.toChartMarkers(): List<ChartEventMarker> {

@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.RunSeries
 import com.dhmeter.domain.model.SeriesType
+import com.dhmeter.domain.model.Run
 import com.dhmeter.domain.usecase.GetRunEventsUseCase
+import com.dhmeter.domain.usecase.GetRunByIdUseCase
 import com.dhmeter.domain.usecase.GetRunSeriesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
@@ -19,9 +21,11 @@ data class RunChartData(
     val runId: String,
     val runLabel: String,
     val color: Color,
+    val run: Run? = null,
     val impactSeries: RunSeries? = null,
     val harshnessSeries: RunSeries? = null,
     val stabilitySeries: RunSeries? = null,
+    val speedSeries: RunSeries? = null,
     val events: List<RunEvent> = emptyList()
 )
 
@@ -43,6 +47,7 @@ data class ChartsUiState(
 
 @HiltViewModel
 class ChartsViewModel @Inject constructor(
+    private val getRunByIdUseCase: GetRunByIdUseCase,
     private val getRunSeriesUseCase: GetRunSeriesUseCase,
     private val getRunEventsUseCase: GetRunEventsUseCase
 ) : ViewModel() {
@@ -81,18 +86,22 @@ class ChartsViewModel @Inject constructor(
                 // Load all data for all runs in parallel
                 val runsData = runIds.mapIndexed { index, runId ->
                     async {
+                        val runDeferred = async { getRunByIdUseCase(runId).getOrNull() }
                         val impact = async { getRunSeriesUseCase(runId, SeriesType.IMPACT_DENSITY) }
                         val harshness = async { getRunSeriesUseCase(runId, SeriesType.HARSHNESS) }
                         val stability = async { getRunSeriesUseCase(runId, SeriesType.STABILITY) }
+                        val speed = async { getRunSeriesUseCase(runId, SeriesType.SPEED_TIME) }
                         val events = async { getRunEventsUseCase(runId) }
                         
                         RunChartData(
                             runId = runId,
                             runLabel = "Run ${index + 1}",
                             color = runColors[index % runColors.size],
+                            run = runDeferred.await(),
                             impactSeries = impact.await().getOrNull(),
                             harshnessSeries = harshness.await().getOrNull(),
                             stabilitySeries = stability.await().getOrNull(),
+                            speedSeries = speed.await().getOrNull(),
                             events = events.await().getOrDefault(emptyList())
                         )
                     }

@@ -21,6 +21,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dhmeter.app.ui.theme.*
+import com.dhmeter.charts.components.ComparisonLineChart
+import com.dhmeter.charts.model.AxisConfig
+import com.dhmeter.charts.model.ChartPoint
+import com.dhmeter.charts.model.ChartSeries
 import com.dhmeter.domain.model.*
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
@@ -29,6 +33,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
@@ -37,6 +42,7 @@ import com.google.maps.android.compose.rememberCameraPositionState
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.abs
+import kotlin.math.ceil
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -139,7 +145,7 @@ private fun MultiRunComparisonContent(
             modifier = Modifier.padding(bottom = 12.dp)
         )
         Text(
-            text = "For 0-100 metrics, lower means smoother/less punishing.",
+            text = "Lower score means smoother/less punishing.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
         )
@@ -149,6 +155,15 @@ private fun MultiRunComparisonContent(
             runs = comparison.runs,
             comparisons = comparison.metricComparisons
         )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "Speed Comparison",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        SpeedComparisonChart(comparison = comparison)
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -290,6 +305,76 @@ private fun VerdictCard(verdict: MultiRunVerdict) {
 }
 
 @Composable
+private fun SpeedComparisonChart(comparison: MultiRunComparisonResult) {
+    val chartSeries = remember(comparison) { buildSpeedComparisonSeries(comparison) }
+
+    if (chartSeries.isEmpty()) {
+        Text(
+            text = "No speed data available",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    } else {
+        val maxSpeed = chartSeries.flatMap { it.points }.maxOfOrNull { it.y } ?: 0f
+        val axisMax = (ceil(maxSpeed / 5f) * 5f).coerceAtLeast(10f)
+
+        ComparisonLineChart(
+            series = chartSeries,
+            xAxisConfig = AxisConfig(0f, 100f, label = "Distance %"),
+            yAxisConfig = AxisConfig(0f, axisMax, label = "km/h"),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+        )
+    }
+}
+
+private fun buildSpeedComparisonSeries(comparison: MultiRunComparisonResult): List<ChartSeries> {
+    val mapComparison = comparison.mapComparison
+
+    return comparison.runs.mapIndexedNotNull { runIndex, runWithColor ->
+        val sectionPoints = mapComparison?.sections
+            ?.mapNotNull { section ->
+                val speedMps = section.sectionAvgSpeedMps.getOrNull(runIndex)
+                speedMps?.takeIf { it.isFinite() && it > 0f }?.let {
+                    ChartPoint(
+                        x = (section.startDistPct + section.endDistPct) / 2f,
+                        y = it * 3.6f
+                    )
+                }
+            }
+            .orEmpty()
+            .sortedBy { it.x }
+
+        val avgSpeedMps = runWithColor.run.avgSpeed
+        val points = when {
+            sectionPoints.isNotEmpty() -> buildList {
+                add(ChartPoint(0f, sectionPoints.first().y))
+                addAll(sectionPoints)
+                add(ChartPoint(100f, sectionPoints.last().y))
+            }
+
+            avgSpeedMps != null && avgSpeedMps > 0f -> {
+                val speedKmh = avgSpeedMps * 3.6f
+                listOf(ChartPoint(0f, speedKmh), ChartPoint(100f, speedKmh))
+            }
+
+            else -> emptyList()
+        }.filter { it.x.isFinite() && it.y.isFinite() }
+
+        if (points.isEmpty()) {
+            null
+        } else {
+            ChartSeries(
+                label = runWithColor.label,
+                points = points,
+                color = Color(runWithColor.color)
+            )
+        }
+    }
+}
+
+@Composable
 private fun MultiMetricsTable(
     runs: List<RunWithColor>,
     comparisons: List<MultiMetricComparison>
@@ -397,83 +482,82 @@ private fun RouteOverlayMap(
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             Text("No route data available")
         }
-        return
-    }
-
-    val allPoints = remember(runs) {
-        runs.flatMap { run -> run.polyline.points.map { LatLng(it.lat, it.lon) } }
-    }
-    val baselinePoints = runs.first().polyline.points
-    var mapLoaded by remember { mutableStateOf(false) }
-    val boundsBuilder = remember(allPoints) {
-        if (allPoints.isEmpty()) null else LatLngBounds.builder().apply {
-            allPoints.forEach { include(it) }
+    } else {
+        val allPoints = remember(runs) {
+            runs.flatMap { run -> run.polyline.points.map { LatLng(it.lat, it.lon) } }
         }
-    }
-    val cameraPositionState = rememberCameraPositionState {
-        val firstPoint = allPoints.firstOrNull()
-        if (firstPoint != null) {
-            position = CameraPosition.fromLatLngZoom(firstPoint, 14f)
-        }
-    }
-
-    LaunchedEffect(boundsBuilder, mapLoaded) {
-        if (!mapLoaded) return@LaunchedEffect
-        boundsBuilder?.let { builder ->
-            runCatching {
-                cameraPositionState.animate(
-                    CameraUpdateFactory.newLatLngBounds(builder.build(), 90)
-                )
+        val baselinePoints = runs.first().polyline.points
+        var mapLoaded by remember { mutableStateOf(false) }
+        val boundsBuilder = remember(allPoints) {
+            if (allPoints.isEmpty()) null else LatLngBounds.builder().apply {
+                allPoints.forEach { include(it) }
             }
         }
-    }
-
-    GoogleMap(
-        modifier = modifier,
-        cameraPositionState = cameraPositionState,
-        properties = MapProperties(),
-        uiSettings = MapUiSettings(
-            zoomControlsEnabled = true,
-            mapToolbarEnabled = true,
-            compassEnabled = true
-        ),
-        onMapLoaded = { mapLoaded = true }
-    ) {
-        runs.forEachIndexed { index, run ->
-            val polylinePoints = run.polyline.points.map { LatLng(it.lat, it.lon) }
-            if (polylinePoints.size >= 2) {
-                Polyline(
-                    points = polylinePoints,
-                    color = Color(run.color),
-                    width = if (index == mapComparison.baselineRunIndex) 10f else 7f,
-                    zIndex = if (index == mapComparison.baselineRunIndex) 2f else 1f
-                )
+        val cameraPositionState = rememberCameraPositionState {
+            val firstPoint = allPoints.firstOrNull()
+            if (firstPoint != null) {
+                position = CameraPosition.fromLatLngZoom(firstPoint, 14f)
             }
         }
 
-        baselinePoints.firstOrNull()?.let { start ->
-            Marker(
-                state = MarkerState(LatLng(start.lat, start.lon)),
-                title = "Start",
-                icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
-            )
-        }
-        baselinePoints.lastOrNull()?.let { end ->
-            Marker(
-                state = MarkerState(LatLng(end.lat, end.lon)),
-                title = "Finish",
-                icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
-            )
+        LaunchedEffect(boundsBuilder, mapLoaded) {
+            if (!mapLoaded) return@LaunchedEffect
+            boundsBuilder?.let { builder ->
+                runCatching {
+                    cameraPositionState.animate(
+                        CameraUpdateFactory.newLatLngBounds(builder.build(), 90)
+                    )
+                }
+            }
         }
 
-        // Sector markers (S1..Sn) based on baseline route.
-        mapComparison.sections.dropLast(1).forEach { section ->
-            findPointNearDistPct(baselinePoints, section.endDistPct)?.let { point ->
+        GoogleMap(
+            modifier = modifier,
+            cameraPositionState = cameraPositionState,
+            properties = MapProperties(mapType = MapType.HYBRID),
+            uiSettings = MapUiSettings(
+                zoomControlsEnabled = true,
+                mapToolbarEnabled = true,
+                compassEnabled = true
+            ),
+            onMapLoaded = { mapLoaded = true }
+        ) {
+            runs.forEachIndexed { index, run ->
+                val polylinePoints = run.polyline.points.map { LatLng(it.lat, it.lon) }
+                if (polylinePoints.size >= 2) {
+                    Polyline(
+                        points = polylinePoints,
+                        color = Color(run.color),
+                        width = if (index == mapComparison.baselineRunIndex) 10f else 7f,
+                        zIndex = if (index == mapComparison.baselineRunIndex) 2f else 1f
+                    )
+                }
+            }
+
+            baselinePoints.firstOrNull()?.let { start ->
                 Marker(
-                    state = MarkerState(LatLng(point.lat, point.lon)),
-                    title = "S${section.sectionIndex}",
-                    snippet = "${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%"
+                    state = MarkerState(LatLng(start.lat, start.lon)),
+                    title = "Start",
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
                 )
+            }
+            baselinePoints.lastOrNull()?.let { end ->
+                Marker(
+                    state = MarkerState(LatLng(end.lat, end.lon)),
+                    title = "Finish",
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
+                )
+            }
+
+            // Sector markers (S1..Sn) based on baseline route.
+            mapComparison.sections.dropLast(1).forEach { section ->
+                findPointNearDistPct(baselinePoints, section.endDistPct)?.let { point ->
+                    Marker(
+                        state = MarkerState(LatLng(point.lat, point.lon)),
+                        title = "S${section.sectionIndex}",
+                        snippet = "${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%"
+                    )
+                }
             }
         }
     }
@@ -565,6 +649,12 @@ private fun SplitDeltaTable(mapComparison: MapComparisonData) {
                                     textAlign = TextAlign.Center
                                 )
                             }
+                            Text(
+                                text = formatSpeed(section.sectionAvgSpeedMps.getOrNull(runIndex)),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
                 }
@@ -631,12 +721,10 @@ private fun MultiMetricRow(
         
         comparison.values.forEachIndexed { index, value ->
             val isBest = comparison.bestRunIndex == index
-            val displayValue = if (comparison.metricName == "Duration" && value != null) {
-                formatDuration((value * 1000).toLong())
-            } else if (comparison.metricName.contains("(0-100)") && value != null) {
-                String.format(Locale.US, "%.0f", value)
-            } else {
-                value?.let { String.format(Locale.US, "%.2f", it) } ?: "--"
+            val displayValue = when {
+                comparison.metricName == "Duration" && value != null -> formatDuration((value * 1000).toLong())
+                comparison.metricName == "Max Speed" && value != null -> String.format(Locale.US, "%.1f km/h", value)
+                else -> value?.let { String.format(Locale.US, "%.2f", it) } ?: "--"
             }
             
             Box(
@@ -712,6 +800,11 @@ private fun formatSignedDelta(deltaMs: Long): String {
         "$absMs ms"
     }
     return sign + value
+}
+
+private fun formatSpeed(speedMps: Float?): String {
+    speedMps ?: return "--"
+    return String.format(Locale.US, "%.1f km/h", speedMps * 3.6f)
 }
 
 private fun findPointNearDistPct(points: List<GpsPoint>, targetPct: Float): GpsPoint? {

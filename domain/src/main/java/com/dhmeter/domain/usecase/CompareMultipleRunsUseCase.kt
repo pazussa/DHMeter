@@ -13,9 +13,9 @@ class CompareMultipleRunsUseCase @Inject constructor(
     private val runRepository: RunRepository
 ) {
     companion object {
-        private const val IMPACT_REF = 5f
-        private const val HARSHNESS_REF = 3f
-        private const val STABILITY_REF = 0.5f
+        private const val IMPACT_REF = 25f
+        private const val HARSHNESS_REF = 1.2f
+        private const val STABILITY_REF = 0.35f
         private val KEY_SECTION_BOUNDS = listOf(0f, 20f, 40f, 60f, 80f, 100f)
     }
 
@@ -93,22 +93,23 @@ class CompareMultipleRunsUseCase @Inject constructor(
         val impactScores = runs.map { it.run.impactScore?.let { value -> normalizeBurden(SeriesType.IMPACT_DENSITY, value) } }
         val harshnessScores = runs.map { it.run.harshnessAvg?.let { value -> normalizeBurden(SeriesType.HARSHNESS, value) } }
         val stabilityScores = runs.map { it.run.stabilityScore?.let { value -> normalizeBurden(SeriesType.STABILITY, value) } }
+        val maxSpeeds = runs.map { it.run.maxSpeed?.let { value -> value * 3.6f } }
 
         return listOf(
             MultiMetricComparison(
-                metricName = "Impact (0-100)",
+                metricName = "Impact",
                 values = impactScores,
                 bestRunIndex = findBestRunIndex(impactScores, lowerIsBetter = true),
                 lowerIsBetter = true
             ),
             MultiMetricComparison(
-                metricName = "Harshness (0-100)",
+                metricName = "Harshness",
                 values = harshnessScores,
                 bestRunIndex = findBestRunIndex(harshnessScores, lowerIsBetter = true),
                 lowerIsBetter = true
             ),
             MultiMetricComparison(
-                metricName = "Stability (0-100)",
+                metricName = "Stability",
                 values = stabilityScores,
                 bestRunIndex = findBestRunIndex(stabilityScores, lowerIsBetter = true),
                 lowerIsBetter = true
@@ -124,15 +125,22 @@ class CompareMultipleRunsUseCase @Inject constructor(
                 values = runs.map { it.run.durationMs.toFloat() / 1000f },
                 bestRunIndex = findBestRunIndex(runs.map { it.run.durationMs.toFloat() / 1000f }, lowerIsBetter = true),
                 lowerIsBetter = true
+            ),
+            MultiMetricComparison(
+                metricName = "Max Speed",
+                values = maxSpeeds,
+                bestRunIndex = findBestRunIndex(maxSpeeds, lowerIsBetter = false),
+                lowerIsBetter = false
             )
         )
     }
 
     private fun normalizeBurden(type: SeriesType, value: Float): Float {
+        val nonNegativeValue = value.coerceAtLeast(0f)
         val normalized = when (type) {
-            SeriesType.IMPACT_DENSITY -> (value / IMPACT_REF) * 100f
-            SeriesType.HARSHNESS -> (value / HARSHNESS_REF) * 100f
-            SeriesType.STABILITY -> (value / STABILITY_REF) * 100f
+            SeriesType.IMPACT_DENSITY -> (nonNegativeValue / (nonNegativeValue + IMPACT_REF)) * 100f
+            SeriesType.HARSHNESS -> (nonNegativeValue / (nonNegativeValue + HARSHNESS_REF)) * 100f
+            SeriesType.STABILITY -> (nonNegativeValue / (nonNegativeValue + STABILITY_REF)) * 100f
             SeriesType.SPEED_TIME -> value
         }
         return normalized.coerceIn(0f, 100f)
@@ -248,6 +256,9 @@ class CompareMultipleRunsUseCase @Inject constructor(
             val sectionTimes = timingProfiles.map { profile ->
                 calculateSectionTimeMs(profile, startPct, endPct)
             }
+            val sectionSpeeds = timingProfiles.mapIndexed { profileIndex, profile ->
+                calculateSectionAvgSpeed(profile.run, sectionTimes.getOrNull(profileIndex), startPct, endPct)
+            }
 
             val baseline = sectionTimes.firstOrNull()
             val deltas = sectionTimes.mapIndexed { runIndex, timeMs ->
@@ -264,6 +275,7 @@ class CompareMultipleRunsUseCase @Inject constructor(
                 endDistPct = endPct,
                 sectionTimesMs = sectionTimes,
                 deltaVsBaselineMs = deltas,
+                sectionAvgSpeedMps = sectionSpeeds,
                 bestRunIndex = findBestSectionIndex(sectionTimes)
             )
         }
@@ -290,6 +302,20 @@ class CompareMultipleRunsUseCase @Inject constructor(
         val startMs = profile.elapsedMsAtDist(startDistPct) ?: return null
         val endMs = profile.elapsedMsAtDist(endDistPct) ?: return null
         return (endMs - startMs).coerceAtLeast(0L)
+    }
+
+    private fun calculateSectionAvgSpeed(
+        run: Run,
+        sectionMs: Long?,
+        startPct: Float,
+        endPct: Float
+    ): Float? {
+        val totalDistanceM = run.distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return null
+        val durationMs = sectionMs?.takeIf { it > 0L } ?: return null
+        val sectionDistanceM = totalDistanceM * ((endPct - startPct) / 100f)
+        if (sectionDistanceM <= 0f) return null
+        val speedMps = sectionDistanceM / (durationMs / 1000f)
+        return speedMps.takeIf { it.isFinite() }
     }
 
     private fun findBestSectionIndex(sectionTimes: List<Long?>): Int? {
@@ -339,7 +365,7 @@ class CompareMultipleRunsUseCase @Inject constructor(
         }
     }
 
-    private fun String.cleanMetricName(): String = replace(" (0-100)", "")
+    private fun String.cleanMetricName(): String = this
 
     private data class RunTimingProfile(
         val run: Run,

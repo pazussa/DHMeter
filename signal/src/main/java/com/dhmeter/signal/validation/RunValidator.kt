@@ -2,6 +2,7 @@ package com.dhmeter.signal.validation
 
 import com.dhmeter.domain.model.GpsQuality
 import com.dhmeter.domain.model.InvalidRunReason
+import com.dhmeter.domain.repository.SensorSensitivityRepository
 import com.dhmeter.sensing.data.AccelSample
 import com.dhmeter.sensing.data.GpsSample
 import javax.inject.Inject
@@ -12,7 +13,9 @@ import javax.inject.Singleton
  * MVP2: Validates continuous DH-style movement without altitude sensor.
  */
 @Singleton
-class RunValidator @Inject constructor() {
+class RunValidator @Inject constructor(
+    private val sensitivityRepository: SensorSensitivityRepository
+) {
 
     companion object {
         // Validation thresholds (MVP2 - GPS/movement based)
@@ -167,8 +170,11 @@ class RunValidator @Inject constructor() {
             )
         }
 
+        val maxGpsAccuracy = adjustedMaxGpsAccuracy()
+        val minGoodGpsRatio = adjustedMinGoodGpsRatio()
+
         // Count good samples (accuracy < threshold)
-        val goodSamples = samples.count { it.accuracy < MAX_GPS_ACCURACY_M }
+        val goodSamples = samples.count { it.accuracy < maxGpsAccuracy }
         val goodRatio = goodSamples.toFloat() / samples.size
 
         // Calculate average accuracy
@@ -183,7 +189,7 @@ class RunValidator @Inject constructor() {
 
         val quality = when {
             goodRatio >= 0.9f && avgAccuracy < 10f -> GpsQuality.EXCELLENT
-            goodRatio >= MIN_GOOD_GPS_RATIO && avgAccuracy < MAX_GPS_ACCURACY_M -> GpsQuality.GOOD
+            goodRatio >= minGoodGpsRatio && avgAccuracy < maxGpsAccuracy -> GpsQuality.GOOD
             goodRatio >= 0.5f -> GpsQuality.FAIR
             else -> GpsQuality.POOR
         }
@@ -244,6 +250,18 @@ class RunValidator @Inject constructor() {
 
         val avgSpeed = recentSamples.map { it.speed }.average()
         return avgSpeed >= MIN_SPEED_THRESHOLD_MPS
+    }
+
+    private fun adjustedMaxGpsAccuracy(): Float {
+        val gpsSensitivity = sensitivityRepository.currentSettings.gpsSensitivity
+        return (MAX_GPS_ACCURACY_M / gpsSensitivity.coerceAtLeast(0.01f))
+            .coerceIn(10f, 60f)
+    }
+
+    private fun adjustedMinGoodGpsRatio(): Float {
+        val gpsSensitivity = sensitivityRepository.currentSettings.gpsSensitivity
+        return (MIN_GOOD_GPS_RATIO + (gpsSensitivity - 1f) * 0.2f)
+            .coerceIn(0.5f, 0.95f)
     }
 }
 

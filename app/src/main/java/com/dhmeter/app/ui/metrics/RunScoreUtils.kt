@@ -2,22 +2,42 @@ package com.dhmeter.app.ui.metrics
 
 import com.dhmeter.domain.model.Run
 import com.dhmeter.domain.model.SeriesType
-import kotlin.math.roundToInt
+import java.util.Locale
 
-private const val IMPACT_REF = 5f
-private const val HARSHNESS_REF = 3f
-private const val STABILITY_REF = 0.5f
+private const val IMPACT_REF = 25f
+private const val HARSHNESS_REF = 1.2f
+private const val STABILITY_REF = 0.35f
+
+private const val IMPACT_SERIES_REF = 5f
+private const val HARSHNESS_SERIES_REF = 3f
+private const val STABILITY_SERIES_REF = 0.5f
 
 /**
  * Converts raw metric values to a burden score in range 0..100.
  * Lower burden score = smoother/cleaner run.
  */
 fun normalizeBurdenScore(seriesType: SeriesType, value: Float): Float {
+    val nonNegativeValue = value.coerceAtLeast(0f)
     val normalized = when (seriesType) {
-        SeriesType.IMPACT_DENSITY -> (value / IMPACT_REF) * 100f
-        SeriesType.HARSHNESS -> (value / HARSHNESS_REF) * 100f
-        SeriesType.STABILITY -> (value / STABILITY_REF) * 100f
+        SeriesType.IMPACT_DENSITY -> (nonNegativeValue / (nonNegativeValue + IMPACT_REF)) * 100f
+        SeriesType.HARSHNESS -> (nonNegativeValue / (nonNegativeValue + HARSHNESS_REF)) * 100f
+        SeriesType.STABILITY -> (nonNegativeValue / (nonNegativeValue + STABILITY_REF)) * 100f
         SeriesType.SPEED_TIME -> value
+    }
+    return normalized.coerceIn(0f, 100f)
+}
+
+/**
+ * Converts per-window series values to chart burden scale (0..100) using
+ * the same references shown in the live monitor normalization.
+ */
+fun normalizeSeriesBurdenScore(seriesType: SeriesType, value: Float): Float {
+    val nonNegativeValue = value.coerceAtLeast(0f)
+    val normalized = when (seriesType) {
+        SeriesType.IMPACT_DENSITY -> (nonNegativeValue / IMPACT_SERIES_REF) * 100f
+        SeriesType.HARSHNESS -> (nonNegativeValue / HARSHNESS_SERIES_REF) * 100f
+        SeriesType.STABILITY -> (nonNegativeValue / STABILITY_SERIES_REF) * 100f
+        SeriesType.SPEED_TIME -> nonNegativeValue
     }
     return normalized.coerceIn(0f, 100f)
 }
@@ -45,6 +65,6 @@ fun runOverallQualityScore(run: Run): Float? {
 }
 
 fun formatScore0to100(value: Float?): String {
-    return value?.roundToInt()?.toString() ?: "--"
+    value ?: return "--"
+    return String.format(Locale.US, "%.2f", value.coerceIn(0f, 100f))
 }
-

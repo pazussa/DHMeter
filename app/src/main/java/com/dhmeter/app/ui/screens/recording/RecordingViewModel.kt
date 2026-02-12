@@ -4,17 +4,20 @@ import android.content.Context
 import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dhmeter.domain.model.SensorSensitivitySettings
 import com.dhmeter.app.service.RecordingService
 import com.dhmeter.domain.model.TrackSegment
 import com.dhmeter.domain.usecase.GetTrackByIdUseCase
 import com.dhmeter.domain.usecase.GetTrackSegmentsUseCase
 import com.dhmeter.domain.usecase.ProcessRunUseCase
+import com.dhmeter.domain.repository.SensorSensitivityRepository
 import com.dhmeter.sensing.RecordingManager
 import com.dhmeter.sensing.RecordingState
 import com.dhmeter.sensing.preview.PreviewLocation
 import com.dhmeter.sensing.preview.RecordingPreviewManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -51,7 +54,9 @@ data class RecordingUiState(
     // Preview mode
     val isPreviewActive: Boolean = false,
     // Recovery action when processing appears stuck
-    val canRecoverFromProcessing: Boolean = false
+    val canRecoverFromProcessing: Boolean = false,
+    val manualStartCountdownSeconds: Int = 0,
+    val sensitivitySettings: SensorSensitivitySettings = SensorSensitivitySettings()
 )
 
 @HiltViewModel
@@ -61,7 +66,8 @@ class RecordingViewModel @Inject constructor(
     private val getTrackSegmentsUseCase: GetTrackSegmentsUseCase,
     private val recordingManager: RecordingManager,
     private val processRunUseCase: ProcessRunUseCase,
-    private val previewManager: RecordingPreviewManager
+    private val previewManager: RecordingPreviewManager,
+    private val sensitivityRepository: SensorSensitivityRepository
 ) : ViewModel() {
 
     companion object {
@@ -75,6 +81,7 @@ class RecordingViewModel @Inject constructor(
         private const val MIN_RECORDING_BEFORE_AUTO_STOP_MS = 5_000L
         private const val MIN_START_CONFIRMATION_HITS = 2
         private const val MIN_DIRECTION_DOT = 0.15
+        private const val MANUAL_START_DELAY_SECONDS = 10
     }
 
     private val _uiState = MutableStateFlow(RecordingUiState())
@@ -91,6 +98,8 @@ class RecordingViewModel @Inject constructor(
     private var trackLoadJob: Job? = null
     private var segmentLoadJob: Job? = null
     private var processingRecoveryJob: Job? = null
+    private var manualStartDelayJob: Job? = null
+    private var isManualStartForegroundArmed: Boolean = false
     private var startCandidateSegment: TrackSegment? = null
     private var startCandidateHits: Int = 0
     private var lastPreviewLatitude: Double? = null
@@ -99,10 +108,22 @@ class RecordingViewModel @Inject constructor(
     private var lastRecordingLongitude: Double? = null
     private var lastDistanceToSegmentEndM: Double? = null
 
+    init {
+        viewModelScope.launch {
+            sensitivityRepository.settings.collect { settings ->
+                _uiState.update { state ->
+                    state.copy(sensitivitySettings = settings)
+                }
+            }
+        }
+    }
+
     fun initialize(trackId: String) {
         trackLoadJob?.cancel()
         segmentLoadJob?.cancel()
         processingRecoveryJob?.cancel()
+        manualStartDelayJob?.cancel()
+        manualStartDelayJob = null
         localSegments = emptyList()
         activeAutoSegment = null
         isAutoStopInProgress = false
@@ -124,7 +145,8 @@ class RecordingViewModel @Inject constructor(
                 error = null,
                 segmentCount = 0,
                 segmentStatus = "Loading local segments...",
-                canRecoverFromProcessing = false
+                canRecoverFromProcessing = false,
+                manualStartCountdownSeconds = 0
             )
         }
 
@@ -165,7 +187,8 @@ class RecordingViewModel @Inject constructor(
                                 isRecording = false,
                                 isProcessing = false,
                                 canStartRecording = true,
-                                canRecoverFromProcessing = false
+                                canRecoverFromProcessing = false,
+                                manualStartCountdownSeconds = 0
                             )
                         }
                         if (!_uiState.value.isRecording) {
@@ -180,7 +203,10 @@ class RecordingViewModel @Inject constructor(
                                 isRecording = true,
                                 isProcessing = false,
                                 canStartRecording = false,
-                                gpsSignal = mapGpsSignal(state.gpsAccuracy),
+                                gpsSignal = mapGpsSignal(
+                                    state.gpsAccuracy,
+                                    _uiState.value.sensitivitySettings.gpsSensitivity
+                                ),
                                 movementDetected = state.movementDetected,
                                 signalQuality = mapSignalQuality(state.signalStability),
                                 currentSpeed = state.currentSpeed,
@@ -189,6 +215,7 @@ class RecordingViewModel @Inject constructor(
                                 liveStability = state.liveStability,
                                 isPreviewActive = false,
                                 canRecoverFromProcessing = false,
+                                manualStartCountdownSeconds = 0,
                                 segmentStatus = if (activeAutoSegment != null) {
                                     "Auto recording active on local segment"
                                 } else {
@@ -205,6 +232,7 @@ class RecordingViewModel @Inject constructor(
                                 isProcessing = true,
                                 canStartRecording = false,
                                 canRecoverFromProcessing = false,
+                                manualStartCountdownSeconds = 0,
                                 segmentStatus = "Processing run data..."
                             )
                         }
@@ -219,6 +247,7 @@ class RecordingViewModel @Inject constructor(
                                 canStartRecording = true,
                                 completedRunId = state.runId,
                                 canRecoverFromProcessing = false,
+                                manualStartCountdownSeconds = 0,
                                 segmentStatus = defaultSegmentStatus()
                             )
                         }
@@ -236,6 +265,7 @@ class RecordingViewModel @Inject constructor(
                                 canStartRecording = true,
                                 error = state.message,
                                 canRecoverFromProcessing = false,
+                                manualStartCountdownSeconds = 0,
                                 segmentStatus = defaultSegmentStatus()
                             )
                         }
@@ -274,12 +304,66 @@ class RecordingViewModel @Inject constructor(
     }
 
     fun startRecording() {
-        startRecordingInternal(autoSegment = null)
-    }
-
-    private fun startRecordingInternal(autoSegment: TrackSegment?) {
         recoverFromStaleProcessingStateIfNeeded()
         if (_uiState.value.isRecording || _uiState.value.isProcessing || isStartingRecording) return
+        if (manualStartDelayJob?.isActive == true) return
+
+        if (!startForegroundRecordingService(_uiState.value.trackId)) {
+            return
+        }
+        isManualStartForegroundArmed = true
+
+        manualStartDelayJob = viewModelScope.launch {
+            try {
+                for (remaining in MANUAL_START_DELAY_SECONDS downTo 1) {
+                    _uiState.update {
+                        it.copy(
+                            canStartRecording = false,
+                            completedRunId = null,
+                            error = null,
+                            manualStartCountdownSeconds = remaining,
+                            segmentStatus = "Manual start in ${remaining}s..."
+                        )
+                    }
+                    delay(1000)
+                }
+
+                _uiState.update { it.copy(manualStartCountdownSeconds = 0) }
+                val started = startRecordingInternal(
+                    autoSegment = null,
+                    foregroundAlreadyArmed = true
+                )
+                if (!started && isManualStartForegroundArmed) {
+                    stopForegroundRecordingService()
+                }
+            } catch (_: CancellationException) {
+                if (isManualStartForegroundArmed) {
+                    stopForegroundRecordingService()
+                    isManualStartForegroundArmed = false
+                }
+                _uiState.update { state ->
+                    if (state.isRecording || state.isProcessing) {
+                        state
+                    } else {
+                        state.copy(
+                            canStartRecording = true,
+                            manualStartCountdownSeconds = 0,
+                            segmentStatus = defaultSegmentStatus()
+                        )
+                    }
+                }
+            } finally {
+                manualStartDelayJob = null
+            }
+        }
+    }
+
+    private fun startRecordingInternal(
+        autoSegment: TrackSegment?,
+        foregroundAlreadyArmed: Boolean = false
+    ): Boolean {
+        recoverFromStaleProcessingStateIfNeeded()
+        if (_uiState.value.isRecording || _uiState.value.isProcessing || isStartingRecording) return false
 
         activeAutoSegment = autoSegment
         isAutoStopInProgress = false
@@ -292,7 +376,20 @@ class RecordingViewModel @Inject constructor(
 
         // Stop preview before starting real recording
         stopPreview()
-        startForegroundRecordingService(_uiState.value.trackId)
+        if (!foregroundAlreadyArmed && !startForegroundRecordingService(_uiState.value.trackId)) {
+            isStartingRecording = false
+            isAutoStopInProgress = false
+            activeAutoSegment = null
+            _uiState.update {
+                it.copy(
+                    canStartRecording = true,
+                    segmentStatus = defaultSegmentStatus()
+                )
+            }
+            startPreview()
+            return false
+        }
+        isManualStartForegroundArmed = false
         _uiState.update {
             it.copy(
                 canStartRecording = false,
@@ -329,9 +426,12 @@ class RecordingViewModel @Inject constructor(
                 startPreview()
             }
         }
+        return true
     }
 
     fun stopRecording() {
+        manualStartDelayJob?.cancel()
+        manualStartDelayJob = null
         isStartingRecording = false
         activeAutoSegment = null
         isAutoStopInProgress = false
@@ -404,7 +504,39 @@ class RecordingViewModel @Inject constructor(
         _uiState.update { it.copy(error = null) }
     }
 
+    fun updateImpactSensitivity(value: Float) {
+        viewModelScope.launch {
+            sensitivityRepository.updateImpactSensitivity(value)
+        }
+    }
+
+    fun updateHarshnessSensitivity(value: Float) {
+        viewModelScope.launch {
+            sensitivityRepository.updateHarshnessSensitivity(value)
+        }
+    }
+
+    fun updateStabilitySensitivity(value: Float) {
+        viewModelScope.launch {
+            sensitivityRepository.updateStabilitySensitivity(value)
+        }
+    }
+
+    fun updateGpsSensitivity(value: Float) {
+        viewModelScope.launch {
+            sensitivityRepository.updateGpsSensitivity(value)
+        }
+    }
+
+    fun resetSensitivityDefaults() {
+        viewModelScope.launch {
+            sensitivityRepository.resetToDefaults()
+        }
+    }
+
     fun resetStuckProcessing() {
+        manualStartDelayJob?.cancel()
+        manualStartDelayJob = null
         if (!_uiState.value.isProcessing) return
         processingRecoveryJob?.cancel()
         isStartingRecording = false
@@ -420,6 +552,7 @@ class RecordingViewModel @Inject constructor(
                 canStartRecording = true,
                 canRecoverFromProcessing = false,
                 error = null,
+                manualStartCountdownSeconds = 0,
                 segmentStatus = defaultSegmentStatus()
             )
         }
@@ -432,12 +565,20 @@ class RecordingViewModel @Inject constructor(
             updateLastPreviewLocation(location)
             return
         }
+        if (manualStartDelayJob?.isActive == true) {
+            updateLastPreviewLocation(location)
+            return
+        }
         if (localSegments.isEmpty()) {
             updateSegmentStatus(defaultSegmentStatus())
             updateLastPreviewLocation(location)
             return
         }
-        if (location.accuracy <= 0f || location.accuracy > MAX_PREVIEW_ACCURACY_M) {
+        val gpsSensitivity = currentState.sensitivitySettings.gpsSensitivity
+        val maxPreviewAccuracy = (MAX_PREVIEW_ACCURACY_M / gpsSensitivity.coerceAtLeast(0.01f))
+            .coerceIn(10f, 60f)
+
+        if (location.accuracy <= 0f || location.accuracy > maxPreviewAccuracy) {
             resetStartCandidate()
             updateSegmentStatus("Waiting for good GPS to arm segments")
             updateLastPreviewLocation(location)
@@ -624,8 +765,8 @@ class RecordingViewModel @Inject constructor(
         }
     }
 
-    private fun startForegroundRecordingService(trackId: String) {
-        runCatching {
+    private fun startForegroundRecordingService(trackId: String): Boolean {
+        val started = runCatching {
             val intent = Intent(appContext, RecordingService::class.java).apply {
                 action = RecordingService.ACTION_START_FOREGROUND
                 putExtra(RecordingService.EXTRA_TRACK_ID, trackId)
@@ -633,10 +774,12 @@ class RecordingViewModel @Inject constructor(
             appContext.startForegroundService(intent)
         }.onFailure { error ->
             _uiState.update { it.copy(error = error.message ?: "Failed to start recording service") }
-        }
+        }.isSuccess
+        return started
     }
 
     private fun stopForegroundRecordingService() {
+        isManualStartForegroundArmed = false
         runCatching {
             val intent = Intent(appContext, RecordingService::class.java).apply {
                 action = RecordingService.ACTION_STOP_FOREGROUND
@@ -775,11 +918,15 @@ class RecordingViewModel @Inject constructor(
         return r * c
     }
 
-    private fun mapGpsSignal(accuracy: Float): GpsSignalLevel {
+    private fun mapGpsSignal(accuracy: Float, gpsSensitivity: Float): GpsSignalLevel {
+        val normalizedSensitivity = gpsSensitivity.coerceAtLeast(0.01f)
+        val goodThreshold = (5f / normalizedSensitivity).coerceIn(2f, 15f)
+        val mediumThreshold = (15f / normalizedSensitivity).coerceIn(5f, 40f)
+
         return when {
             accuracy < 0 -> GpsSignalLevel.NONE
-            accuracy <= 5 -> GpsSignalLevel.GOOD
-            accuracy <= 15 -> GpsSignalLevel.MEDIUM
+            accuracy <= goodThreshold -> GpsSignalLevel.GOOD
+            accuracy <= mediumThreshold -> GpsSignalLevel.MEDIUM
             else -> GpsSignalLevel.POOR
         }
     }
@@ -798,6 +945,8 @@ class RecordingViewModel @Inject constructor(
         timerJob?.cancel()
         recordingStateJob?.cancel()
         processingRecoveryJob?.cancel()
+        manualStartDelayJob?.cancel()
+        manualStartDelayJob = null
         stopPreview()
         val state = recordingManager.recordingState.value
         if (state is RecordingState.Processing) {

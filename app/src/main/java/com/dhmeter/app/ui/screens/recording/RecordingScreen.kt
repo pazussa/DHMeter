@@ -14,12 +14,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dhmeter.app.ui.theme.GreenPositive
+import com.dhmeter.domain.model.SensorSensitivitySettings
 import com.dhmeter.app.ui.theme.RedNegative
-import com.dhmeter.app.ui.theme.YellowWarning
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -32,6 +32,7 @@ fun RecordingScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showStopConfirmation by remember { mutableStateOf(false) }
+    var showSensitivityPanel by remember { mutableStateOf(false) }
 
     LaunchedEffect(trackId) {
         viewModel.initialize(trackId)
@@ -67,9 +68,19 @@ fun RecordingScreen(
                 navigationIcon = {
                     IconButton(
                         onClick = onCancel,
-                        enabled = !uiState.isRecording && !uiState.isProcessing
+                        enabled = !uiState.isRecording &&
+                                !uiState.isProcessing &&
+                                uiState.manualStartCountdownSeconds == 0
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Cancel")
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = { showSensitivityPanel = true },
+                        enabled = !uiState.isProcessing
+                    ) {
+                        Icon(Icons.Default.Tune, contentDescription = "Sensor sensitivity")
                     }
                 }
             )
@@ -102,22 +113,6 @@ fun RecordingScreen(
             AutoSegmentsCard(
                 segmentCount = uiState.segmentCount,
                 status = uiState.segmentStatus,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Status indicators card (Signal, GPS, Movement)
-            StatusIndicatorsCard(
-                gpsSignal = uiState.gpsSignal,
-                gpsAccuracyText = when (uiState.gpsSignal) {
-                    GpsSignalLevel.GOOD -> "OK (+/-5m)"
-                    GpsSignalLevel.MEDIUM -> "OK (+/-15m)"
-                    GpsSignalLevel.POOR -> "Poor (+/-25m+)"
-                    GpsSignalLevel.NONE -> "No signal"
-                },
-                movementDetected = uiState.movementDetected,
-                signalQuality = uiState.signalQuality,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -191,7 +186,11 @@ fun RecordingScreen(
                 ) {
                     Icon(Icons.Default.FiberManualRecord, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("START RUN")
+                    if (uiState.manualStartCountdownSeconds > 0) {
+                        Text("STARTING IN ${uiState.manualStartCountdownSeconds}s")
+                    } else {
+                        Text("START RUN")
+                    }
                 }
             }
 
@@ -239,6 +238,18 @@ fun RecordingScreen(
                     Text("Continue Recording")
                 }
             }
+        )
+    }
+
+    if (showSensitivityPanel) {
+        SensorSensitivitySheet(
+            settings = uiState.sensitivitySettings,
+            onDismiss = { showSensitivityPanel = false },
+            onImpactSensitivityChange = viewModel::updateImpactSensitivity,
+            onHarshnessSensitivityChange = viewModel::updateHarshnessSensitivity,
+            onStabilitySensitivityChange = viewModel::updateStabilitySensitivity,
+            onGpsSensitivityChange = viewModel::updateGpsSensitivity,
+            onResetDefaults = viewModel::resetSensitivityDefaults
         )
     }
 
@@ -369,92 +380,6 @@ private fun RecordingStatusIndicator(
 }
 
 @Composable
-private fun StatusIndicatorsCard(
-    gpsSignal: GpsSignalLevel,
-    gpsAccuracyText: String,
-    movementDetected: Boolean,
-    signalQuality: SignalQuality,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Signal quality
-            StatusRow(
-                label = "Signal:",
-                statusText = signalQuality.name,
-                statusColor = when (signalQuality) {
-                    SignalQuality.STABLE -> GreenPositive
-                    SignalQuality.MODERATE -> YellowWarning
-                    SignalQuality.LOOSE -> RedNegative
-                    SignalQuality.UNKNOWN -> MaterialTheme.colorScheme.outline
-                }
-            )
-            
-            // GPS
-            StatusRow(
-                label = "GPS:",
-                statusText = gpsAccuracyText,
-                statusColor = when (gpsSignal) {
-                    GpsSignalLevel.GOOD -> GreenPositive
-                    GpsSignalLevel.MEDIUM -> YellowWarning
-                    GpsSignalLevel.POOR -> RedNegative
-                    GpsSignalLevel.NONE -> MaterialTheme.colorScheme.outline
-                }
-            )
-            
-            // Movement
-            StatusRow(
-                label = "Movement:",
-                statusText = if (movementDetected) "CONTINUOUS" else "WAITING",
-                statusColor = if (movementDetected) GreenPositive else MaterialTheme.colorScheme.outline
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatusRow(
-    label: String,
-    statusText: String,
-    statusColor: Color
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(statusColor)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = statusText,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = statusColor
-            )
-        }
-    }
-}
-
-@Composable
 private fun LiveMetricsBarsCard(
     impactLevel: Float,
     harshnessLevel: Float,
@@ -496,9 +421,9 @@ private fun LiveMetricsBarsCard(
             )
             
             LiveMetricBar(
-                label = "Stability",
-                level = 1f - stabilityLevel, // Invert: higher bar = more stable
-                color = Color(0xFF4CAF50) // Green for stability
+                label = if (isPreview) "Instability" else "Instability (live)",
+                level = stabilityLevel,
+                color = Color(0xFFD32F2F)
             )
         }
     }
@@ -556,6 +481,105 @@ private fun LiveMetricBar(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SensorSensitivitySheet(
+    settings: SensorSensitivitySettings,
+    onDismiss: () -> Unit,
+    onImpactSensitivityChange: (Float) -> Unit,
+    onHarshnessSensitivityChange: (Float) -> Unit,
+    onStabilitySensitivityChange: (Float) -> Unit,
+    onGpsSensitivityChange: (Float) -> Unit,
+    onResetDefaults: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        modifier = Modifier.fillMaxSize(),
+        sheetMaxWidth = Dp.Unspecified
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.95f)
+                .padding(horizontal = 10.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Sensor Sensitivity",
+                style = MaterialTheme.typography.titleLarge
+            )
+            Text(
+                text = "Changes apply to preview and new recordings.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+
+            SensitivitySliderRow(
+                label = "Impact (Accelerometer)",
+                value = settings.impactSensitivity,
+                onValueChange = onImpactSensitivityChange
+            )
+            SensitivitySliderRow(
+                label = "Vibration (Accelerometer)",
+                value = settings.harshnessSensitivity,
+                onValueChange = onHarshnessSensitivityChange
+            )
+            SensitivitySliderRow(
+                label = "Instability (Gyroscope)",
+                value = settings.stabilitySensitivity,
+                onValueChange = onStabilitySensitivityChange
+            )
+            SensitivitySliderRow(
+                label = "GPS",
+                value = settings.gpsSensitivity,
+                onValueChange = onGpsSensitivityChange
+            )
+
+            TextButton(
+                onClick = onResetDefaults,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("Reset defaults")
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun SensitivitySliderRow(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge
+            )
+            Text(
+                text = String.format(Locale.US, "%.2f", value),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = SensorSensitivitySettings.MIN_SENSITIVITY..SensorSensitivitySettings.MAX_SENSITIVITY
+        )
     }
 }
 

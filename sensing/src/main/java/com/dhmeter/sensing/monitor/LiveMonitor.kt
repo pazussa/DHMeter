@@ -1,5 +1,6 @@
 package com.dhmeter.sensing.monitor
 
+import com.dhmeter.domain.repository.SensorSensitivityRepository
 import com.dhmeter.sensing.data.SensorBuffers
 import kotlinx.coroutines.delay
 import javax.inject.Inject
@@ -13,17 +14,19 @@ import kotlin.math.sqrt
  * Calculates live Impact, Harshness, and Stability metrics.
  */
 @Singleton
-class LiveMonitor @Inject constructor() {
+class LiveMonitor @Inject constructor(
+    private val sensitivityRepository: SensorSensitivityRepository
+) {
 
     companion object {
         const val MIN_MOVING_SPEED_MPS = 2.22f // 8 km/h
         const val GRAVITY = 9.81f
-        const val IMPACT_THRESHOLD_G = 0.8f // 0.8g threshold (~7.8 m/s²) - matches ImpactAnalyzer
-        
+        const val IMPACT_THRESHOLD_MS2 = 2.5f // LINEAR_ACCEL threshold at sensitivity=1.0
+
         // Harshness bandpass filter coefficients (simplified for real-time)
         const val HARSHNESS_LOW_CUTOFF = 15f
         const val HARSHNESS_HIGH_CUTOFF = 40f
-        
+
         // Sample rate estimation
         const val ESTIMATED_SAMPLE_RATE = 200f
     }
@@ -63,7 +66,7 @@ class LiveMonitor @Inject constructor() {
 
         // Check signal stability (phone not loose in pocket)
         val signalStability = calculateSignalStability(buffers)
-        
+
         // Calculate live metrics from recent sensor data
         val liveImpact = calculateLiveImpact(buffers)
         val liveHarshness = calculateLiveHarshness(buffers)
@@ -87,29 +90,73 @@ class LiveMonitor @Inject constructor() {
      * Uses peak detection above threshold.
      */
     private fun calculateLiveImpact(buffers: SensorBuffers): Float {
-        val accelSamples = buffers.accel.getAll().takeLast(100) // ~0.5s at 200Hz
-        if (accelSamples.size < 20) return 0f
-        
-        // Calculate magnitude and detect peaks above impact threshold
-        val magnitudes = accelSamples.map { sqrt(it.x * it.x + it.y * it.y + it.z * it.z) }
-        val thresholdMs2 = IMPACT_THRESHOLD_G * GRAVITY
-        
-        var impactScore = 0f
-        var lastPeakIdx = -30 // Debounce ~150ms
-        
-        magnitudes.forEachIndexed { idx, mag ->
-            if (mag > thresholdMs2 && idx - lastPeakIdx > 30) {
-                // Found an impact peak
-                val peakG = mag / GRAVITY
-                impactScore += peakG.pow(2)
-                lastPeakIdx = idx
-            }
-        }
-        
+        val accelSamples = buffers.accel.getAll().takeLast(200) // ~1s at 200Hz
+        if (accelSamples.size < 50) return 0f
+
+        val magnitudes = accelSamples.map { sqrt(it.x * it.x + it.y * it.y + it.z * it.z) }.toFloatArray()
+        val impactSensitivity = sensitivityRepository.currentSettings.impactSensitivity
+        val thresholdMs2 = IMPACT_THRESHOLD_MS2 / impactSensitivity.coerceAtLeast(0.01f)
+        val sampleRateHz = estimateSampleRate(accelSamples)
+        val minDistanceSamples = ((100f / 1000f) * sampleRateHz).toInt().coerceAtLeast(1)
+
+        val peaks = detectImpactPeaks(
+            signal = magnitudes,
+            threshold = thresholdMs2,
+            minDistanceSamples = minDistanceSamples
+        )
+        val impactScore = peaks.sumOf { idx ->
+            val peakG = magnitudes[idx] / GRAVITY
+            peakG.toDouble().pow(2)
+        }.toFloat()
+
         // Normalize to 0-1 range (max ~5 means very rough)
         return (impactScore / 5f).coerceIn(0f, 1f)
     }
-    
+
+    private fun detectImpactPeaks(
+        signal: FloatArray,
+        threshold: Float,
+        minDistanceSamples: Int
+    ): List<Int> {
+        if (signal.size < 3) return emptyList()
+
+        val peaks = mutableListOf<Int>()
+
+        for (i in 1 until signal.lastIndex) {
+            val current = signal[i]
+            if (current <= threshold) continue
+
+            val prev = signal[i - 1]
+            val next = signal[i + 1]
+            val isLocalMax = current >= prev && current >= next && (current > prev || current > next)
+            if (!isLocalMax) continue
+
+            val lastPeakIdx = peaks.lastOrNull()
+            if (lastPeakIdx != null && (i - lastPeakIdx) < minDistanceSamples) {
+                if (current > signal[lastPeakIdx]) {
+                    peaks[peaks.lastIndex] = i
+                }
+            } else {
+                peaks.add(i)
+            }
+        }
+
+        return peaks
+    }
+
+    private fun estimateSampleRate(samples: List<com.dhmeter.sensing.data.AccelSample>): Float {
+        if (samples.size < 2) return ESTIMATED_SAMPLE_RATE
+
+        val durationNs = (samples.last().timestampNs - samples.first().timestampNs).coerceAtLeast(1L)
+        val intervals = (samples.size - 1).coerceAtLeast(1)
+        val sampleRate = intervals * 1_000_000_000f / durationNs.toFloat()
+        return if (sampleRate.isFinite()) {
+            sampleRate.coerceIn(20f, 500f)
+        } else {
+            ESTIMATED_SAMPLE_RATE
+        }
+    }
+
     /**
      * Calculate live harshness (vibration RMS) from recent accelerometer data.
      * Simplified high-frequency energy calculation.
@@ -117,20 +164,21 @@ class LiveMonitor @Inject constructor() {
     private fun calculateLiveHarshness(buffers: SensorBuffers): Float {
         val accelSamples = buffers.accel.getAll().takeLast(200) // ~1s at 200Hz
         if (accelSamples.size < 50) return 0f
-        
+
         // Calculate magnitude
         val magnitudes = accelSamples.map { sqrt(it.x * it.x + it.y * it.y + it.z * it.z) }
-        
+
         // Simple high-pass to remove gravity/low-frequency: difference filter
         val highFreq = magnitudes.zipWithNext { a, b -> (b - a).pow(2) }
-        
+
         // RMS of high-frequency content
         val rms = sqrt(highFreq.average().toFloat())
-        
-        // Normalize to 0-1 range (typical harsh terrain ~2-3 m/s²)
-        return (rms / 3f).coerceIn(0f, 1f)
+
+        // Normalize to 0-1 range (typical harsh terrain ~2-3 m/s^2)
+        val harshnessSensitivity = sensitivityRepository.currentSettings.harshnessSensitivity
+        return ((rms * harshnessSensitivity) / 3f).coerceIn(0f, 1f)
     }
-    
+
     /**
      * Calculate live stability index from gyroscope data.
      * Uses variance of rotation rates (pitch/roll).
@@ -138,21 +186,22 @@ class LiveMonitor @Inject constructor() {
     private fun calculateLiveStabilityIndex(buffers: SensorBuffers): Float {
         val gyroSamples = buffers.gyro.getAll().takeLast(200) // ~1s at 200Hz
         if (gyroSamples.size < 50) return 0f
-        
+
         // Calculate variance of X and Y rotation (pitch/roll - most indicative of instability)
         val omegaX = gyroSamples.map { it.x }
         val omegaY = gyroSamples.map { it.y }
-        
+
         val meanX = omegaX.average()
         val meanY = omegaY.average()
-        
+
         val varX = omegaX.map { (it - meanX).pow(2) }.average().toFloat()
         val varY = omegaY.map { (it - meanY).pow(2) }.average().toFloat()
-        
-        val stabilityIndex = varX + varY
-        
+
+        val stabilitySensitivity = sensitivityRepository.currentSettings.stabilitySensitivity
+        val stabilityIndex = (varX + varY) * stabilitySensitivity
+
         // Normalize to 0-1 range (higher = less stable)
-        // Typical unstable: >0.5 rad²/s², very stable: <0.05 rad²/s²
+        // Typical unstable: >0.5 rad^2/s^2, very stable: <0.05 rad^2/s^2
         return (stabilityIndex / 0.5f).coerceIn(0f, 1f)
     }
 
@@ -175,14 +224,6 @@ class LiveMonitor @Inject constructor() {
         val accelSamples = buffers.accel.getAll().takeLast(200)
         if (accelSamples.size < 100) return -1f
 
-        // Calculate variance of acceleration magnitude
-        val magnitudes = accelSamples.map { 
-            sqrt(it.x * it.x + it.y * it.y + it.z * it.z)
-        }
-        
-        val mean = magnitudes.average()
-        val variance = magnitudes.map { (it - mean) * (it - mean) }.average()
-
         // Gyro variance is also important for stability
         val gyroSamples = buffers.gyro.getAll().takeLast(200)
         if (gyroSamples.size < 100) return -1f
@@ -190,17 +231,17 @@ class LiveMonitor @Inject constructor() {
         val gyroMags = gyroSamples.map {
             sqrt(it.x * it.x + it.y * it.y + it.z * it.z)
         }
-        val gyroVariance = gyroMags.map { 
-            val m = gyroMags.average()
-            (it - m) * (it - m) 
-        }.average()
+        val gyroMean = gyroMags.average()
+        val gyroVariance = gyroMags.map { (it - gyroMean) * (it - gyroMean) }.average()
+        val stabilitySensitivity = sensitivityRepository.currentSettings.stabilitySensitivity
+        val adjustedGyroVariance = gyroVariance * stabilitySensitivity
 
         // Simple stability score (1 = stable, 0 = unstable)
         val stabilityScore = when {
-            gyroVariance > 10 -> 0.2f // Very unstable
-            gyroVariance > 5 -> 0.5f  // Moderate
-            gyroVariance > 2 -> 0.7f  // Good
-            else -> 0.9f              // Very stable
+            adjustedGyroVariance > 10 -> 0.2f // Very unstable
+            adjustedGyroVariance > 5 -> 0.5f  // Moderate
+            adjustedGyroVariance > 2 -> 0.7f  // Good
+            else -> 0.9f // Very stable
         }
 
         return stabilityScore
@@ -217,7 +258,7 @@ data class LiveMetrics(
     val currentSpeed: Float,
     val latitude: Double? = null,
     val longitude: Double? = null,
-    val liveImpact: Float = 0f,      // 0-1, higher = more impacts
-    val liveHarshness: Float = 0f,   // 0-1, higher = more vibration
-    val liveStability: Float = 0f    // 0-1, higher = less stable
+    val liveImpact: Float = 0f, // 0-1, higher = more impacts
+    val liveHarshness: Float = 0f, // 0-1, higher = more vibration
+    val liveStability: Float = 0f // 0-1, higher = less stable
 )

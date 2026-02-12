@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Looper
 import android.os.SystemClock
+import com.dhmeter.domain.repository.SensorSensitivityRepository
 import com.dhmeter.sensing.data.GpsSample
 import com.dhmeter.sensing.data.SensorBuffers
 import com.google.android.gms.location.*
@@ -18,7 +19,8 @@ import kotlin.math.*
  */
 @Singleton
 class GpsCollector @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val sensitivityRepository: SensorSensitivityRepository
 ) {
     companion object {
         // GPS drift filtering thresholds
@@ -60,7 +62,10 @@ class GpsCollector @Inject constructor(
                 // 1. Current accuracy is acceptable
                 // 2. Speed is above minimum threshold
                 // 3. Movement distance is significantly larger than accuracy uncertainty
-                val isValidMovement = location.accuracy <= MAX_ACCURACY_M &&
+                val gpsSensitivity = sensitivityRepository.currentSettings.gpsSensitivity
+                val maxAccuracyM = (MAX_ACCURACY_M / gpsSensitivity.coerceAtLeast(0.01f))
+                    .coerceIn(10f, 60f)
+                val isValidMovement = location.accuracy <= maxAccuracyM &&
                         location.speed >= MIN_SPEED_MPS &&
                         segmentDistance > (maxOf(location.accuracy, lastAccuracy) * MIN_DISTANCE_FACTOR)
 

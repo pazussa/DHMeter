@@ -8,8 +8,10 @@ import com.dhmeter.data.local.DHMeterDatabase
 import com.dhmeter.data.local.dao.RunDao
 import com.dhmeter.data.local.dao.TrackDao
 import com.dhmeter.data.repository.RunRepositoryImpl
+import com.dhmeter.data.repository.SensorSensitivityRepositoryImpl
 import com.dhmeter.data.repository.TrackRepositoryImpl
 import com.dhmeter.domain.repository.RunRepository
+import com.dhmeter.domain.repository.SensorSensitivityRepository
 import com.dhmeter.domain.repository.TrackRepository
 import dagger.Module
 import dagger.Provides
@@ -47,6 +49,12 @@ object DataModule {
         }
     }
 
+    private val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE runs ADD COLUMN maxSpeed REAL DEFAULT NULL")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): DHMeterDatabase {
@@ -55,7 +63,7 @@ object DataModule {
             DHMeterDatabase::class.java,
             "dhmeter.db"
         )
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         .fallbackToDestructiveMigration()
         .build()
     }
@@ -77,5 +85,11 @@ object DataModule {
     fun provideRunRepository(runDao: RunDao): RunRepository {
         return RunRepositoryImpl(runDao)
     }
+
+    @Provides
+    @Singleton
+    fun provideSensorSensitivityRepository(
+        impl: SensorSensitivityRepositoryImpl
+    ): SensorSensitivityRepository = impl
 
 }

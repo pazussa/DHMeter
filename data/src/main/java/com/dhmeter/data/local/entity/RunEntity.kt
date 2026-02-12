@@ -44,6 +44,7 @@ data class RunEntity(
     val stabilityScore: Float?,
     val landingQualityScore: Float?,
     val avgSpeed: Float?,
+    val maxSpeed: Float?,
     val slopeClassAvg: Int?,
     
     // User tags
