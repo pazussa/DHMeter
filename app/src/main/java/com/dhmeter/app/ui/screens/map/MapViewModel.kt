@@ -15,9 +15,18 @@ data class MapUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val selectedMetric: MapMetricType = MapMetricType.IMPACT,
+    val mapDisplayType: MapDisplayType = MapDisplayType.TERRAIN,
+    val showTraffic: Boolean = false,
     val showEvents: Boolean = true,
     val selectedEvent: MapEventMarker? = null
 )
+
+enum class MapDisplayType(val displayName: String) {
+    TERRAIN("Terrain"),
+    NORMAL("Normal"),
+    SATELLITE("Satellite"),
+    HYBRID("Hybrid")
+}
 
 @HiltViewModel
 class MapViewModel @Inject constructor(
@@ -81,6 +90,14 @@ class MapViewModel @Inject constructor(
 
     fun toggleEvents() {
         _uiState.update { it.copy(showEvents = !it.showEvents) }
+    }
+
+    fun setMapDisplayType(type: MapDisplayType) {
+        _uiState.update { it.copy(mapDisplayType = type) }
+    }
+
+    fun toggleTraffic() {
+        _uiState.update { it.copy(showTraffic = !it.showTraffic) }
     }
 
     fun selectEvent(event: MapEventMarker?) {

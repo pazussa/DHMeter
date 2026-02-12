@@ -1,7 +1,8 @@
 package com.dhmeter.app.ui.screens.map
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dhmeter.app.ui.theme.*
 import com.dhmeter.domain.model.*
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
@@ -84,8 +86,12 @@ fun MapScreen(
                     MapContent(
                         mapData = uiState.mapData!!,
                         selectedMetric = uiState.selectedMetric,
+                        mapDisplayType = uiState.mapDisplayType,
+                        showTraffic = uiState.showTraffic,
                         showEvents = uiState.showEvents,
                         onMetricChange = viewModel::changeMetric,
+                        onMapDisplayTypeChange = viewModel::setMapDisplayType,
+                        onToggleTraffic = viewModel::toggleTraffic,
                         onToggleEvents = viewModel::toggleEvents,
                         onEventSelected = viewModel::selectEvent
                     )
@@ -107,12 +113,19 @@ fun MapScreen(
 private fun MapContent(
     mapData: RunMapData,
     selectedMetric: MapMetricType,
+    mapDisplayType: MapDisplayType,
+    showTraffic: Boolean,
     showEvents: Boolean,
     onMetricChange: (MapMetricType) -> Unit,
+    onMapDisplayTypeChange: (MapDisplayType) -> Unit,
+    onToggleTraffic: () -> Unit,
     onToggleEvents: () -> Unit,
     onEventSelected: (MapEventMarker) -> Unit
 ) {
     val points = mapData.polyline.points
+    val startPoint = points.firstOrNull()
+    val endPoint = points.lastOrNull()
+    var mapLoaded by remember { mutableStateOf(false) }
     
     // Calculate bounds
     val boundsBuilder = remember(points) {
@@ -131,8 +144,9 @@ private fun MapContent(
         }
     }
 
-    // Fit bounds when loaded
-    LaunchedEffect(boundsBuilder) {
+    // Fit bounds when map + route are ready.
+    LaunchedEffect(boundsBuilder, mapLoaded) {
+        if (!mapLoaded) return@LaunchedEffect
         boundsBuilder?.let { builder ->
             val bounds = builder.build()
             cameraPositionState.animate(
@@ -146,13 +160,25 @@ private fun MapContent(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
             properties = MapProperties(
-                mapType = MapType.TERRAIN
+                mapType = mapDisplayType.toMapType(),
+                isTrafficEnabled = showTraffic
             ),
             uiSettings = MapUiSettings(
-                zoomControlsEnabled = false,
+                zoomControlsEnabled = true,
+                mapToolbarEnabled = true,
+                compassEnabled = true,
                 myLocationButtonEnabled = false
-            )
+            ),
+            onMapLoaded = { mapLoaded = true }
         ) {
+            if (points.size >= 2) {
+                Polyline(
+                    points = points.map { LatLng(it.lat, it.lon) },
+                    color = Color(0xFF607D8B),
+                    width = 4f
+                )
+            }
+
             // Draw colored segments
             mapData.segments.forEach { segment ->
                 Polyline(
@@ -161,7 +187,25 @@ private fun MapContent(
                         LatLng(segment.end.lat, segment.end.lon)
                     ),
                     color = segment.severity.toColor(),
-                    width = 8f
+                    width = 10f
+                )
+            }
+
+            startPoint?.let { start ->
+                Marker(
+                    state = MarkerState(position = LatLng(start.lat, start.lon)),
+                    title = "Start",
+                    snippet = "0% of run",
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
+                )
+            }
+
+            endPoint?.let { end ->
+                Marker(
+                    state = MarkerState(position = LatLng(end.lat, end.lon)),
+                    title = "Finish",
+                    snippet = "100% of run",
+                    icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
                 )
             }
 
@@ -174,6 +218,7 @@ private fun MapContent(
                         ),
                         title = event.type.displayName,
                         snippet = "Tap for details",
+                        icon = BitmapDescriptorFactory.defaultMarker(event.toMarkerHue()),
                         onClick = {
                             onEventSelected(event)
                             true
@@ -195,9 +240,20 @@ private fun MapContent(
         // Controls overlay
         MapControls(
             selectedMetric = selectedMetric,
+            mapDisplayType = mapDisplayType,
+            showTraffic = showTraffic,
             showEvents = showEvents,
             onMetricChange = onMetricChange,
+            onMapDisplayTypeChange = onMapDisplayTypeChange,
+            onToggleTraffic = onToggleTraffic,
             onToggleEvents = onToggleEvents,
+            onCenterRoute = {
+                boundsBuilder?.let { builder ->
+                    cameraPositionState.move(
+                        CameraUpdateFactory.newLatLngBounds(builder.build(), 100)
+                    )
+                }
+            },
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(16.dp)
@@ -205,6 +261,8 @@ private fun MapContent(
 
         // Legend
         MapLegend(
+            metric = selectedMetric,
+            percentiles = mapData.percentiles,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp)
@@ -242,9 +300,14 @@ private fun GpsQualityBanner(modifier: Modifier = Modifier) {
 @Composable
 private fun MapControls(
     selectedMetric: MapMetricType,
+    mapDisplayType: MapDisplayType,
+    showTraffic: Boolean,
     showEvents: Boolean,
     onMetricChange: (MapMetricType) -> Unit,
+    onMapDisplayTypeChange: (MapDisplayType) -> Unit,
+    onToggleTraffic: () -> Unit,
     onToggleEvents: () -> Unit,
+    onCenterRoute: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -264,7 +327,10 @@ private fun MapControls(
                     color = MaterialTheme.colorScheme.outline
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     MapMetricType.entries.forEach { metric ->
                         FilterChip(
                             selected = selectedMetric == metric,
@@ -276,32 +342,92 @@ private fun MapControls(
             }
         }
 
-        // Events toggle
+        // Map style selector
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
             )
         ) {
-            Row(
-                modifier = Modifier.padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Column(modifier = Modifier.padding(8.dp)) {
                 Text(
-                    text = "Events",
-                    style = MaterialTheme.typography.labelMedium
+                    text = "Map style:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Switch(
-                    checked = showEvents,
-                    onCheckedChange = { onToggleEvents() }
-                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    MapDisplayType.entries.forEach { style ->
+                        FilterChip(
+                            selected = mapDisplayType == style,
+                            onClick = { onMapDisplayTypeChange(style) },
+                            label = { Text(style.displayName) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Layers and visibility
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Events",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = showEvents,
+                        onCheckedChange = { onToggleEvents() }
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Traffic",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = showTraffic,
+                        onCheckedChange = { onToggleTraffic() }
+                    )
+                }
+                OutlinedButton(
+                    onClick = onCenterRoute,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CenterFocusStrong,
+                        contentDescription = null
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Center Route")
+                }
             }
         }
     }
 }
 
 @Composable
-private fun MapLegend(modifier: Modifier = Modifier) {
+private fun MapLegend(
+    metric: MapMetricType,
+    percentiles: MetricPercentiles,
+    modifier: Modifier = Modifier
+) {
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(
@@ -309,9 +435,32 @@ private fun MapLegend(modifier: Modifier = Modifier) {
         )
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
-            LegendItem(color = GreenPositive, label = "Low (<=P50)")
-            LegendItem(color = YellowWarning, label = "Medium")
-            LegendItem(color = RedNegative, label = "High (>P75)")
+            Text(
+                text = metric.displayName,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            LegendItem(
+                color = SegmentSeverity.VERY_LOW.toColor(),
+                label = "<= P20 (${formatMetricThreshold(percentiles.p20)})"
+            )
+            LegendItem(
+                color = SegmentSeverity.LOW.toColor(),
+                label = "P20-P40 (${formatMetricThreshold(percentiles.p40)})"
+            )
+            LegendItem(
+                color = SegmentSeverity.MEDIUM.toColor(),
+                label = "P40-P60 (${formatMetricThreshold(percentiles.p60)})"
+            )
+            LegendItem(
+                color = SegmentSeverity.HIGH.toColor(),
+                label = "P60-P80 (${formatMetricThreshold(percentiles.p80)})"
+            )
+            LegendItem(
+                color = SegmentSeverity.VERY_HIGH.toColor(),
+                label = "> P80"
+            )
         }
     }
 }
@@ -446,8 +595,26 @@ private fun MetricRow(label: String, value: String) {
 }
 
 private fun SegmentSeverity.toColor(): Color = when (this) {
-    SegmentSeverity.LOW -> GreenPositive
-    SegmentSeverity.MEDIUM -> YellowWarning
-    SegmentSeverity.HIGH -> RedNegative
+    SegmentSeverity.VERY_LOW -> Color(0xFF1B5E20)
+    SegmentSeverity.LOW -> Color(0xFF4CAF50)
+    SegmentSeverity.MEDIUM -> Color(0xFFFFC107)
+    SegmentSeverity.HIGH -> Color(0xFFFF9800)
+    SegmentSeverity.VERY_HIGH -> Color(0xFFD32F2F)
+}
+
+private fun MapDisplayType.toMapType(): MapType = when (this) {
+    MapDisplayType.TERRAIN -> MapType.TERRAIN
+    MapDisplayType.NORMAL -> MapType.NORMAL
+    MapDisplayType.SATELLITE -> MapType.SATELLITE
+    MapDisplayType.HYBRID -> MapType.HYBRID
+}
+
+private fun MapEventMarker.toMarkerHue(): Float = when (type) {
+    MapEventType.IMPACT_PEAK -> BitmapDescriptorFactory.HUE_RED
+    MapEventType.LANDING -> BitmapDescriptorFactory.HUE_ORANGE
+}
+
+private fun formatMetricThreshold(value: Float): String {
+    return String.format(Locale.US, "%.2f", value)
 }
 

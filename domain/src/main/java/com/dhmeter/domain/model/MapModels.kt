@@ -43,9 +43,11 @@ data class MapSegment(
  * Severity level for map segment coloring.
  */
 enum class SegmentSeverity {
-    LOW,    // Green - <= P50
-    MEDIUM, // Yellow - P50-P75
-    HIGH    // Red - > P75
+    VERY_LOW,  // <= P20
+    LOW,       // P20-P40
+    MEDIUM,    // P40-P60
+    HIGH,      // P60-P80
+    VERY_HIGH  // > P80
 }
 
 /**
@@ -93,7 +95,8 @@ data class RunMapData(
  * Percentiles for a metric series, used for coloring.
  */
 data class MetricPercentiles(
-    val p50: Float,
-    val p75: Float,
-    val p90: Float
+    val p20: Float,
+    val p40: Float,
+    val p60: Float,
+    val p80: Float
 )

@@ -17,8 +17,6 @@ class GetRunMapDataUseCase @Inject constructor(
             
             val events = runRepository.getEvents(runId)
             val impactSeries = runRepository.getSeries(runId, SeriesType.IMPACT_DENSITY)
-            val harshnessSeries = runRepository.getSeries(runId, SeriesType.HARSHNESS)
-            val stabilitySeries = runRepository.getSeries(runId, SeriesType.STABILITY)
             
             // Calculate percentiles for impact (default metric)
             val impactValues = impactSeries?.getYValues() ?: emptyList()
@@ -83,17 +81,19 @@ class GetRunMapDataUseCase @Inject constructor(
     }
     
     private fun calculatePercentiles(values: List<Float>): MetricPercentiles {
-        if (values.isEmpty()) return MetricPercentiles(0f, 0f, 0f)
+        if (values.isEmpty()) return MetricPercentiles(0f, 0f, 0f, 0f)
         
         val sorted = values.sorted()
-        val p50Index = (sorted.size * 0.5).toInt().coerceAtMost(sorted.lastIndex)
-        val p75Index = (sorted.size * 0.75).toInt().coerceAtMost(sorted.lastIndex)
-        val p90Index = (sorted.size * 0.9).toInt().coerceAtMost(sorted.lastIndex)
+        val p20Index = (sorted.size * 0.2).toInt().coerceAtMost(sorted.lastIndex)
+        val p40Index = (sorted.size * 0.4).toInt().coerceAtMost(sorted.lastIndex)
+        val p60Index = (sorted.size * 0.6).toInt().coerceAtMost(sorted.lastIndex)
+        val p80Index = (sorted.size * 0.8).toInt().coerceAtMost(sorted.lastIndex)
         
         return MetricPercentiles(
-            p50 = sorted[p50Index],
-            p75 = sorted[p75Index],
-            p90 = sorted[p90Index]
+            p20 = sorted[p20Index],
+            p40 = sorted[p40Index],
+            p60 = sorted[p60Index],
+            p80 = sorted[p80Index]
         )
     }
     
@@ -112,9 +112,11 @@ class GetRunMapDataUseCase @Inject constructor(
             val value = if (values.isNotEmpty()) values[valueIndex] else 0f
             
             val severity = when {
-                value <= percentiles.p50 -> SegmentSeverity.LOW
-                value <= percentiles.p75 -> SegmentSeverity.MEDIUM
-                else -> SegmentSeverity.HIGH
+                value <= percentiles.p20 -> SegmentSeverity.VERY_LOW
+                value <= percentiles.p40 -> SegmentSeverity.LOW
+                value <= percentiles.p60 -> SegmentSeverity.MEDIUM
+                value <= percentiles.p80 -> SegmentSeverity.HIGH
+                else -> SegmentSeverity.VERY_HIGH
             }
             
             MapSegment(
