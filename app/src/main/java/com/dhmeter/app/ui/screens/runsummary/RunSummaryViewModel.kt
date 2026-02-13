@@ -137,7 +137,7 @@ class RunSummaryViewModel @Inject constructor(
                     chartsError = e.message ?: tr(
                         appContext,
                         "Failed to load charts",
-                        "No se pudieron cargar las graficas"
+                        "No se pudieron cargar las gráficas"
                     )
                 )
             }

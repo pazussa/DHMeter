@@ -90,7 +90,7 @@ fun CommunityScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
-                            contentDescription = tr("Back", "Atras")
+                            contentDescription = tr("Back", "Atrás")
                         )
                     }
                 }
@@ -253,7 +253,7 @@ private fun RegistrationContent(
                 Text(
                     text = tr(
                         "Use a unique username and your city to join the community chat.",
-                        "Usa un nombre unico y tu ciudad para entrar al chat de comunidad."
+                        "Usa un nombre único y tu ciudad para entrar al chat de comunidad."
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -284,12 +284,12 @@ private fun RegistrationContent(
                         Text(
                             text = tr(
                                 "I accept the community rules and terms.",
-                                "Acepto las reglas y terminos de la comunidad."
+                                "Acepto las reglas y términos de la comunidad."
                             ),
                             style = MaterialTheme.typography.bodySmall
                         )
                         TextButton(onClick = onShowTerms) {
-                            Text(tr("Read terms", "Leer terminos"))
+                            Text(tr("Read terms", "Leer términos"))
                         }
                     }
                 }
@@ -399,7 +399,7 @@ private fun RidersCard(
             Text(
                 text = tr(
                     "Tap a rider to view basic progress or moderation actions.",
-                    "Toca un rider para ver progreso basico o acciones de moderacion."
+                    "Toca un rider para ver progreso básico o acciones de moderación."
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -582,11 +582,11 @@ private fun RiderProgressDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(tr("Basic progress", "Progreso basico"), fontWeight = FontWeight.Bold)
+                Text(tr("Basic progress", "Progreso básico"), fontWeight = FontWeight.Bold)
                 Text("${tr("Runs", "Bajadas")}: ${progress.totalRuns}")
                 Text("${tr("Best time", "Mejor tiempo")}: ${formatMetric(progress.bestTimeSeconds, "s")}")
                 Text("${tr("Average speed", "Velocidad promedio")}: ${formatMetric(progress.avgSpeed, "")}")
-                Text("${tr("Max speed", "Velocidad maxima")}: ${formatMetric(progress.maxSpeed, "")}")
+                Text("${tr("Max speed", "Velocidad máxima")}: ${formatMetric(progress.maxSpeed, "")}")
             }
         },
         confirmButton = {
@@ -618,7 +618,7 @@ private fun TermsDialog(onDismiss: () -> Unit) {
             Text(
                 tr(
                     "Respect riders, avoid offensive content, do not share unsafe instructions, and report abusive behavior. By joining the community chat you accept moderation actions such as report and block.",
-                    "Respeta a los riders, evita contenido ofensivo, no compartas instrucciones inseguras y reporta conductas abusivas. Al entrar al chat aceptas acciones de moderacion como reporte y bloqueo."
+                    "Respeta a los riders, evita contenido ofensivo, no compartas instrucciones inseguras y reporta conductas abusivas. Al entrar al chat aceptas acciones de moderación como reporte y bloqueo."
                 )
             )
         },
@@ -671,8 +671,8 @@ private fun mapErrorCode(code: String?): String? {
     return when (code) {
         "USERNAME_REQUIRED" -> tr("Username is required.", "El usuario es obligatorio.")
         "LOCATION_REQUIRED" -> tr("City or place is required.", "La ciudad o lugar es obligatoria.")
-        "USERNAME_TAKEN" -> tr("That username is already in use.", "Ese usuario ya esta en uso.")
-        "TERMS_REQUIRED" -> tr("You must accept terms to continue.", "Debes aceptar los terminos para continuar.")
+        "USERNAME_TAKEN" -> tr("That username is already in use.", "Ese usuario ya está en uso.")
+        "TERMS_REQUIRED" -> tr("You must accept terms to continue.", "Debes aceptar los términos para continuar.")
         "USER_NOT_REGISTERED" -> tr("Register first to continue.", "Registrate primero para continuar.")
         "MESSAGE_EMPTY" -> tr("Message cannot be empty.", "El mensaje no puede ir vacio.")
         "MESSAGE_NOT_FOUND" -> tr("Message was not found.", "No se encontro el mensaje.")
@@ -683,7 +683,7 @@ private fun mapErrorCode(code: String?): String? {
         "BLOCK_SELF_NOT_ALLOWED" -> tr("You cannot block your own account.", "No puedes bloquear tu propia cuenta.")
         "CLOUD_NOT_CONFIGURED" -> tr(
             "Cloud community is not configured yet.",
-            "La comunidad en nube aun no esta configurada."
+            "La comunidad en nube aún no está configurada."
         )
         "CLOUD_AUTH_FAILED" -> tr(
             "Cloud authentication failed.",

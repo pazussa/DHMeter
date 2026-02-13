@@ -114,7 +114,7 @@ fun HomeScreen(
                             onDismissRequest = { showLanguageMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text(tr("English", "Ingles")) },
+                                text = { Text(tr("English", "Inglés")) },
                                 onClick = {
                                     showLanguageMenu = false
                                     AppLanguageManager.setLanguage(
@@ -124,7 +124,7 @@ fun HomeScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text(tr("Spanish", "Espanol")) },
+                                text = { Text(tr("Spanish", "Español")) },
                                 onClick = {
                                     showLanguageMenu = false
                                     AppLanguageManager.setLanguage(
@@ -233,7 +233,7 @@ fun HomeScreen(
                 Text(
                     tr(
                         "dropIn DH is designed for downhill telemetry: it records your runs, compares sections, and analyzes impact, vibration, instability and speed so you can improve each descent.\n\nData & privacy: sensors and location are used for recording, including background monitoring while a run is active.\n\nYou can delete your community account from Community > Delete account.\n\nContact: dropindh@gmail.com",
-                        "dropIn DH esta pensada para telemetria downhill: graba tus bajadas, compara secciones y analiza impacto, vibracion, inestabilidad y velocidad para mejorar cada descenso.\n\nDatos y privacidad: se usan sensores y ubicacion para la grabacion, incluyendo monitoreo en segundo plano mientras una bajada esta activa.\n\nPuedes eliminar tu cuenta de comunidad en Comunidad > Eliminar cuenta.\n\nContacto: dropindh@gmail.com"
+                        "dropIn DH está pensada para telemetría downhill: graba tus bajadas, compara secciones y analiza impacto, vibración, inestabilidad y velocidad para mejorar cada descenso.\n\nDatos y privacidad: se usan sensores y ubicación para la grabación, incluyendo monitoreo en segundo plano mientras una bajada está activa.\n\nPuedes eliminar tu cuenta de comunidad en Comunidad > Eliminar cuenta.\n\nContacto: dropindh@gmail.com"
                     )
                 )
             },
@@ -285,7 +285,7 @@ private fun HomeHeroBanner(
                 Text(
                     text = tr(
                         "$trackCount tracks ready for analysis",
-                        "$trackCount tracks listos para analisis"
+                        "$trackCount tracks listos para análisis"
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

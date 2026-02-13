@@ -66,7 +66,7 @@ fun RunSummaryScreen(
                 title = { Text(tr("Run Summary", "Resumen de bajada")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atras"))
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atrás"))
                     }
                 },
                 actions = {
@@ -334,17 +334,17 @@ private fun MetricsGrid(run: Run) {
                 score = impactQuality,
                 rawValue = run.impactScore?.let { String.format(Locale.US, "%.2f", it) },
                 rawLabel = tr("raw density", "densidad base"),
-                description = tr("Higher quality = smoother", "Mayor calidad = mas suave"),
+                description = tr("Higher score: smoother impact profile", "Más alto: impacto más suave"),
                 color = ChartImpact,
                 modifier = Modifier.weight(1f)
             )
             MetricCard(
                 icon = Icons.Default.Vibration,
-                label = tr("Harshness", "Vibracion"),
+                label = tr("Harshness", "Vibración"),
                 score = harshnessQuality,
                 rawValue = run.harshnessAvg?.let { String.format(Locale.US, "%.2f", it) },
                 rawLabel = tr("raw RMS", "RMS base"),
-                description = tr("Higher quality = less vibration", "Mayor calidad = menos vibracion"),
+                description = tr("Higher score: less vibration", "Más alto: menos vibración"),
                 color = ChartHarshness,
                 modifier = Modifier.weight(1f)
             )
@@ -357,16 +357,16 @@ private fun MetricsGrid(run: Run) {
             score = stabilityQuality,
             rawValue = run.stabilityScore?.let { String.format(Locale.US, "%.2f", it) },
             rawLabel = tr("raw variance", "varianza base"),
-            description = tr("Higher quality = steadier control", "Mayor calidad = control mas estable"),
+            description = tr("Higher score: steadier control", "Más alto: control más estable"),
             color = ChartStability,
             modifier = Modifier.fillMaxWidth()
         )
 
         ValueMetricCard(
             icon = Icons.Default.Speed,
-            label = tr("Max Speed", "Velocidad maxima"),
+            label = tr("Max Speed", "Velocidad máxima"),
             value = run.maxSpeed?.let { String.format(Locale.US, "%.1f km/h", it * 3.6f) } ?: "--",
-            description = tr("Highest GPS speed recorded", "Velocidad GPS mas alta registrada"),
+            description = tr("Highest GPS speed recorded", "Velocidad GPS más alta registrada"),
             color = ChartSpeed,
             modifier = Modifier.fillMaxWidth()
         )
@@ -494,7 +494,7 @@ private fun QualityOverviewCard(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = tr("Ride Quality Index", "Indice de calidad de bajada"),
+                text = tr("Ride Quality Index", "Índice de calidad de bajada"),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -506,7 +506,7 @@ private fun QualityOverviewCard(
             Text(
                 text = tr(
                     "Based on impact, harshness and stability (higher is better).",
-                    "Basado en impacto, vibracion e inestabilidad (mas alto es mejor)."
+                    "Basado en impacto, vibración e inestabilidad (más alto es mejor)."
                 ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
@@ -586,7 +586,7 @@ private fun LandingQualityCard(score: Float) {
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = tr("Lower score = smoother landings", "Menor puntaje = aterrizajes mas suaves"),
+                text = tr("Lower score = smoother landings", "Menor puntaje = aterrizajes más suaves"),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
             )
@@ -667,7 +667,7 @@ private fun RunChartsSection(
         Text(
             text = tr(
                 "Chart scale is burden score: 0 = smoother/cleaner, 100 = more punishing.",
-                "La escala de grafica es carga: 0 = mas suave/limpio, 100 = mas castigador."
+                "La escala de gráfica es carga: 0 = más suave/limpio, 100 = más castigador."
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
@@ -677,7 +677,7 @@ private fun RunChartsSection(
             isLoading -> {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 Text(
-                    text = tr("Loading charts...", "Cargando graficas..."),
+                    text = tr("Loading charts...", "Cargando gráficas..."),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline
                 )
@@ -699,7 +699,7 @@ private fun RunChartsSection(
                 )
 
                 SingleRunChartSection(
-                    title = tr("Harshness vs Distance %", "Vibracion vs Distancia %"),
+                    title = tr("Harshness vs Distance %", "Vibración vs Distancia %"),
                     series = harshnessSeries,
                     color = ChartHarshness
                 )
@@ -974,7 +974,7 @@ private fun CompareRunDialog(
                             Text(dateFormat.format(Date(run.startedAt)))
                         },
                         supportingContent = { 
-                            Text(tr("Duration: ${formatDuration(run.durationMs)}", "Duracion: ${formatDuration(run.durationMs)}"))
+                            Text(tr("Duration: ${formatDuration(run.durationMs)}", "Duración: ${formatDuration(run.durationMs)}"))
                         },
                         modifier = Modifier.clickable { onSelect(run.runId) }
                     )

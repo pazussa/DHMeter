@@ -27,13 +27,13 @@ class DHMeterApplication : Application() {
     private fun createNotificationChannels() {
         val recordingChannel = NotificationChannel(
             CHANNEL_RECORDING,
-            tr(this, "Recording", "Grabacion"),
+            tr(this, "Recording", "Grabación"),
             NotificationManager.IMPORTANCE_LOW
         ).apply {
             description = tr(
                 this@DHMeterApplication,
                 "Shows when a run is being recorded",
-                "Muestra cuando se esta grabando una bajada"
+                "Muestra cuando se está grabando una bajada"
             )
             setShowBadge(false)
         }

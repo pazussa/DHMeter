@@ -705,10 +705,10 @@ class RecordingService : Service() {
         tr(this, "Processing run data...", "Procesando datos de la bajada...")
 
     private fun msgFailedStartRecording(): String =
-        tr(this, "Failed to start recording", "No se pudo iniciar la grabacion")
+        tr(this, "Failed to start recording", "No se pudo iniciar la grabación")
 
     private fun msgFailedStopRecording(): String =
-        tr(this, "Failed to stop recording", "No se pudo detener la grabacion")
+        tr(this, "Failed to stop recording", "No se pudo detener la grabación")
 
     private fun msgFailedProcessRun(): String =
         tr(this, "Failed to process run", "No se pudo procesar la bajada")

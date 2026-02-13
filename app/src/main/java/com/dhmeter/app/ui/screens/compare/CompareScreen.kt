@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dropindh.app.ui.i18n.tr
@@ -75,7 +76,7 @@ fun CompareScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atras"))
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atrás"))
                     }
                 }
             )
@@ -96,7 +97,7 @@ fun CompareScreen(
                     Text(
                         tr(
                             "View Charts (${runIds.size} runs)",
-                            "Ver graficas (${runIds.size} bajadas)"
+                            "Ver gráficas (${runIds.size} bajadas)"
                         )
                     )
                 }
@@ -127,7 +128,7 @@ fun CompareScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(uiState.error ?: tr("Could not load comparison", "No se pudo cargar la comparacion"))
+                    Text(uiState.error ?: tr("Could not load comparison", "No se pudo cargar la comparación"))
                 }
             }
         }
@@ -157,14 +158,14 @@ private fun MultiRunComparisonContent(
 
         // Metrics comparison table
         Text(
-            text = tr("Metrics Comparison", "Comparacion de metricas"),
+            text = tr("Metrics Comparison", "Comparación de métricas"),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         Text(
             text = tr(
                 "Lower score means smoother/less punishing.",
-                "Menor puntaje significa mas suave/menos castigador."
+                "Menor puntaje significa más suave/menos castigador."
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
@@ -179,7 +180,7 @@ private fun MultiRunComparisonContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = tr("Speed Comparison", "Comparacion de velocidad"),
+            text = tr("Speed Comparison", "Comparación de velocidad"),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(bottom = 12.dp)
         )
@@ -189,7 +190,7 @@ private fun MultiRunComparisonContent(
 
         comparison.mapComparison?.let { mapComparison ->
             Text(
-                text = tr("Route Comparison", "Comparacion de ruta"),
+                text = tr("Route Comparison", "Comparación de ruta"),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
@@ -418,7 +419,7 @@ private fun MultiMetricsTable(
                 horizontalArrangement = Arrangement.Start
             ) {
                 Text(
-                    text = tr("Metric", "Metrica"),
+                    text = tr("Metric", "Métrica"),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.width(132.dp)
@@ -469,7 +470,7 @@ private fun MapComparisonSection(
         Text(
             text = tr(
                 "Tap an S marker on the map to highlight that section in the table.",
-                "Toca un marcador S en el mapa para resaltar esa seccion en la tabla."
+                "Toca un marcador S en el mapa para resaltar esa sección en la tabla."
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
@@ -478,7 +479,7 @@ private fun MapComparisonSection(
             Text(
                 text = tr(
                     "Some runs lack timing profile data; section times are estimated from total duration.",
-                    "Algunas bajadas no tienen perfil de tiempos; los tiempos por seccion se estiman desde la duracion total."
+                    "Algunas bajadas no tienen perfil de tiempos; los tiempos por sección se estiman desde la duración total."
                 ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
@@ -789,7 +790,9 @@ private fun formatDuration(ms: Long): String {
 }
 
 private fun isSpanishLanguage(): Boolean {
-    return Locale.getDefault().language.lowercase(Locale.US).startsWith("es")
+    val appLanguage = AppCompatDelegate.getApplicationLocales().get(0)?.language
+    val language = appLanguage ?: Locale.getDefault().language
+    return language.lowercase(Locale.US).startsWith("es")
 }
 
 private fun localizedRunLabel(label: String): String {
@@ -805,11 +808,11 @@ private fun localizedMetricName(metricName: String): String {
     if (!isSpanishLanguage()) return metricName
     return when (metricName) {
         "Impact" -> "Impacto"
-        "Harshness" -> "Vibracion"
+        "Harshness" -> "Vibración"
         "Stability" -> "Inestabilidad"
         "Landing Quality" -> "Calidad de aterrizaje"
-        "Duration" -> "Duracion"
-        "Max Speed" -> "Velocidad maxima"
+        "Duration" -> "Duración"
+        "Max Speed" -> "Velocidad máxima"
         else -> metricName
     }
 }
@@ -817,7 +820,7 @@ private fun localizedMetricName(metricName: String): String {
 private fun localizedVerdictTitle(verdict: MultiRunVerdict): String {
     if (!isSpanishLanguage()) return verdict.title
     return when (verdict.type) {
-        MultiRunVerdict.Type.CLEAR_WINNER -> "${localizedRunLabel(verdict.bestRunLabel)} fue la mas suave"
+        MultiRunVerdict.Type.CLEAR_WINNER -> "${localizedRunLabel(verdict.bestRunLabel)} fue la más suave"
         MultiRunVerdict.Type.MIXED -> "Resultados mixtos"
         MultiRunVerdict.Type.SIMILAR -> "Rendimiento similar"
     }
@@ -826,8 +829,8 @@ private fun localizedVerdictTitle(verdict: MultiRunVerdict): String {
 private fun localizedInsightText(text: String): String {
     if (!isSpanishLanguage()) return text
     return text
-        .replace("Most metrics are similar across runs.", "La mayoria de metricas son similares entre bajadas.")
-        .replace("Metrics are too close to declare a clear advantage.", "Las metricas estan demasiado cerca para una ventaja clara.")
+        .replace("Most metrics are similar across runs.", "La mayoría de métricas son similares entre bajadas.")
+        .replace("Metrics are too close to declare a clear advantage.", "Las métricas están demasiado cerca para una ventaja clara.")
         .replace("No significant differences detected between runs", "No se detectaron diferencias significativas entre bajadas")
         .replace("Mixed results", "Resultados mixtos")
         .replace("Similar performance", "Rendimiento similar")
@@ -837,15 +840,15 @@ private fun localizedInsightText(text: String): String {
         .replace(" spread is ", " tiene un rango de ")
         .replace(" points", " puntos")
         .replace(" has best ", " tiene mejor ")
-        .replace(" gained ", " gano ")
-        .replace(" lost ", " perdio ")
+        .replace(" gained ", " ganó ")
+        .replace(" lost ", " perdió ")
         .replace(" in S", " en S")
         .replace("Impact", "Impacto")
-        .replace("Harshness", "Vibracion")
+        .replace("Harshness", "Vibración")
         .replace("Stability", "Inestabilidad")
         .replace("Landing Quality", "Calidad de aterrizaje")
-        .replace("Duration", "Duracion")
-        .replace("Max Speed", "Velocidad maxima")
+        .replace("Duration", "Duración")
+        .replace("Max Speed", "Velocidad máxima")
 }
 
 private fun formatMs(value: Long?): String {

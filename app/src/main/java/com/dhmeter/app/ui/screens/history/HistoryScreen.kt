@@ -37,7 +37,7 @@ fun HistoryScreen(
                 title = { Text(tr("History", "Historial")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atras"))
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atrás"))
                     }
                 }
             )

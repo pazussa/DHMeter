@@ -910,10 +910,10 @@ class RecordingViewModel @Inject constructor(
         tr(appContext, "Loading local segments...", "Cargando segmentos locales...")
 
     private fun msgAutoRecordingOnSegment(): String =
-        tr(appContext, "Auto recording active on local segment", "Grabacion automatica activa en segmento local")
+        tr(appContext, "Auto recording active on local segment", "Grabación automatica activa en segmento local")
 
     private fun msgManualRecordingActive(): String =
-        tr(appContext, "Manual recording active", "Grabacion manual activa")
+        tr(appContext, "Manual recording active", "Grabación manual activa")
 
     private fun msgProcessingRunData(): String =
         tr(appContext, "Processing run data...", "Procesando datos de la bajada...")
@@ -929,23 +929,23 @@ class RecordingViewModel @Inject constructor(
         tr(
             appContext,
             "Segment detected: auto recording started",
-            "Segmento detectado: grabacion automatica iniciada"
+            "Segmento detectado: grabación automatica iniciada"
         )
 
     private fun msgManualRecordingStarted(): String =
-        tr(appContext, "Manual recording started", "Grabacion manual iniciada")
+        tr(appContext, "Manual recording started", "Grabación manual iniciada")
 
     private fun msgWaitingForGoodGps(): String =
         tr(appContext, "Waiting for good GPS to arm segments", "Esperando buen GPS para activar segmentos")
 
     private fun msgMoveFasterToArm(): String =
-        tr(appContext, "Move faster to arm segment auto-start", "Muevete mas rapido para activar el auto-inicio")
+        tr(appContext, "Move faster to arm segment auto-start", "Muévete más rápido para activar el auto-inicio")
 
     private fun msgAutoStartCooldown(): String =
         tr(appContext, "Auto-start cooldown active", "En enfriamiento de auto-inicio")
 
     private fun msgNearestSegment(distance: String): String =
-        tr(appContext, "Nearest segment start: $distance", "Inicio de segmento mas cercano: $distance")
+        tr(appContext, "Nearest segment start: $distance", "Inicio de segmento más cercano: $distance")
 
     private fun msgApproachingSegment(distance: String): String =
         tr(appContext, "Approaching segment: $distance", "Acercandose al segmento: $distance")
@@ -961,13 +961,13 @@ class RecordingViewModel @Inject constructor(
         tr(appContext, "Align with segment direction to auto-start", "Alineate con la direccion del segmento para auto-iniciar")
 
     private fun msgAutoRecordingToEnd(distance: String): String =
-        tr(appContext, "Auto recording: $distance to segment end", "Grabacion automatica: $distance para fin de segmento")
+        tr(appContext, "Auto recording: $distance to segment end", "Grabación automatica: $distance para fin de segmento")
 
     private fun msgSegmentEndStopping(): String =
-        tr(appContext, "Segment end reached. Stopping recording...", "Fin de segmento alcanzado. Deteniendo grabacion...")
+        tr(appContext, "Segment end reached. Stopping recording...", "Fin de segmento alcanzado. Deteniendo grabación...")
 
     private fun msgFailedStartService(): String =
-        tr(appContext, "Failed to start recording service", "No se pudo iniciar el servicio de grabacion")
+        tr(appContext, "Failed to start recording service", "No se pudo iniciar el servicio de grabación")
 
     private fun msgNoLocalSegments(): String =
         tr(
@@ -986,7 +986,7 @@ class RecordingViewModel @Inject constructor(
         tr(
             appContext,
             "Processing is taking longer than expected",
-            "El procesamiento esta tardando mas de lo esperado"
+            "El procesamiento está tardando más de lo esperado"
         )
 
     private fun updateSegmentStatus(message: String) {

@@ -2,6 +2,7 @@ package com.dropindh.app.localization
 
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import java.util.Locale
@@ -19,7 +20,7 @@ object AppLanguageManager {
 
     fun setLanguage(context: Context, languageCode: String) {
         applyLanguage(context, normalize(languageCode), persist = true)
-        (context as? Activity)?.let { activity ->
+        context.findActivity()?.let { activity ->
             if (!activity.isFinishing && !activity.isDestroyed) {
                 activity.recreate()
             }
@@ -48,6 +49,7 @@ object AppLanguageManager {
 
         val locales = LocaleListCompat.create(Locale(languageCode))
         AppCompatDelegate.setApplicationLocales(locales)
+        Locale.setDefault(Locale(languageCode))
     }
 
     private fun normalize(languageCode: String): String {
@@ -56,6 +58,12 @@ object AppLanguageManager {
         } else {
             LANGUAGE_EN
         }
+    }
+
+    private tailrec fun Context.findActivity(): Activity? = when (this) {
+        is Activity -> this
+        is ContextWrapper -> baseContext.findActivity()
+        else -> null
     }
 }
 

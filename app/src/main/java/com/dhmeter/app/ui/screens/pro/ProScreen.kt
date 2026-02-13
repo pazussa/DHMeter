@@ -78,7 +78,7 @@ fun ProScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
-                            contentDescription = tr("Back", "Atras")
+                            contentDescription = tr("Back", "Atrás")
                         )
                     }
                 },
@@ -225,7 +225,7 @@ private fun ProValueCard(
             Text(
                 text = tr(
                     "Unlock advanced comparisons, deeper analytics and future cloud backup.",
-                    "Desbloquea comparaciones avanzadas, analitica profunda y futuro respaldo en nube."
+                    "Desbloquea comparaciones avanzadas, analítica profunda y futuro respaldo en nube."
                 ),
                 style = MaterialTheme.typography.bodyMedium
             )
@@ -326,7 +326,7 @@ private fun mapBillingError(code: Int?, message: String?): String? {
     return when (code) {
         3 -> tr("Billing unavailable on this device.", "Billing no disponible en este dispositivo.")
         5 -> tr("Developer error in Billing setup.", "Error de desarrollador en Billing.")
-        7 -> tr("Item already owned.", "El item ya esta activo.")
+        7 -> tr("Item already owned.", "El item ya está activo.")
         else -> if (message.isNullOrBlank()) generic else "$generic\n($message)"
     }
 }
@@ -334,7 +334,7 @@ private fun mapBillingError(code: Int?, message: String?): String? {
 @Composable
 private fun mapActionError(code: String?): String? {
     return when (code) {
-        "BILLING_NOT_READY" -> tr("Billing is not ready yet.", "Billing aun no esta listo.")
+        "BILLING_NOT_READY" -> tr("Billing is not ready yet.", "Billing aún no está listo.")
         "PRODUCT_NOT_LOADED" -> tr("Product not loaded from Play Billing.", "Producto no cargado desde Play Billing.")
         "OFFER_TOKEN_NOT_FOUND" -> tr("Offer token not available for this product.", "No hay offer token para este producto.")
         else -> if (code == null) null else tr("Could not start purchase flow.", "No se pudo iniciar la compra.")

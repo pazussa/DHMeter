@@ -54,7 +54,7 @@ fun ChartsScreen(
                 title = { Text(tr("Charts (${runIds.size} runs)", "Graficas (${runIds.size} bajadas)")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atras"))
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atrás"))
                     }
                 }
             )
@@ -144,7 +144,7 @@ private fun ChartsContent(
 
         // Harshness vs distPct
         MultiRunChartSection(
-            title = tr("Harshness vs Distance %", "Vibracion vs Distancia %"),
+            title = tr("Harshness vs Distance %", "Vibración vs Distancia %"),
             runs = uiState.runs,
             seriesSelector = { it.harshnessSeries }
         )
@@ -184,7 +184,7 @@ private fun ChartsContent(
 
         // Heatmap by speed for each run
         Text(
-            text = tr("Speed Heatmap Comparison", "Comparacion de mapa de calor por velocidad"),
+            text = tr("Speed Heatmap Comparison", "Comparación de mapa de calor por velocidad"),
             style = MaterialTheme.typography.titleMedium
         )
         
@@ -231,7 +231,7 @@ private fun MultiRunChartSection(
         Text(
             text = tr(
                 "Burden score: 0 = smoother, 100 = more punishing (lower is better).",
-                "Puntaje de carga: 0 = mas suave, 100 = mas castigador (menor es mejor)."
+                "Puntaje de carga: 0 = más suave, 100 = más castigador (menor es mejor)."
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline

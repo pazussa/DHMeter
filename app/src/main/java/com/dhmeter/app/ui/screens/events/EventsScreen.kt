@@ -40,7 +40,7 @@ fun EventsScreen(
                 title = { Text(tr("Events", "Eventos")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atras"))
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atrás"))
                     }
                 }
             )
@@ -139,7 +139,7 @@ private fun EventsSummary(events: List<RunEvent>) {
                 SummaryItem(
                     icon = Icons.Default.Vibration,
                     count = harshnessBursts,
-                    label = tr("Harshness", "Vibracion")
+                    label = tr("Harshness", "Vibración")
                 )
             }
         }
@@ -179,7 +179,7 @@ private fun EventCard(event: RunEvent) {
     val (icon, color, label) = when (event.type) {
         "LANDING" -> Triple(Icons.Default.FlightLand, ChartImpact, tr("Landing", "Aterrizaje"))
         "IMPACT_PEAK" -> Triple(Icons.Default.Bolt, ChartHarshness, tr("Impact Peak", "Pico de impacto"))
-        "HARSHNESS_BURST" -> Triple(Icons.Default.Vibration, YellowWarning, tr("Harshness Burst", "Rafaga de vibracion"))
+        "HARSHNESS_BURST" -> Triple(Icons.Default.Vibration, YellowWarning, tr("Harshness Burst", "Ráfaga de vibración"))
         else -> Triple(Icons.Default.Info, MaterialTheme.colorScheme.outline, event.type)
     }
     

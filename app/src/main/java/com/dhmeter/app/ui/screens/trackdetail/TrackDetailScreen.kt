@@ -50,7 +50,7 @@ fun TrackDetailScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atras"))
+                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atrás"))
                     }
                 },
                 actions = {
@@ -63,7 +63,7 @@ fun TrackDetailScreen(
                         ) {
                             Icon(
                                 imageVector = if (isCompareMode) Icons.Default.Close else Icons.Default.Compare,
-                                contentDescription = tr("Compare mode", "Modo comparacion")
+                                contentDescription = tr("Compare mode", "Modo comparación")
                             )
                         }
                     }
@@ -323,7 +323,7 @@ private fun RunCard(
                 Text(
                     text = tr(
                         "Duration: ${formatDuration(run.durationMs)}",
-                        "Duracion: ${formatDuration(run.durationMs)}"
+                        "Duración: ${formatDuration(run.durationMs)}"
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

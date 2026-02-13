@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dropindh.app.ui.i18n.tr
@@ -49,7 +50,7 @@ fun MapScreen(
                 title = { Text(tr("Run Map", "Mapa de bajada")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "Atras"))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "Atrás"))
                     }
                 }
             )
@@ -377,7 +378,7 @@ private fun GpsQualityBanner(modifier: Modifier = Modifier) {
             Text(
                 text = tr(
                     "GPS imprecise. Map is approximate.\nUse charts for analysis.",
-                    "GPS impreciso. El mapa es aproximado.\nUsa las graficas para analizar."
+                    "GPS impreciso. El mapa es aproximado.\nUsa las gráficas para analizar."
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.Black
@@ -522,7 +523,7 @@ private fun MapLegend(
                     color = SegmentSeverity.MEDIUM.toColor(),
                     label = tr(
                         "No metric samples (neutral coloring)",
-                        "Sin muestras de metrica (color neutro)"
+                        "Sin muestras de métrica (color neutro)"
                     )
                 )
             }
@@ -549,19 +550,19 @@ private fun SectionComparisonBottomSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = tr("Section Time Comparison", "Comparacion de tiempos por seccion"),
+                text = tr("Section Time Comparison", "Comparación de tiempos por sección"),
                 style = MaterialTheme.typography.titleLarge
             )
             Text(
                 text = if (currentIsFastest) {
                     tr(
                         "This run is the fastest reference on this track.",
-                        "Esta bajada es la referencia mas rapida en este track."
+                        "Esta bajada es la referencia más rápida en este track."
                     )
                 } else {
                     tr(
                         "Compared against the fastest run on this track.",
-                        "Comparada contra la bajada mas rapida de este track."
+                        "Comparada contra la bajada más rápida de este track."
                     )
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -570,7 +571,7 @@ private fun SectionComparisonBottomSheet(
             Text(
                 text = tr(
                     "Current: ${formatMsCompact(comparison.currentDurationMs)}   Fastest: ${formatMsCompact(comparison.fastestDurationMs)}",
-                    "Actual: ${formatMsCompact(comparison.currentDurationMs)}   Mas rapida: ${formatMsCompact(comparison.fastestDurationMs)}"
+                    "Actual: ${formatMsCompact(comparison.currentDurationMs)}   Mas rápida: ${formatMsCompact(comparison.fastestDurationMs)}"
                 ),
                 style = MaterialTheme.typography.labelMedium
             )
@@ -578,7 +579,7 @@ private fun SectionComparisonBottomSheet(
                 Text(
                     text = tr(
                         "Split timing is estimated from total duration for at least one run.",
-                        "El tiempo por secciones se estima desde la duracion total en al menos una bajada."
+                        "El tiempo por secciones se estima desde la duración total en al menos una bajada."
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
@@ -790,7 +791,9 @@ private fun formatMetricThreshold(value: Float): String {
 }
 
 private fun isSpanishLanguage(): Boolean {
-    return Locale.getDefault().language.lowercase(Locale.US).startsWith("es")
+    val appLanguage = AppCompatDelegate.getApplicationLocales().get(0)?.language
+    val language = appLanguage ?: Locale.getDefault().language
+    return language.lowercase(Locale.US).startsWith("es")
 }
 
 private fun localizedMetricName(metric: MapMetricType): String {
@@ -804,7 +807,7 @@ private fun localizedMetricName(metric: MapMetricType): String {
     }
     return when (metric) {
         MapMetricType.IMPACT -> "Impacto"
-        MapMetricType.HARSHNESS -> "Vibracion"
+        MapMetricType.HARSHNESS -> "Vibración"
         MapMetricType.STABILITY -> "Inestabilidad"
         MapMetricType.SPEED -> "Velocidad"
     }
@@ -855,9 +858,9 @@ private fun formatVsFastestDelta(deltaMs: Long?): String {
         "$absMs ms"
     }
     return if (deltaMs < 0L) {
-        if (isSpanishLanguage()) "-$valueText mas rapido" else "-$valueText faster"
+        if (isSpanishLanguage()) "-$valueText más rápido" else "-$valueText faster"
     } else {
-        if (isSpanishLanguage()) "+$valueText mas lento" else "+$valueText slower"
+        if (isSpanishLanguage()) "+$valueText más lento" else "+$valueText slower"
     }
 }
 

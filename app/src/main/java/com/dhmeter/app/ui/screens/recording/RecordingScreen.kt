@@ -229,8 +229,8 @@ fun RecordingScreen(
     if (showStopConfirmation) {
         AlertDialog(
             onDismissRequest = { showStopConfirmation = false },
-            title = { Text(tr("Stop Recording?", "Detener grabacion?")) },
-            text = { Text(tr("Are you sure you want to stop recording this run?", "Seguro que quieres detener esta grabacion?")) },
+            title = { Text(tr("Stop Recording?", "Detener grabación?")) },
+            text = { Text(tr("Are you sure you want to stop recording this run?", "Seguro que quieres detener esta grabación?")) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -264,7 +264,7 @@ fun RecordingScreen(
     uiState.error?.let { message ->
         AlertDialog(
             onDismissRequest = { viewModel.clearError() },
-            title = { Text(tr("Recording Error", "Error de grabacion")) },
+            title = { Text(tr("Recording Error", "Error de grabación")) },
             text = { Text(message) },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearError() }) {
@@ -419,7 +419,7 @@ private fun LiveMetricsBarsCard(
             )
             
             LiveMetricBar(
-                label = if (isPreview) tr("Vibration", "Vibracion") else tr("Vibration (live)", "Vibracion (en vivo)"),
+                label = if (isPreview) tr("Vibration", "Vibración") else tr("Vibration (live)", "Vibración (en vivo)"),
                 level = harshnessLevel,
                 color = Color(0xFFFF9800) // Orange for harshness
             )
@@ -534,7 +534,7 @@ private fun SensorSensitivitySheet(
                 onValueChange = onImpactSensitivityChange
             )
             SensitivitySliderRow(
-                label = tr("Vibration (Accelerometer)", "Vibracion (Acelerometro)"),
+                label = tr("Vibration (Accelerometer)", "Vibración (Acelerometro)"),
                 value = settings.harshnessSensitivity,
                 onValueChange = onHarshnessSensitivityChange
             )
