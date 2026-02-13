@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.screens.trackdetail
+package com.dropindh.app.ui.screens.trackdetail
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,11 +13,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dhmeter.app.ui.i18n.tr
-import com.dhmeter.app.ui.metrics.formatScore0to100
-import com.dhmeter.app.ui.metrics.runOverallQualityScore
-import com.dhmeter.app.ui.theme.dhGlassCardColors
-import com.dhmeter.app.ui.theme.dhTopBarColors
+import com.dropindh.app.ui.i18n.tr
+import com.dropindh.app.ui.metrics.formatScore0to100
+import com.dropindh.app.ui.metrics.runOverallQualityScore
+import com.dropindh.app.ui.theme.dhGlassCardColors
+import com.dropindh.app.ui.theme.dhTopBarColors
 import com.dhmeter.domain.model.Run
 import java.text.SimpleDateFormat
 import java.util.*
@@ -369,4 +369,5 @@ private fun formatDuration(ms: Long): String {
     val secs = seconds % 60
     return String.format(Locale.US, "%d:%02d", minutes, secs)
 }
+
 

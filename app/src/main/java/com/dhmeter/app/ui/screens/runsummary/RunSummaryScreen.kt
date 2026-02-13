@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.screens.runsummary
+package com.dropindh.app.ui.screens.runsummary
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -17,12 +17,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dhmeter.app.ui.i18n.tr
-import com.dhmeter.app.ui.metrics.formatScore0to100
-import com.dhmeter.app.ui.metrics.normalizeSeriesBurdenScore
-import com.dhmeter.app.ui.metrics.runMetricQualityScore
-import com.dhmeter.app.ui.metrics.runOverallQualityScore
-import com.dhmeter.app.ui.theme.*
+import com.dropindh.app.ui.i18n.tr
+import com.dropindh.app.ui.metrics.formatScore0to100
+import com.dropindh.app.ui.metrics.normalizeSeriesBurdenScore
+import com.dropindh.app.ui.metrics.runMetricQualityScore
+import com.dropindh.app.ui.metrics.runOverallQualityScore
+import com.dropindh.app.ui.theme.*
 import com.dhmeter.charts.components.ComparisonLineChart
 import com.dhmeter.charts.components.EventMarkers
 import com.dhmeter.charts.components.HeatmapBar
@@ -852,7 +852,8 @@ private fun SpeedChartSection(
 }
 
 private fun RunSeries.toChartPoints(): List<ChartPoint> {
-    return (0 until pointCount).mapNotNull { i ->
+    val count = effectivePointCount
+    return (0 until count).mapNotNull { i ->
         ChartPoint(points[i * 2], normalizeToScore(seriesType, points[i * 2 + 1]))
             .takeIf { it.x.isFinite() && it.y.isFinite() }
     }
@@ -861,10 +862,11 @@ private fun RunSeries.toChartPoints(): List<ChartPoint> {
 private fun RunSeries.toSpeedChartPoints(distanceMeters: Float?): List<ChartPoint> {
     if (seriesType != SeriesType.SPEED_TIME) return emptyList()
     val totalDistanceM = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
-    if (pointCount < 2) return emptyList()
+    val count = effectivePointCount
+    if (count < 2) return emptyList()
 
-    val result = ArrayList<ChartPoint>(pointCount - 1)
-    for (i in 1 until pointCount) {
+    val result = ArrayList<ChartPoint>(count - 1)
+    for (i in 1 until count) {
         val prevX = points[(i - 1) * 2]
         val prevT = points[(i - 1) * 2 + 1]
         val currX = points[i * 2]
@@ -993,5 +995,6 @@ private fun formatDuration(ms: Long): String {
     val secs = seconds % 60
     return String.format(Locale.US, "%d:%02d", minutes, secs)
 }
+
 
 

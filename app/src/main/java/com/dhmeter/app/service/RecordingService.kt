@@ -1,4 +1,4 @@
-package com.dhmeter.app.service
+package com.dropindh.app.service
 
 import android.app.Notification
 import android.app.NotificationManager
@@ -8,11 +8,12 @@ import android.content.Intent
 import android.os.Binder
 import android.os.IBinder
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.dhmeter.app.DHMeterApplication
-import com.dhmeter.app.R
-import com.dhmeter.app.ui.MainActivity
-import com.dhmeter.app.ui.i18n.tr
+import com.dropindh.app.DHMeterApplication
+import com.dropindh.app.R
+import com.dropindh.app.ui.MainActivity
+import com.dropindh.app.ui.i18n.tr
 import com.dhmeter.domain.model.TrackSegment
 import com.dhmeter.domain.repository.SensorSensitivityRepository
 import com.dhmeter.domain.usecase.GetTrackSegmentsUseCase
@@ -46,6 +47,7 @@ import kotlin.math.sqrt
 class RecordingService : Service() {
 
     companion object {
+        private const val TAG = "RecordingService"
         const val CHANNEL_ID = DHMeterApplication.CHANNEL_RECORDING
         const val NOTIFICATION_ID = 1001
         const val ACTION_START = "com.dhmeter.action.START_RECORDING"
@@ -65,6 +67,7 @@ class RecordingService : Service() {
         private const val MIN_RECORDING_BEFORE_AUTO_STOP_MS = 5_000L
         private const val MIN_START_CONFIRMATION_HITS = 2
         private const val MIN_DIRECTION_DOT = 0.15
+        private const val WAKE_LOCK_TIMEOUT_MS = 2 * 60 * 60 * 1000L
     }
 
     @Inject
@@ -171,6 +174,7 @@ class RecordingService : Service() {
                     )
                 }
                 .onFailure {
+                    Log.w(TAG, "Manual recording start failed: ${it.message}")
                     previewManager.resumeAll()
                     startAutoPreviewIfPossible()
                     _recordingState.value = RecordingState.Error(
@@ -210,6 +214,7 @@ class RecordingService : Service() {
                     }
                 )
             } else {
+                Log.w(TAG, "Recording stop requested but no capture handle was returned.")
                 _recordingState.value = RecordingState.Error(msgFailedStopRecording())
             }
 
@@ -268,6 +273,7 @@ class RecordingService : Service() {
         )
 
         if (!started) {
+            Log.w(TAG, "Auto preview could not start. Waiting for sensors/location availability.")
             ensureForegroundNotification(msgWaitingSensors())
         }
     }
@@ -438,6 +444,7 @@ class RecordingService : Service() {
         serviceScope.launch {
             recordingManager.startRecording(trackId, "POCKET_THIGH")
                 .onFailure {
+                    Log.w(TAG, "Auto recording start failed for segment ${segment.id}: ${it.message}")
                     activeAutoSegment = null
                     isAutoStopInProgress = false
                     previewManager.resumeAll()
@@ -649,14 +656,22 @@ class RecordingService : Service() {
             "dropInDH:RecordingWakeLock"
         ).apply {
             setReferenceCounted(false)
-            acquire()
+            try {
+                acquire(WAKE_LOCK_TIMEOUT_MS)
+            } catch (t: Throwable) {
+                Log.e(TAG, "Failed to acquire wakelock", t)
+            }
         }
     }
 
     private fun releaseWakeLock() {
         val held = wakeLock
         if (held?.isHeld == true) {
-            held.release()
+            try {
+                held.release()
+            } catch (t: Throwable) {
+                Log.w(TAG, "Failed to release wakelock cleanly", t)
+            }
         }
         wakeLock = null
     }
@@ -710,3 +725,4 @@ sealed class RecordingState {
     data class Completed(val handle: com.dhmeter.domain.model.RawCaptureHandle) : RecordingState()
     data class Error(val message: String) : RecordingState()
 }
+

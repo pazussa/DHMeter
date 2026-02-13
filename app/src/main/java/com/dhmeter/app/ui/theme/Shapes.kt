@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.theme
+package com.dropindh.app.ui.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Shapes
@@ -9,3 +9,4 @@ val DHMeterShapes = Shapes(
     medium = RoundedCornerShape(22.dp),
     large = RoundedCornerShape(30.dp)
 )
+

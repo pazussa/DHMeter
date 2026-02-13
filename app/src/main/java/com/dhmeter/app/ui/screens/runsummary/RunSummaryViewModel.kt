@@ -1,9 +1,9 @@
-package com.dhmeter.app.ui.screens.runsummary
+package com.dropindh.app.ui.screens.runsummary
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.dhmeter.app.ui.i18n.tr
+import com.dropindh.app.ui.i18n.tr
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.RunSeries
 import com.dhmeter.domain.model.SeriesType
@@ -144,3 +144,4 @@ class RunSummaryViewModel @Inject constructor(
         }
     }
 }
+

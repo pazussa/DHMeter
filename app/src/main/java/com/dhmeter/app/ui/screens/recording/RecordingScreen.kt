@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.screens.recording
+package com.dropindh.app.ui.screens.recording
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -19,10 +19,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dhmeter.domain.model.SensorSensitivitySettings
-import com.dhmeter.app.ui.i18n.tr
-import com.dhmeter.app.ui.theme.RedNegative
-import com.dhmeter.app.ui.theme.dhGlassCardColors
-import com.dhmeter.app.ui.theme.dhTopBarColors
+import com.dropindh.app.ui.i18n.tr
+import com.dropindh.app.ui.theme.RedNegative
+import com.dropindh.app.ui.theme.dhGlassCardColors
+import com.dropindh.app.ui.theme.dhTopBarColors
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -604,4 +604,5 @@ private fun formatDuration(seconds: Long): String {
 
 enum class GpsSignalLevel { NONE, POOR, MEDIUM, GOOD }
 enum class SignalQuality { UNKNOWN, LOOSE, MODERATE, STABLE }
+
 

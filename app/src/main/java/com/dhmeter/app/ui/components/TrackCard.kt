@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.components
+package com.dropindh.app.ui.components
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
@@ -13,8 +13,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.dhmeter.app.ui.i18n.tr
-import com.dhmeter.app.ui.theme.dhGlassCardColors
+import com.dropindh.app.ui.i18n.tr
+import com.dropindh.app.ui.theme.dhGlassCardColors
 import com.dhmeter.domain.model.Track
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -141,3 +141,4 @@ fun NewTrackDialog(
         }
     )
 }
+

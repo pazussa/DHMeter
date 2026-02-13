@@ -3,6 +3,27 @@
 Fecha: 2026-02-12
 Proyecto analizado: `DHMeter`
 
+## Estado tras correcciones aplicadas (2026-02-12)
+
+Se aplicaron mejoras concretas de compatibilidad:
+- `compileSdk` y `targetSdk` subidos a `35` en todos los modulos.
+- Fallback de GPS sin GMS implementado en `GpsCollector`:
+  - usa `FusedLocationProviderClient` cuando hay Play Services,
+  - cae a `LocationManager` (GPS/Network provider) cuando no hay GMS o falla Fused.
+- WakeLock defensivo con timeout en `RecordingService` (`acquire(timeout)`), mas logs de errores operativos.
+- Se removio bloqueo de orientacion fija `portrait` en `MainActivity` (mejor soporte tablets/ChromeOS).
+- Se elimino permiso `HIGH_SAMPLING_RATE_SENSORS` y se limito muestreo IMU a 200Hz para evitar requisito/politica especial.
+- Se actualizaron dependencias criticas seguras sin romper el stack actual:
+  - `androidx.core:core-ktx` -> `1.13.1`
+  - `androidx.appcompat:appcompat` -> `1.7.1`
+  - `com.google.android.gms:play-services-location` -> `21.3.0`
+  - `com.google.android.gms:play-services-maps` -> `19.1.0`
+
+Verificacion local post-cambios:
+- `:app:assembleDebug` OK
+- `:app:assembleRelease` OK
+- `:app:lintDebug` OK (`0 errors, 128 warnings`)
+
 ## Resumen ejecutivo
 
 No es posible afirmar 100% "funciona en todos los Android" sin una granja de dispositivos reales (OEMs, chips, capas de energia y sensores distintos).
@@ -11,7 +32,7 @@ Estado actual con evidencia local:
 - Compila en debug: OK (`:app:assembleDebug`)
 - Compila en release: OK (`:app:assembleRelease`)
 - Tests unitarios debug: OK (`:app:testDebugUnitTest`)
-- Lint debug: OK sin errores bloqueantes (`0 errors, 133 warnings`)
+- Lint debug: OK sin errores bloqueantes (`0 errors, 126 warnings`)
 
 Conclusion tecnica:
 - Soporte real esperado: Android 8.0+ (API 26+) con hardware y servicios requeridos.
@@ -21,11 +42,11 @@ Conclusion tecnica:
 
 `app/build.gradle.kts`:
 - `minSdk = 26`
-- `targetSdk = 34`
-- `compileSdk = 34`
+- `targetSdk = 35`
+- `compileSdk = 35`
 
 `app/src/main/AndroidManifest.xml`:
-- Permisos clave: `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`, `WAKE_LOCK`, `HIGH_SAMPLING_RATE_SENSORS`
+- Permisos clave: `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`, `WAKE_LOCK`
 - Features requeridas: `accelerometer=true`, `gyroscope=true`, `gps=true`
 - Servicio foreground con tipo `location`
 
@@ -45,7 +66,7 @@ Conclusion tecnica:
 ### Android 14+ (API 34+)
 - Compatible en ejecucion (segun build actual).
 - Hay mas restricciones de ejecucion en background segun OEM y estado de la app.
-- Para publicacion Play en 2026, `targetSdk` 34 ya es riesgo de cumplimiento (deberia subirse).
+- Riesgo de cumplimiento Play por target SDK: mitigado al subir a `targetSdk 35`.
 
 ## Compatibilidad por tipo de dispositivo
 
@@ -53,12 +74,12 @@ Conclusion tecnica:
 - Mejor escenario de compatibilidad.
 
 ### Dispositivos sin GMS (ej. varios Huawei)
-- Riesgo alto: se usa `FusedLocationProviderClient` (Google Play Services) sin fallback nativo.
-- Puede fallar geolocalizacion o degradarse funcionalidad.
+- Riesgo medio: ahora hay fallback nativo con `LocationManager` cuando no hay Play Services.
+- Puede degradarse precision/frecuencia segun provider disponible (GPS vs network).
 
 ### Tablets
-- Puede funcionar, pero hay warning de orientacion bloqueada en portrait (`LockedOrientationActivity`).
-- UX puede ser suboptima en pantallas grandes/ChromeOS.
+- Compatibilidad mejorada al remover bloqueo fijo en portrait.
+- Aun se recomienda pruebas UI en pantallas grandes/ChromeOS para optimizar layout.
 
 ### Wear OS / Android TV / automotriz
 - No objetivo funcional de esta app por sensores/interfaz.
@@ -68,21 +89,17 @@ Conclusion tecnica:
 
 ## Hallazgos relevantes de lint (impacto real)
 
-1. `HIGH_SAMPLING_RATE_SENSORS` (warning especifico de politica)
-- Archivo: `app/src/main/AndroidManifest.xml` linea 23
-- Impacto: puede requerir justificacion fuerte en review de Play.
+1. Dependencias aun con warnings de obsolescencia
+- Se actualizaron algunas criticas (`core-ktx`, `appcompat`, `play-services-location`, `play-services-maps`), pero quedan otras por migrar.
+- Impacto: riesgo moderado de bugs/resoluciones tardias en OEM/versiones futuras.
 
-2. `Wakelock` sin timeout
-- Archivo: `app/src/main/java/com/dhmeter/app/service/RecordingService.kt` (lint marca linea ~652)
-- Impacto: riesgo de consumo excesivo en algunos equipos y politicas OEM.
+2. Stack de build (AGP/Kotlin/Compose) atrasado para subir mas dependencias
+- Varias versiones recientes de AndroidX exigen AGP mas nuevo.
+- Impacto: limita mejoras de compatibilidad hasta ejecutar una migracion de toolchain.
 
-3. Orientacion bloqueada (`portrait`)
-- Archivo: `app/src/main/AndroidManifest.xml` linea ~52
-- Impacto: UX y compatibilidad en tablets/ChromeOS.
-
-4. Dependencias viejas
-- Hay multiples warnings de versions obsoletas (AndroidX, Maps, WorkManager, etc.).
-- Impacto: mas probabilidad de bugs por OEM/version.
+3. Warnings de lint no funcionales (typos, recursos no usados, tipografia)
+- No bloquean ejecucion, pero mantienen ruido tecnico.
+- Impacto: bajo en runtime, medio en mantenibilidad.
 
 ## Riesgos funcionales en campo (no detectables solo con build)
 
@@ -94,19 +111,17 @@ Conclusion tecnica:
 ## Recomendaciones para ampliar compatibilidad real
 
 Prioridad alta:
-1. Subir `targetSdk` y `compileSdk` a nivel vigente para Play.
-2. Implementar fallback para equipos sin GMS (si quieres cubrir ese mercado).
-3. Agregar timeout defensivo al wakelock y telemetria de errores de servicio.
-4. Crear matriz de pruebas reales minima por OEM/version:
+1. Crear matriz de pruebas reales minima por OEM/version:
    - Samsung (API 30/33/34)
    - Xiaomi (API 30/33)
    - Motorola (API 29/33)
    - Pixel (API 34/35)
+2. Planificar upgrade de toolchain (AGP/Kotlin/Compose) para desbloquear dependencias mas nuevas.
 
 Prioridad media:
-1. Actualizar dependencias criticas (location/maps/lifecycle/navigation/work).
-2. Evaluar remover bloqueo portrait en tablets.
-3. Mantener validaciones de sensores y mensajes claros al usuario cuando un sensor no existe o tiene baja calidad.
+1. Seguir actualizando dependencias criticas por tandas (lifecycle/navigation/work/testing) tras upgrade de AGP.
+2. Mantener validaciones de sensores y mensajes claros al usuario cuando un sensor no existe o tiene baja calidad.
+3. Limpiar warnings de lint no funcionales para reducir deuda tecnica.
 
 ## Dictamen final
 

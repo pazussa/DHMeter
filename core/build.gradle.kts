@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.dhmeter.core"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         minSdk = 26
@@ -34,7 +34,7 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.core:core-ktx:1.13.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     
     testImplementation("junit:junit:4.13.2")

@@ -1,6 +1,6 @@
-package com.dhmeter.app.simulation
+package com.dropindh.app.simulation
 
-import com.dhmeter.app.ui.metrics.normalizeSeriesBurdenScore
+import com.dropindh.app.ui.metrics.normalizeSeriesBurdenScore
 import com.dhmeter.domain.model.SensorSensitivitySettings
 import com.dhmeter.domain.model.SeriesType
 import com.dhmeter.domain.repository.SensorSensitivityRepository
@@ -193,3 +193,4 @@ private object SimulatedRunFactory {
         return value.toFloat()
     }
 }
+

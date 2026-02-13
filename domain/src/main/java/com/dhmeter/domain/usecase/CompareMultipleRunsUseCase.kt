@@ -250,7 +250,10 @@ class CompareMultipleRunsUseCase @Inject constructor(
             val timingSeries = runRepository.getSeries(mapRun.runId, SeriesType.SPEED_TIME)
             RunTimingProfile(baseRun, timingSeries)
         }
-        val hasMeasuredSplitTiming = timingProfiles.all { it.timingSeries != null && it.timingSeries.pointCount > 0 }
+        val hasMeasuredSplitTiming = timingProfiles.all {
+            val series = it.timingSeries
+            series != null && series.effectivePointCount > 0
+        }
 
         val sections = KEY_SECTION_BOUNDS.zipWithNext().mapIndexed { index, (startPct, endPct) ->
             val sectionTimes = timingProfiles.map { profile ->
@@ -373,7 +376,7 @@ class CompareMultipleRunsUseCase @Inject constructor(
     ) {
         fun elapsedMsAtDist(distPct: Float): Long? {
             val clampedPct = distPct.coerceIn(0f, 100f)
-            timingSeries?.takeIf { it.seriesType == SeriesType.SPEED_TIME && it.pointCount > 0 }?.let { series ->
+            timingSeries?.takeIf { it.seriesType == SeriesType.SPEED_TIME && it.effectivePointCount > 0 }?.let { series ->
                 val valueSec = interpolateSeriesValue(series, clampedPct) ?: return null
                 if (valueSec.isFinite()) {
                     return (valueSec * 1000f).roundToLong().coerceAtLeast(0L)
@@ -385,13 +388,14 @@ class CompareMultipleRunsUseCase @Inject constructor(
         }
 
         private fun interpolateSeriesValue(series: RunSeries, targetX: Float): Float? {
-            if (series.pointCount <= 0) return null
+            val pointCount = series.effectivePointCount
+            if (pointCount <= 0) return null
 
             var lowX = series.points[0]
             var lowY = series.points[1]
             if (targetX <= lowX) return lowY
 
-            for (i in 1 until series.pointCount) {
+            for (i in 1 until pointCount) {
                 val hiX = series.points[i * 2]
                 val hiY = series.points[i * 2 + 1]
                 if (targetX <= hiX) {

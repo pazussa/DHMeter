@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.screens.trackdetail
+package com.dropindh.app.ui.screens.trackdetail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -58,3 +58,4 @@ class TrackDetailViewModel @Inject constructor(
         _uiState.update { it.copy(error = null) }
     }
 }
+

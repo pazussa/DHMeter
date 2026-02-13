@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Location permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     
@@ -18,9 +20,6 @@
     
     <!-- Wake lock for sensor recording -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    
-    <!-- High sampling rate sensors (required for Android 12+ at >200Hz) -->
-    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
     
     <!-- High-accuracy sensors -->
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="true" />
@@ -38,7 +37,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.DHMeter"
-        tools:targetApi="34">
+        tools:targetApi="35">
         
         <!-- Google Maps API Key -->
         <meta-data
@@ -49,7 +48,6 @@
             android:name=".ui.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.DHMeter"
-            android:screenOrientation="portrait"
             android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

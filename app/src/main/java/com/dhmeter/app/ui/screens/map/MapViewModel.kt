@@ -1,9 +1,9 @@
-package com.dhmeter.app.ui.screens.map
+package com.dropindh.app.ui.screens.map
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.dhmeter.app.ui.i18n.tr
+import com.dropindh.app.ui.i18n.tr
 import com.dhmeter.domain.model.*
 import com.dhmeter.domain.usecase.GetRunMapDataUseCase
 import com.dhmeter.domain.usecase.GetRunSectionComparisonUseCase
@@ -137,7 +137,12 @@ class MapViewModel @Inject constructor(
     }
 
     fun selectEvent(event: MapEventMarker?) {
-        _uiState.update { it.copy(selectedEvent = event) }
+        _uiState.update {
+            it.copy(
+                selectedEvent = event,
+                showSectionComparison = if (event != null) false else it.showSectionComparison
+            )
+        }
     }
 
     fun dismissEventSheet() {
@@ -146,10 +151,16 @@ class MapViewModel @Inject constructor(
 
     fun showSectionComparison() {
         if (_uiState.value.sectionComparison == null) return
-        _uiState.update { it.copy(showSectionComparison = true) }
+        _uiState.update {
+            it.copy(
+                showSectionComparison = true,
+                selectedEvent = null
+            )
+        }
     }
 
     fun dismissSectionComparison() {
         _uiState.update { it.copy(showSectionComparison = false) }
     }
 }
+

@@ -97,10 +97,11 @@ class GetRunMapDataUseCase @Inject constructor(
         val series = speedSeries ?: return emptyList()
         if (series.seriesType != SeriesType.SPEED_TIME) return emptyList()
         val distance = totalDistanceM?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
-        if (series.pointCount < 2) return emptyList()
+        val pointCount = series.effectivePointCount
+        if (pointCount < 2) return emptyList()
 
-        val values = ArrayList<Float>(series.pointCount - 1)
-        for (i in 1 until series.pointCount) {
+        val values = ArrayList<Float>(pointCount - 1)
+        for (i in 1 until pointCount) {
             val prevX = series.points[(i - 1) * 2]
             val prevT = series.points[(i - 1) * 2 + 1]
             val currX = series.points[i * 2]
@@ -336,13 +337,14 @@ class GetRunSectionComparisonUseCase @Inject constructor(
         }
 
         private fun interpolateSeriesValue(series: RunSeries, targetX: Float): Float? {
-            if (series.pointCount <= 0) return null
+            val pointCount = series.effectivePointCount
+            if (pointCount <= 0) return null
 
             var lowX = series.points[0]
             var lowY = series.points[1]
             if (targetX <= lowX) return lowY
 
-            for (i in 1 until series.pointCount) {
+            for (i in 1 until pointCount) {
                 val hiX = series.points[i * 2]
                 val hiY = series.points[i * 2 + 1]
                 if (targetX <= hiX) {

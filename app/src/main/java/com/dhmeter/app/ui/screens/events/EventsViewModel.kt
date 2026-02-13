@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.screens.events
+package com.dropindh.app.ui.screens.events
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -37,3 +37,4 @@ class EventsViewModel @Inject constructor(
         }
     }
 }
+

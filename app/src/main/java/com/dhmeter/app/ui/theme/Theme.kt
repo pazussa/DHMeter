@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.theme
+package com.dropindh.app.ui.theme
 
 import android.app.Activity
 import android.os.Build
@@ -102,3 +102,4 @@ fun DHMeterTheme(
         content = content
     )
 }
+

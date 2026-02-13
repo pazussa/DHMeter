@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.dhmeter.charts"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         minSdk = 26
@@ -45,7 +45,7 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":core"))
 
-    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.core:core-ktx:1.13.1")
     
     // Compose
     implementation(platform("androidx.compose:compose-bom:2024.02.00"))

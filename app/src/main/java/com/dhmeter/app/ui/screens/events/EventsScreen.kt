@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.screens.events
+package com.dropindh.app.ui.screens.events
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,8 +14,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dhmeter.app.ui.i18n.tr
-import com.dhmeter.app.ui.theme.*
+import com.dropindh.app.ui.i18n.tr
+import com.dropindh.app.ui.theme.*
 import com.dhmeter.domain.model.RunEvent
 import java.util.Locale
 
@@ -251,4 +251,5 @@ private fun getSeverityColor(severity: Float): androidx.compose.ui.graphics.Colo
         else -> RedNegative
     }
 }
+
 

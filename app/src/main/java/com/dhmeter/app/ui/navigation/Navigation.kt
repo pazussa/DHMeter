@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.navigation
+package com.dropindh.app.ui.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
@@ -7,16 +7,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.dhmeter.app.ui.screens.charts.ChartsScreen
-import com.dhmeter.app.ui.screens.community.CommunityScreen
-import com.dhmeter.app.ui.screens.compare.CompareScreen
-import com.dhmeter.app.ui.screens.events.EventsScreen
-import com.dhmeter.app.ui.screens.history.HistoryScreen
-import com.dhmeter.app.ui.screens.home.HomeScreen
-import com.dhmeter.app.ui.screens.map.MapScreen
-import com.dhmeter.app.ui.screens.recording.RecordingScreen
-import com.dhmeter.app.ui.screens.runsummary.RunSummaryScreen
-import com.dhmeter.app.ui.screens.trackdetail.TrackDetailScreen
+import com.dropindh.app.ui.screens.charts.ChartsScreen
+import com.dropindh.app.ui.screens.community.CommunityScreen
+import com.dropindh.app.ui.screens.compare.CompareScreen
+import com.dropindh.app.ui.screens.events.EventsScreen
+import com.dropindh.app.ui.screens.history.HistoryScreen
+import com.dropindh.app.ui.screens.home.HomeScreen
+import com.dropindh.app.ui.screens.map.MapScreen
+import com.dropindh.app.ui.screens.pro.ProScreen
+import com.dropindh.app.ui.screens.recording.RecordingScreen
+import com.dropindh.app.ui.screens.runsummary.RunSummaryScreen
+import com.dropindh.app.ui.screens.trackdetail.TrackDetailScreen
 
 sealed class Screen(val route: String) {
     data object Home : Screen("home")
@@ -47,6 +48,7 @@ sealed class Screen(val route: String) {
         fun createRoute(runId: String) = "run_map/$runId"
     }
     data object History : Screen("history")
+    data object Pro : Screen("pro")
     data object Community : Screen("community")
     data object TrackDetail : Screen("track_detail/{trackId}") {
         fun createRoute(trackId: String) = "track_detail/$trackId"
@@ -72,8 +74,8 @@ fun DHMeterNavHost(
                 onNavigateToTrackDetail = { trackId ->
                     navController.navigate(Screen.TrackDetail.createRoute(trackId))
                 },
-                onNavigateToCommunity = {
-                    navController.navigate(Screen.Community.route)
+                onNavigateToPro = {
+                    navController.navigate(Screen.Pro.route)
                 }
             )
         }
@@ -208,6 +210,14 @@ fun DHMeterNavHost(
             )
         }
 
+        composable(Screen.Pro.route) {
+            ProScreen(
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
         composable(
             route = Screen.TrackDetail.route,
             arguments = listOf(navArgument("trackId") { type = NavType.StringType })
@@ -231,3 +241,4 @@ fun DHMeterNavHost(
         }
     }
 }
+

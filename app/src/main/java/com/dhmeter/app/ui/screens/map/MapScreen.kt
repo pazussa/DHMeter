@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.screens.map
+package com.dropindh.app.ui.screens.map
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -17,8 +17,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dhmeter.app.ui.i18n.tr
-import com.dhmeter.app.ui.theme.*
+import com.dropindh.app.ui.i18n.tr
+import com.dropindh.app.ui.theme.*
 import com.dhmeter.domain.model.*
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
@@ -175,19 +175,21 @@ fun MapScreen(
         }
     }
 
-    // Event bottom sheet
-    uiState.selectedEvent?.let { event ->
-        EventBottomSheet(
-            event = event,
-            onDismiss = viewModel::dismissEventSheet
-        )
-    }
+    // Only one bottom sheet at a time to avoid overlapping modal state issues.
+    when {
+        uiState.selectedEvent != null -> {
+            EventBottomSheet(
+                event = uiState.selectedEvent!!,
+                onDismiss = viewModel::dismissEventSheet
+            )
+        }
 
-    if (uiState.showSectionComparison && uiState.sectionComparison != null) {
-        SectionComparisonBottomSheet(
-            comparison = uiState.sectionComparison!!,
-            onDismiss = viewModel::dismissSectionComparison
-        )
+        uiState.showSectionComparison && uiState.sectionComparison != null -> {
+            SectionComparisonBottomSheet(
+                comparison = uiState.sectionComparison!!,
+                onDismiss = viewModel::dismissSectionComparison
+            )
+        }
     }
 }
 
@@ -858,4 +860,5 @@ private fun formatVsFastestDelta(deltaMs: Long?): String {
         if (isSpanishLanguage()) "+$valueText mas lento" else "+$valueText slower"
     }
 }
+
 

@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.screens.charts
+package com.dropindh.app.ui.screens.charts
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dhmeter.app.ui.metrics.normalizeSeriesBurdenScore
+import com.dropindh.app.ui.metrics.normalizeSeriesBurdenScore
 import com.dhmeter.charts.components.ComparisonLineChart
 import com.dhmeter.charts.components.EventMarkers
 import com.dhmeter.charts.components.HeatmapBar
@@ -29,8 +29,8 @@ import com.dhmeter.domain.model.RunSeries
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.EventType
 import com.dhmeter.domain.model.SeriesType
-import com.dhmeter.app.ui.i18n.tr
-import com.dhmeter.app.ui.theme.dhTopBarColors
+import com.dropindh.app.ui.i18n.tr
+import com.dropindh.app.ui.theme.dhTopBarColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -335,7 +335,8 @@ private fun SpeedComparisonSection(
  * Extension function to convert RunSeries to list of ChartPoint
  */
 private fun RunSeries.toChartPoints(): List<ChartPoint> {
-    return (0 until pointCount).mapNotNull { i ->
+    val count = effectivePointCount
+    return (0 until count).mapNotNull { i ->
         ChartPoint(points[i * 2], normalizeToScore(seriesType, points[i * 2 + 1]))
             .takeIf { it.x.isFinite() && it.y.isFinite() }
     }
@@ -344,10 +345,11 @@ private fun RunSeries.toChartPoints(): List<ChartPoint> {
 private fun RunSeries.toSpeedChartPoints(distanceMeters: Float?): List<ChartPoint> {
     if (seriesType != SeriesType.SPEED_TIME) return emptyList()
     val totalDistanceM = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
-    if (pointCount < 2) return emptyList()
+    val count = effectivePointCount
+    if (count < 2) return emptyList()
 
-    val result = ArrayList<ChartPoint>(pointCount - 1)
-    for (i in 1 until pointCount) {
+    val result = ArrayList<ChartPoint>(count - 1)
+    for (i in 1 until count) {
         val prevX = points[(i - 1) * 2]
         val prevT = points[(i - 1) * 2 + 1]
         val currX = points[i * 2]
@@ -442,5 +444,6 @@ private fun String.toMarkerColor(): Color {
         else -> Color(0xFF9C27B0)                        // Purple
     }
 }
+
 
 
