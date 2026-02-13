@@ -310,7 +310,7 @@ private fun AutoSegmentsCard(
                 Text(
                     text = tr(
                         "Auto-start triggers near start, above ~9 km/h, and aligned direction.",
-                        "El auto-inicio se activa cerca del inicio, sobre ~9 km/h y con direccion alineada."
+                        "El auto-inicio se activa cerca del inicio, sobre ~9 km/h y con dirección alineada."
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
@@ -529,12 +529,12 @@ private fun SensorSensitivitySheet(
             )
 
             SensitivitySliderRow(
-                label = tr("Impact (Accelerometer)", "Impacto (Acelerometro)"),
+                label = tr("Impact (Accelerometer)", "Impacto (Acelerómetro)"),
                 value = settings.impactSensitivity,
                 onValueChange = onImpactSensitivityChange
             )
             SensitivitySliderRow(
-                label = tr("Vibration (Accelerometer)", "Vibración (Acelerometro)"),
+                label = tr("Vibration (Accelerometer)", "Vibración (Acelerómetro)"),
                 value = settings.harshnessSensitivity,
                 onValueChange = onHarshnessSensitivityChange
             )

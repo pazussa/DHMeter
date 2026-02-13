@@ -271,14 +271,14 @@ private fun HomeHeroBanner(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = tr("Downhill Telemetry", "Telemetria Downhill"),
+                    text = tr("Downhill Telemetry", "Telemetría Downhill"),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = tr(
                         "Rider, get the most out of every descent.",
-                        "Rider, saca el maximo de tus bajadas."
+                        "Rider, saca el máximo de tus bajadas."
                     ),
                     style = MaterialTheme.typography.titleLarge
                 )
@@ -391,7 +391,7 @@ private fun EmptyTracksContent(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = tr("No tracks yet", "Aun no hay tracks"),
+                text = tr("No tracks yet", "Aún no hay tracks"),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

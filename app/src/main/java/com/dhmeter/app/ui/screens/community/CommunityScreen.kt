@@ -613,7 +613,7 @@ private fun RiderProgressDialog(
 private fun TermsDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(tr("Community terms", "Terminos de comunidad")) },
+        title = { Text(tr("Community terms", "Términos de comunidad")) },
         text = {
             Text(
                 tr(
@@ -673,13 +673,13 @@ private fun mapErrorCode(code: String?): String? {
         "LOCATION_REQUIRED" -> tr("City or place is required.", "La ciudad o lugar es obligatoria.")
         "USERNAME_TAKEN" -> tr("That username is already in use.", "Ese usuario ya está en uso.")
         "TERMS_REQUIRED" -> tr("You must accept terms to continue.", "Debes aceptar los términos para continuar.")
-        "USER_NOT_REGISTERED" -> tr("Register first to continue.", "Registrate primero para continuar.")
-        "MESSAGE_EMPTY" -> tr("Message cannot be empty.", "El mensaje no puede ir vacio.")
-        "MESSAGE_NOT_FOUND" -> tr("Message was not found.", "No se encontro el mensaje.")
+        "USER_NOT_REGISTERED" -> tr("Register first to continue.", "Regístrate primero para continuar.")
+        "MESSAGE_EMPTY" -> tr("Message cannot be empty.", "El mensaje no puede ir vacío.")
+        "MESSAGE_NOT_FOUND" -> tr("Message was not found.", "No se encontró el mensaje.")
         "REPORT_TARGET_REQUIRED" -> tr("Choose a user to report.", "Selecciona un usuario para reportar.")
-        "REPORT_TARGET_NOT_FOUND" -> tr("User was not found.", "No se encontro el usuario.")
+        "REPORT_TARGET_NOT_FOUND" -> tr("User was not found.", "No se encontró el usuario.")
         "BLOCK_TARGET_REQUIRED" -> tr("Choose a user to block.", "Selecciona un usuario para bloquear.")
-        "BLOCK_TARGET_NOT_FOUND" -> tr("User was not found.", "No se encontro el usuario.")
+        "BLOCK_TARGET_NOT_FOUND" -> tr("User was not found.", "No se encontró el usuario.")
         "BLOCK_SELF_NOT_ALLOWED" -> tr("You cannot block your own account.", "No puedes bloquear tu propia cuenta.")
         "CLOUD_NOT_CONFIGURED" -> tr(
             "Cloud community is not configured yet.",

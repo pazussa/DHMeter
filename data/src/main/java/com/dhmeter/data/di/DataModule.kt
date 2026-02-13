@@ -10,9 +10,11 @@ import com.dhmeter.data.local.dao.TrackDao
 import com.dhmeter.data.repository.RunRepositoryImpl
 import com.dhmeter.data.repository.SensorSensitivityRepositoryImpl
 import com.dhmeter.data.repository.TrackRepositoryImpl
+import com.dhmeter.data.repository.TrackAutoStartRepositoryImpl
 import com.dhmeter.domain.repository.RunRepository
 import com.dhmeter.domain.repository.SensorSensitivityRepository
 import com.dhmeter.domain.repository.TrackRepository
+import com.dhmeter.domain.repository.TrackAutoStartRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -90,5 +92,11 @@ object DataModule {
     fun provideSensorSensitivityRepository(
         impl: SensorSensitivityRepositoryImpl
     ): SensorSensitivityRepository = impl
+
+    @Provides
+    @Singleton
+    fun provideTrackAutoStartRepository(
+        impl: TrackAutoStartRepositoryImpl
+    ): TrackAutoStartRepository = impl
 
 }

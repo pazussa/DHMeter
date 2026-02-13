@@ -117,7 +117,7 @@ fun NewTrackDialog(
                 OutlinedTextField(
                     value = locationHint,
                     onValueChange = { locationHint = it },
-                    label = { Text(tr("Location (optional)", "Ubicacion (opcional)")) },
+                    label = { Text(tr("Location (optional)", "Ubicación (opcional)")) },
                     placeholder = { Text(tr("e.g., Bike Park, Trail name", "ej. Bike Park, nombre del trail")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()

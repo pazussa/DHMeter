@@ -115,7 +115,7 @@ fun RunSummaryScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(tr("Run not found", "No se encontro la bajada"))
+                    Text(tr("Run not found", "No se encontró la bajada"))
                 }
             }
         }
@@ -661,7 +661,7 @@ private fun RunChartsSection(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = tr("Charts", "Graficas"),
+            text = tr("Charts", "Gráficas"),
             style = MaterialTheme.typography.titleMedium
         )
         Text(

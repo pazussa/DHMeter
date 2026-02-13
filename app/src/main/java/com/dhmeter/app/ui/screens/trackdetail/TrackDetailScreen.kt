@@ -117,7 +117,55 @@ fun TrackDetailScreen(
                             modifier = Modifier.padding(16.dp)
                         )
                     }
-                    
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        colors = dhGlassCardColors()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = tr("Track auto-start", "Auto-start del track"),
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = tr(
+                                        "Auto-start by local segments",
+                                        "Auto-inicio por segmentos locales"
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = uiState.isAutoStartEnabled,
+                                onCheckedChange = viewModel::setAutoStartEnabled,
+                                enabled = uiState.canEnableAutoStart
+                            )
+                        }
+
+                        if (!uiState.canEnableAutoStart) {
+                            Text(
+                                text = tr(
+                                    "Record at least one run to enable auto-start and segments.",
+                                    "Debes hacer una bajada para activar el auto-start y los segmentos."
+                                ),
+                                modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                     
                     // Compare mode instructions
                     if (isCompareMode) {
                         Card(
@@ -157,7 +205,7 @@ fun TrackDetailScreen(
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    text = tr("No runs yet", "Aun no hay bajadas"),
+                                    text = tr("No runs yet", "Aún no hay bajadas"),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

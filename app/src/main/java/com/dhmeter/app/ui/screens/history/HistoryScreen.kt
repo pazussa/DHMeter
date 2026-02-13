@@ -72,7 +72,7 @@ fun HistoryScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = tr("No tracks yet", "Aun no hay tracks"),
+                            text = tr("No tracks yet", "Aún no hay tracks"),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

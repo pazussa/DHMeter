@@ -51,7 +51,7 @@ fun ChartsScreen(
         topBar = {
             TopAppBar(
                 colors = dhTopBarColors(),
-                title = { Text(tr("Charts (${runIds.size} runs)", "Graficas (${runIds.size} bajadas)")) },
+                title = { Text(tr("Charts (${runIds.size} runs)", "Gráficas (${runIds.size} bajadas)")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atrás"))

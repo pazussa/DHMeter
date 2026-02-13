@@ -177,7 +177,7 @@ fun ProScreen(
                         Text(
                             text = tr(
                                 "No subscription plans found in Play Billing yet.",
-                                "Aun no hay planes cargados en Play Billing."
+                                "Aún no hay planes cargados en Play Billing."
                             ),
                             modifier = Modifier.padding(16.dp)
                         )
@@ -285,7 +285,7 @@ private fun SubscriptionPlanCard(
             }
             if (product.hasFreeTrial) {
                 Text(
-                    text = tr("Includes trial period", "Incluye periodo de prueba"),
+                    text = tr("Includes trial period", "Incluye período de prueba"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.tertiary
                 )

@@ -181,4 +181,82 @@ Hay un test que valida alineacion entre monitor en vivo y normalizacion de serie
 
 Esto respalda coherencia de la escala de grafica con la parte live, pero no implica igualdad numerica con el score final de cards (porque ese score usa otra formula y agregacion).
 
+## 9. Coherencia con objetivo de vida real (downhill)
+
+Objetivo real implicito del producto:
+- premiar bajadas mas controladas y menos castigadoras para rider/bici,
+- penalizar impactos duros, vibracion alta e inestabilidad.
+
+Veredicto global:
+- **SI es coherente a nivel de direccion fisica y utilidad practica**.
+- **NO es aun un score absoluto "de verdad universal"**.
+- En estado actual: **coherencia real aproximada 7/10**.
+
+### 9.1 Impacto (coherencia real: media)
+
+Lo bueno:
+- usa picos reales sobre umbral y pondera por energia (`peakG^2`), lo que si representa golpes mas fuertes.
+
+Lo mejorable para vida real:
+- el score final de impacto se calcula como **suma** de ventanas (`SignalProcessor.kt:67`), con ventanas solapadas (1.0 s / hop 0.25 s), por lo que un mismo evento puede influir en varias ventanas.
+- eso introduce sesgo por duracion/longitud de bajada (a igual estilo, una bajada mas larga puede salir peor solo por acumular mas).
+
+Impacto en interpretacion real:
+- bueno como "carga acumulada total",
+- menos bueno como comparacion justa entre bajadas de duracion distinta si no se normaliza por tiempo o distancia.
+
+### 9.2 Vibracion (coherencia real: media-alta)
+
+Lo bueno:
+- el RMS de diferencias captura bien terreno "chatter"/aspereza de forma robusta y simple.
+
+Lo mejorable:
+- el comentario de dominio menciona banda 15-40Hz, pero en implementacion se usa aproximacion por diferencia (no un band-pass real).
+- puede mezclar ruido de sensor/montaje con vibracion real, dependiendo de telefono y fijacion.
+
+Impacto en vida real:
+- util para comparar tendencia de suavidad,
+- menos fiable como magnitud fisica exacta entre dispositivos distintos.
+
+### 9.3 Estabilidad (coherencia real: media)
+
+Lo bueno:
+- varianza de gyro X+Y representa bien descontrol angular general.
+
+Lo mejorable:
+- no distingue entre inestabilidad "mala" y maniobra agresiva/intencional (curvas rapidas, saltos, correcciones deportivas).
+- depende bastante de posicion del telefono y setup del rider.
+
+Impacto en vida real:
+- bueno para detectar bajadas erraticas,
+- puede penalizar estilo agresivo pero tecnico en pistas exigentes.
+
+### 9.4 Normalizacion y calibracion (coherencia real: media)
+
+Lo bueno:
+- la transformacion saturante `x/(x+REF)` evita extremos y hace scores estables.
+
+Lo mejorable:
+- refs fijos (`25`, `1.2`, `0.35`) no estan adaptados por rider, bici, montaje, ni tipo de pista.
+- eso limita comparabilidad absoluta entre usuarios/tracks.
+
+Impacto en vida real:
+- bueno para seguimiento personal en condiciones parecidas,
+- menos bueno para ranking absoluto entre contextos distintos.
+
+## 10. Conclusiones practicas
+
+Hoy el sistema sirve bien para:
+- comparar **tu propia evolucion** en el mismo track y setup,
+- detectar si una bajada fue globalmente mas suave o mas castigadora.
+
+Hoy el sistema no debe venderse como:
+- medicion absoluta universal entre riders/dispositivos/tracks muy distintos.
+
+Si se quiere subir coherencia real a nivel "competitivo" (8.5-9/10):
+1. normalizar impacto por distancia o tiempo (no solo suma),
+2. usar filtro de vibracion band-pass real (por ejemplo 15-40Hz),
+3. calibrar refs por dispositivo/montaje y por tipo de pista,
+4. agregar un indice de confianza del score segun calidad de senal/GPS.
+
 

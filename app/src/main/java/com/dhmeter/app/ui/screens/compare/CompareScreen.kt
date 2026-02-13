@@ -632,7 +632,7 @@ private fun SplitSectionTable(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = tr("Section", "Seccion"),
+                    text = tr("Section", "Sección"),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.width(132.dp)

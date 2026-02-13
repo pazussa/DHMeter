@@ -16,6 +16,7 @@ import com.dropindh.app.ui.MainActivity
 import com.dropindh.app.ui.i18n.tr
 import com.dhmeter.domain.model.TrackSegment
 import com.dhmeter.domain.repository.SensorSensitivityRepository
+import com.dhmeter.domain.repository.TrackAutoStartRepository
 import com.dhmeter.domain.usecase.GetTrackSegmentsUseCase
 import com.dhmeter.domain.usecase.ProcessRunUseCase
 import com.dhmeter.sensing.RecordingManager
@@ -84,6 +85,9 @@ class RecordingService : Service() {
 
     @Inject
     lateinit var sensitivityRepository: SensorSensitivityRepository
+
+    @Inject
+    lateinit var trackAutoStartRepository: TrackAutoStartRepository
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val binder = RecordingBinder()
@@ -156,7 +160,7 @@ class RecordingService : Service() {
 
     fun startRecording(trackId: String) {
         currentTrackId = trackId
-        autoEnabledTrackId = trackId
+        configureAutoMonitoringForTrack(trackId)
         startTimeMs = System.currentTimeMillis()
         activeAutoSegment = null
         isAutoStopInProgress = false
@@ -180,7 +184,7 @@ class RecordingService : Service() {
                     _recordingState.value = RecordingState.Error(
                         it.message ?: msgFailedStartRecording()
                     )
-                    ensureForegroundNotification(msgAutoArmed())
+                    ensureForegroundNotification(currentAutoStatusMessage())
                 }
         }
     }
@@ -189,11 +193,10 @@ class RecordingService : Service() {
         val sanitizedTrackId = trackId?.takeIf { it.isNotBlank() }
         if (sanitizedTrackId != null) {
             currentTrackId = sanitizedTrackId
-            autoEnabledTrackId = sanitizedTrackId
-            loadLocalSegments(sanitizedTrackId)
+            configureAutoMonitoringForTrack(sanitizedTrackId)
         }
 
-        ensureForegroundNotification(msgAutoArmed())
+        ensureForegroundNotification(currentAutoStatusMessage())
         startAutoPreviewIfPossible()
         _recordingState.value = RecordingState.Idle
     }
@@ -224,7 +227,7 @@ class RecordingService : Service() {
 
     fun stopForegroundOnly() {
         if (autoEnabledTrackId != null) {
-            ensureForegroundNotification(msgAutoArmed())
+            ensureForegroundNotification(currentAutoStatusMessage())
             _recordingState.value = RecordingState.Idle
             return
         }
@@ -253,7 +256,7 @@ class RecordingService : Service() {
         startAutoPreviewIfPossible()
 
         if (autoEnabledTrackId != null) {
-            ensureForegroundNotification(msgAutoArmed())
+            ensureForegroundNotification(currentAutoStatusMessage())
         } else {
             stopForegroundAndSelf()
         }
@@ -290,20 +293,38 @@ class RecordingService : Service() {
         }
     }
 
+    private fun configureAutoMonitoringForTrack(trackId: String) {
+        val enabled = trackAutoStartRepository.isAutoStartEnabled(trackId)
+        autoEnabledTrackId = trackId.takeIf { enabled }
+        if (enabled) {
+            loadLocalSegments(trackId)
+        } else {
+            autoSegments = emptyList()
+            activeAutoSegment = null
+            resetStartCandidate()
+        }
+    }
+
+    private fun currentAutoStatusMessage(): String {
+        return if (autoEnabledTrackId != null) {
+            msgAutoArmed()
+        } else {
+            msgAutoDisabled()
+        }
+    }
+
     private fun observeRecordingState() {
         serviceScope.launch {
             recordingManager.recordingState.collect { state ->
                 when (state) {
                     is SensorRecordingState.Idle -> {
-                        if (autoEnabledTrackId != null && !isAutoStopInProgress) {
-                            ensureForegroundNotification(msgAutoArmed())
+                        if (!isAutoStopInProgress) {
+                            ensureForegroundNotification(currentAutoStatusMessage())
                         }
                     }
 
                     is SensorRecordingState.Completed -> {
-                        if (autoEnabledTrackId != null) {
-                            ensureForegroundNotification(msgAutoArmed())
-                        }
+                        ensureForegroundNotification(currentAutoStatusMessage())
                     }
 
                     is SensorRecordingState.Error -> {
@@ -336,6 +357,10 @@ class RecordingService : Service() {
     }
 
     private fun maybeAutoStartAtSegmentStart(location: PreviewLocation) {
+        if (autoEnabledTrackId == null) {
+            updateLastPreviewLocation(location)
+            return
+        }
         if (recordingManager.recordingState.value is SensorRecordingState.Recording) {
             updateLastPreviewLocation(location)
             return
@@ -449,7 +474,7 @@ class RecordingService : Service() {
                     isAutoStopInProgress = false
                     previewManager.resumeAll()
                     startAutoPreviewIfPossible()
-                    ensureForegroundNotification(msgAutoArmed())
+                    ensureForegroundNotification(currentAutoStatusMessage())
                 }
         }
     }
@@ -694,6 +719,9 @@ class RecordingService : Service() {
 
     private fun msgAutoArmed(): String =
         tr(this, "Auto-start armed", "Auto-inicio armado")
+
+    private fun msgAutoDisabled(): String =
+        tr(this, "Auto-start disabled", "Auto-start desactivado")
 
     private fun msgWaitingSensors(): String =
         tr(this, "Waiting for sensor preview", "Esperando vista previa de sensores")
