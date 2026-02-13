@@ -76,6 +76,9 @@ fun DHMeterNavHost(
                 },
                 onNavigateToPro = {
                     navController.navigate(Screen.Pro.route)
+                },
+                onNavigateToCommunity = {
+                    navController.navigate(Screen.Community.route)
                 }
             )
         }
