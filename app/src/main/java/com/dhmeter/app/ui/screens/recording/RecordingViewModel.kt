@@ -1,12 +1,13 @@
-package com.dhmeter.app.ui.screens.recording
+package com.dropindh.app.ui.screens.recording
 
 import android.content.Context
 import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dropindh.app.monetization.EventTracker
 import com.dhmeter.domain.model.SensorSensitivitySettings
-import com.dhmeter.app.service.RecordingService
-import com.dhmeter.app.ui.i18n.tr
+import com.dropindh.app.service.RecordingService
+import com.dropindh.app.ui.i18n.tr
 import com.dhmeter.domain.model.TrackSegment
 import com.dhmeter.domain.usecase.GetTrackByIdUseCase
 import com.dhmeter.domain.usecase.GetTrackSegmentsUseCase
@@ -68,7 +69,8 @@ class RecordingViewModel @Inject constructor(
     private val recordingManager: RecordingManager,
     private val processRunUseCase: ProcessRunUseCase,
     private val previewManager: RecordingPreviewManager,
-    private val sensitivityRepository: SensorSensitivityRepository
+    private val sensitivityRepository: SensorSensitivityRepository,
+    private val eventTracker: EventTracker
 ) : ViewModel() {
 
     companion object {
@@ -477,6 +479,7 @@ class RecordingViewModel @Inject constructor(
 
             processRunUseCase(captureHandle)
                 .onSuccess { runId ->
+                    eventTracker.trackFirstRunCompleteIfNeeded()
                     isAutoStopInProgress = false
                     activeAutoSegment = null
                     segmentLoadJob?.cancel()
@@ -1089,3 +1092,4 @@ class RecordingViewModel @Inject constructor(
         }
     }
 }
+

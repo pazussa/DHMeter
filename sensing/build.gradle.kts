@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.dhmeter.sensing"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         minSdk = 26
@@ -40,12 +40,12 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":core"))
     
-    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.core:core-ktx:1.13.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     
     // Location Services
-    implementation("com.google.android.gms:play-services-location:21.1.0")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     
     // Hilt
     implementation("com.google.dagger:hilt-android:2.50")

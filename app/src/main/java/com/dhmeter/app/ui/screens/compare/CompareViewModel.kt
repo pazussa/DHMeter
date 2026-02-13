@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.screens.compare
+package com.dropindh.app.ui.screens.compare
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -37,3 +37,4 @@ class CompareViewModel @Inject constructor(
         }
     }
 }
+

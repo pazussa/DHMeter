@@ -11,25 +11,31 @@ data class RunSeries(
     val points: FloatArray, // Interleaved [x0, y0, x1, y1, ...]
     val pointCount: Int
 ) {
+    val effectivePointCount: Int
+        get() = pointCount.coerceAtLeast(0).coerceAtMost(points.size / 2)
+
     /**
      * Get X values as a list
      */
     fun getXValues(): List<Float> {
-        return (0 until pointCount).map { points[it * 2] }
+        val count = effectivePointCount
+        return (0 until count).map { points[it * 2] }
     }
 
     /**
      * Get Y values as a list
      */
     fun getYValues(): List<Float> {
-        return (0 until pointCount).map { points[it * 2 + 1] }
+        val count = effectivePointCount
+        return (0 until count).map { points[it * 2 + 1] }
     }
 
     /**
      * Get point at index
      */
     fun getPoint(index: Int): Pair<Float, Float> {
-        require(index in 0 until pointCount)
+        val count = effectivePointCount
+        require(index in 0 until count)
         return Pair(points[index * 2], points[index * 2 + 1])
     }
 

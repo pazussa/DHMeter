@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.components
+package com.dropindh.app.ui.components
 
 import android.Manifest
 import android.os.Build
@@ -26,3 +26,4 @@ fun PermissionHandler() {
         }
     }
 }
+

@@ -64,7 +64,6 @@ object DataModule {
             "dhmeter.db"
         )
         .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
-        .fallbackToDestructiveMigration()
         .build()
     }
 

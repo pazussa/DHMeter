@@ -24,6 +24,11 @@ import javax.inject.Singleton
 class ImuCollector @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    companion object {
+        // Cap at 200 Hz to avoid requiring HIGH_SAMPLING_RATE_SENSORS policy exceptions.
+        private const val SENSOR_SAMPLING_PERIOD_US = 5_000
+    }
+
     private val sensorManager: SensorManager by lazy {
         context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     }
@@ -116,7 +121,7 @@ class ImuCollector @Inject constructor(
         val accelRegistered = sensorManager.registerListener(
             linearAccelListener,
             linearAccel,
-            SensorManager.SENSOR_DELAY_FASTEST,
+            SENSOR_SAMPLING_PERIOD_US,
             handler
         )
         if (!accelRegistered) {
@@ -133,7 +138,7 @@ class ImuCollector @Inject constructor(
         val gyroRegistered = sensorManager.registerListener(
             gyroListener,
             gyro,
-            SensorManager.SENSOR_DELAY_FASTEST,
+            SENSOR_SAMPLING_PERIOD_US,
             handler
         )
         if (!gyroRegistered) {
@@ -147,7 +152,7 @@ class ImuCollector @Inject constructor(
             sensorManager.registerListener(
                 rotationListener,
                 rotationVector,
-                SensorManager.SENSOR_DELAY_FASTEST,
+                SENSOR_SAMPLING_PERIOD_US,
                 handler
             )
         }

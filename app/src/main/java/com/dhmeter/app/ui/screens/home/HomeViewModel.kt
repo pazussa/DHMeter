@@ -1,7 +1,8 @@
-package com.dhmeter.app.ui.screens.home
+package com.dropindh.app.ui.screens.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dropindh.app.monetization.EventTracker
 import com.dhmeter.domain.model.Track
 import com.dhmeter.domain.usecase.CreateTrackUseCase
 import com.dhmeter.domain.usecase.GetTracksUseCase
@@ -29,7 +30,8 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     private val getTracksUseCase: GetTracksUseCase,
     private val createTrackUseCase: CreateTrackUseCase,
-    private val sensorAvailability: SensorAvailability
+    private val sensorAvailability: SensorAvailability,
+    private val eventTracker: EventTracker
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -65,6 +67,9 @@ class HomeViewModel @Inject constructor(
     fun createTrack(name: String, locationHint: String?) {
         viewModelScope.launch {
             createTrackUseCase(name, locationHint)
+                .onSuccess {
+                    eventTracker.trackOnboardingCompleteIfNeeded()
+                }
                 .onFailure { e ->
                     _uiState.update { it.copy(error = e.message) }
                 }
@@ -75,3 +80,4 @@ class HomeViewModel @Inject constructor(
         _uiState.update { it.copy(error = null) }
     }
 }
+

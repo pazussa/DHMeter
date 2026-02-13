@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.theme
+package com.dropindh.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
@@ -42,3 +42,4 @@ val ChartSlope = Color(0xFFB5BECC)
 val HeatmapLow = Color(0xFF8BEE64)    // Green - low severity
 val HeatmapMid = Color(0xFFFFC74D)    // Yellow - medium
 val HeatmapHigh = Color(0xFFFF5454)   // Red - high severity
+

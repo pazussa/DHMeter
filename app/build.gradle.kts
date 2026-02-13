@@ -6,34 +6,66 @@ plugins {
 }
 
 android {
-    namespace = "com.dhmeter.app"
-    compileSdk = 34
+    namespace = "com.dropindh.app"
+    compileSdk = 35
 
-    val debugKeystoreFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+    val mapsApiKey = providers.gradleProperty("MAPS_API_KEY")
+        .orElse(providers.environmentVariable("MAPS_API_KEY"))
+        .orNull
+        ?: ""
+
+    val releaseStoreFile = providers.gradleProperty("RELEASE_STORE_FILE")
+        .orElse(providers.environmentVariable("RELEASE_STORE_FILE"))
+        .orNull
+    val releaseStorePassword = providers.gradleProperty("RELEASE_STORE_PASSWORD")
+        .orElse(providers.environmentVariable("RELEASE_STORE_PASSWORD"))
+        .orNull
+    val releaseKeyAlias = providers.gradleProperty("RELEASE_KEY_ALIAS")
+        .orElse(providers.environmentVariable("RELEASE_KEY_ALIAS"))
+        .orNull
+    val releaseKeyPassword = providers.gradleProperty("RELEASE_KEY_PASSWORD")
+        .orElse(providers.environmentVariable("RELEASE_KEY_PASSWORD"))
+        .orNull
+    val hasReleaseSigning = !releaseStoreFile.isNullOrBlank() &&
+        !releaseStorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank()
 
     defaultConfig {
-        applicationId = "com.dhmeter.app"
+        applicationId = "com.dropindh.app"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0.0-MVP"
+
+        val firebaseApiKey = providers.gradleProperty("FIREBASE_API_KEY").orNull ?: ""
+        val firebaseAppId = providers.gradleProperty("FIREBASE_APP_ID").orNull ?: ""
+        val firebaseProjectId = providers.gradleProperty("FIREBASE_PROJECT_ID").orNull ?: ""
+        val firebaseStorageBucket = providers.gradleProperty("FIREBASE_STORAGE_BUCKET").orNull ?: ""
+        val firebaseSenderId = providers.gradleProperty("FIREBASE_MESSAGING_SENDER_ID").orNull ?: ""
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
         
-        // Google Maps API Key (provided by user)
-        manifestPlaceholders["MAPS_API_KEY"] = "AIzaSyCBLZIGOATZaeHpFtVNU4jZJtWRy8C8b60"
+        // Do not hardcode API keys in VCS; inject via Gradle properties or CI env vars.
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
+
+        buildConfigField("String", "FIREBASE_API_KEY", "\"$firebaseApiKey\"")
+        buildConfigField("String", "FIREBASE_APP_ID", "\"$firebaseAppId\"")
+        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"$firebaseProjectId\"")
+        buildConfigField("String", "FIREBASE_STORAGE_BUCKET", "\"$firebaseStorageBucket\"")
+        buildConfigField("String", "FIREBASE_MESSAGING_SENDER_ID", "\"$firebaseSenderId\"")
     }
 
     signingConfigs {
-        create("devRelease") {
-            if (debugKeystoreFile.exists()) {
-                storeFile = debugKeystoreFile
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
             }
         }
     }
@@ -42,7 +74,9 @@ android {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = signingConfigs.getByName("devRelease")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -89,8 +123,8 @@ dependencies {
     implementation(project(":charts"))
 
     // AndroidX Core
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
@@ -113,11 +147,20 @@ dependencies {
     ksp("com.google.dagger:hilt-compiler:2.50")
     
     // Location Services
-    implementation("com.google.android.gms:play-services-location:21.1.0")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     
     // Google Maps
     implementation("com.google.maps.android:maps-compose:4.3.0")
-    implementation("com.google.android.gms:play-services-maps:18.2.0")
+    implementation("com.google.android.gms:play-services-maps:19.1.0")
+
+    // Google Play Billing
+    implementation("com.android.billingclient:billing-ktx:7.1.1")
+
+    // Firebase (real-time community)
+    implementation(platform("com.google.firebase:firebase-bom:33.8.0"))
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
     
     // Permissions
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
@@ -138,3 +181,4 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+

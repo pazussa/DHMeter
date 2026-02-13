@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.metrics
+package com.dropindh.app.ui.metrics
 
 import com.dhmeter.domain.model.Run
 import com.dhmeter.domain.model.SeriesType
@@ -68,3 +68,4 @@ fun formatScore0to100(value: Float?): String {
     value ?: return "--"
     return String.format(Locale.US, "%.2f", value.coerceIn(0f, 100f))
 }
+

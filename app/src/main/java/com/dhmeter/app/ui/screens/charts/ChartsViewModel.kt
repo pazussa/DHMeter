@@ -1,10 +1,10 @@
-package com.dhmeter.app.ui.screens.charts
+package com.dropindh.app.ui.screens.charts
 
 import androidx.compose.ui.graphics.Color
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.dhmeter.app.ui.i18n.tr
+import com.dropindh.app.ui.i18n.tr
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.RunSeries
 import com.dhmeter.domain.model.SeriesType
@@ -133,3 +133,4 @@ class ChartsViewModel @Inject constructor(
         loadChartData(trackId, listOf(runAId, runBId))
     }
 }
+

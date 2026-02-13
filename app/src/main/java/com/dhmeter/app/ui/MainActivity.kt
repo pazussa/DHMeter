@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui
+package com.dropindh.app.ui
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -10,9 +10,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import com.dhmeter.app.ui.navigation.DHMeterNavHost
-import com.dhmeter.app.ui.theme.DHMeterTheme
-import com.dhmeter.app.ui.theme.DHRaceBackground
+import com.dropindh.app.ui.navigation.DHMeterNavHost
+import com.dropindh.app.ui.theme.DHMeterTheme
+import com.dropindh.app.ui.theme.DHRaceBackground
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -37,3 +37,4 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+

@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.screens.history
+package com.dropindh.app.ui.screens.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -58,3 +58,4 @@ class HistoryViewModel @Inject constructor(
         _uiState.update { it.copy(runCounts = counts) }
     }
 }
+

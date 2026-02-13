@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.theme
+package com.dropindh.app.ui.theme
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -84,3 +84,4 @@ fun dhGlassCardColors(emphasis: Boolean = false): CardColors = CardDefaults.card
         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f)
     }
 )
+

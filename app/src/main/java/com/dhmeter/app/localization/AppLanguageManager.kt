@@ -1,8 +1,7 @@
-package com.dhmeter.app.localization
+package com.dropindh.app.localization
 
 import android.app.Activity
 import android.content.Context
-import android.os.Build
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import java.util.Locale
@@ -35,12 +34,7 @@ object AppLanguageManager {
     }
 
     fun isSpanish(context: Context): Boolean {
-        val language = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            context.resources.configuration.locales.get(0)?.language
-        } else {
-            @Suppress("DEPRECATION")
-            context.resources.configuration.locale.language
-        } ?: LANGUAGE_ES
+        val language = context.resources.configuration.locales.get(0)?.language ?: LANGUAGE_ES
         return normalize(language) == LANGUAGE_ES
     }
 
@@ -64,3 +58,4 @@ object AppLanguageManager {
         }
     }
 }
+

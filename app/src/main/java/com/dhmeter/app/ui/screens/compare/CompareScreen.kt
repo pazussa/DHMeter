@@ -1,4 +1,4 @@
-package com.dhmeter.app.ui.screens.compare
+package com.dropindh.app.ui.screens.compare
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ScrollState
@@ -20,8 +20,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dhmeter.app.ui.i18n.tr
-import com.dhmeter.app.ui.theme.*
+import com.dropindh.app.ui.i18n.tr
+import com.dropindh.app.ui.theme.*
 import com.dhmeter.charts.components.ComparisonLineChart
 import com.dhmeter.charts.model.AxisConfig
 import com.dhmeter.charts.model.ChartPoint
@@ -866,5 +866,6 @@ private fun findPointNearDistPct(points: List<GpsPoint>, targetPct: Float): GpsP
     if (points.isEmpty()) return null
     return points.minByOrNull { point -> abs(point.distPct - targetPct) }
 }
+
 
 

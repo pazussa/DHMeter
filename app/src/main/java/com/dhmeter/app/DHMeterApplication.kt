@@ -1,18 +1,26 @@
-package com.dhmeter.app
+package com.dropindh.app
 
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import com.dhmeter.app.localization.AppLanguageManager
-import com.dhmeter.app.ui.i18n.tr
+import com.dropindh.app.community.FirebaseBootstrap
+import com.dropindh.app.localization.AppLanguageManager
+import com.dropindh.app.monetization.EventTracker
+import com.dropindh.app.ui.i18n.tr
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 @HiltAndroidApp
 class DHMeterApplication : Application() {
 
+    @Inject
+    lateinit var eventTracker: EventTracker
+
     override fun onCreate() {
         super.onCreate()
         AppLanguageManager.applySavedLanguage(this)
+        FirebaseBootstrap.initialize(this)
+        eventTracker.trackInstallIfNeeded()
         createNotificationChannels()
     }
 
@@ -52,3 +60,4 @@ class DHMeterApplication : Application() {
         const val CHANNEL_ALERTS = "alerts_channel"
     }
 }
+
