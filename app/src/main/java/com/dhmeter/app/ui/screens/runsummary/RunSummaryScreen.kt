@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,8 +21,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dropindh.app.ui.i18n.tr
 import com.dropindh.app.ui.metrics.formatScore0to100
 import com.dropindh.app.ui.metrics.normalizeSeriesBurdenScore
-import com.dropindh.app.ui.metrics.runMetricQualityScore
-import com.dropindh.app.ui.metrics.runOverallQualityScore
+import com.dropindh.app.ui.metrics.runMetricBurdenScore
+import com.dropindh.app.ui.metrics.runOverallBurdenScore
 import com.dropindh.app.ui.theme.*
 import com.dhmeter.charts.components.ComparisonLineChart
 import com.dhmeter.charts.components.EventMarkers
@@ -46,7 +47,6 @@ import java.util.*
 fun RunSummaryScreen(
     runId: String,
     onCompare: (trackId: String, runAId: String, runBId: String) -> Unit,
-    onViewEvents: () -> Unit,
     onViewMap: () -> Unit,
     onBack: () -> Unit,
     viewModel: RunSummaryViewModel = hiltViewModel()
@@ -66,16 +66,13 @@ fun RunSummaryScreen(
                 title = { Text(tr("Run Summary", "Resumen de bajada")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atrás"))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "Atrás"))
                     }
                 },
                 actions = {
                     uiState.run?.let {
                         IconButton(onClick = onViewMap) {
-                            Icon(Icons.Default.Map, contentDescription = tr("Map", "Mapa"))
-                        }
-                        IconButton(onClick = onViewEvents) {
-                            Icon(Icons.Default.List, contentDescription = tr("Events", "Eventos"))
+                            Icon(Icons.Default.Map, contentDescription = tr("Map & Events", "Mapa y eventos"))
                         }
                     }
                 }
@@ -309,19 +306,19 @@ private fun StatItem(
 
 @Composable
 private fun MetricsGrid(run: Run) {
-    val impactQuality = runMetricQualityScore(SeriesType.IMPACT_DENSITY, run.impactScore)
-    val harshnessQuality = runMetricQualityScore(SeriesType.HARSHNESS, run.harshnessAvg)
-    val stabilityQuality = runMetricQualityScore(SeriesType.STABILITY, run.stabilityScore)
-    val overallQuality = runOverallQualityScore(run)
+    val impactBurden = runMetricBurdenScore(SeriesType.IMPACT_DENSITY, run.impactScore)
+    val harshnessBurden = runMetricBurdenScore(SeriesType.HARSHNESS, run.harshnessAvg)
+    val stabilityBurden = runMetricBurdenScore(SeriesType.STABILITY, run.stabilityScore)
+    val overallBurden = runOverallBurdenScore(run)
 
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        QualityOverviewCard(
-            overallQuality = overallQuality,
-            impactQuality = impactQuality,
-            harshnessQuality = harshnessQuality,
-            stabilityQuality = stabilityQuality
+        BurdenOverviewCard(
+            overallBurden = overallBurden,
+            impactBurden = impactBurden,
+            harshnessBurden = harshnessBurden,
+            stabilityBurden = stabilityBurden
         )
 
         Row(
@@ -331,20 +328,20 @@ private fun MetricsGrid(run: Run) {
             MetricCard(
                 icon = Icons.Default.Bolt,
                 label = tr("Impact", "Impacto"),
-                score = impactQuality,
+                score = impactBurden,
                 rawValue = run.impactScore?.let { String.format(Locale.US, "%.2f", it) },
                 rawLabel = tr("raw density", "densidad base"),
-                description = tr("Higher score: smoother impact profile", "Más alto: impacto más suave"),
+                description = tr("Higher score: more impact density", "Más alto: mayor densidad de impacto"),
                 color = ChartImpact,
                 modifier = Modifier.weight(1f)
             )
             MetricCard(
                 icon = Icons.Default.Vibration,
                 label = tr("Harshness", "Vibración"),
-                score = harshnessQuality,
+                score = harshnessBurden,
                 rawValue = run.harshnessAvg?.let { String.format(Locale.US, "%.2f", it) },
                 rawLabel = tr("raw RMS", "RMS base"),
-                description = tr("Higher score: less vibration", "Más alto: menos vibración"),
+                description = tr("Higher score: more vibration", "Más alto: mayor vibración"),
                 color = ChartHarshness,
                 modifier = Modifier.weight(1f)
             )
@@ -354,10 +351,10 @@ private fun MetricsGrid(run: Run) {
         MetricCard(
             icon = Icons.Default.Balance,
             label = tr("Instability", "Inestabilidad"),
-            score = stabilityQuality,
+            score = stabilityBurden,
             rawValue = run.stabilityScore?.let { String.format(Locale.US, "%.2f", it) },
             rawLabel = tr("raw variance", "varianza base"),
-            description = tr("Higher score: steadier control", "Más alto: control más estable"),
+            description = tr("Higher score: more instability", "Más alto: mayor inestabilidad"),
             color = ChartStability,
             modifier = Modifier.fillMaxWidth()
         )
@@ -480,11 +477,11 @@ private fun ValueMetricCard(
     }
 }
 @Composable
-private fun QualityOverviewCard(
-    overallQuality: Float?,
-    impactQuality: Float?,
-    harshnessQuality: Float?,
-    stabilityQuality: Float?
+private fun BurdenOverviewCard(
+    overallBurden: Float?,
+    impactBurden: Float?,
+    harshnessBurden: Float?,
+    stabilityBurden: Float?
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -494,19 +491,19 @@ private fun QualityOverviewCard(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = tr("Ride Quality Index", "Índice de calidad de bajada"),
+                text = tr("Ride Severity Index", "Índice de severidad de bajada"),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = formatScore0to100(overallQuality),
+                text = formatScore0to100(overallBurden),
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
                 text = tr(
-                    "Based on impact, harshness and stability (higher is better).",
-                    "Basado en impacto, vibración e inestabilidad (más alto es mejor)."
+                    "Based on impact, harshness and instability (higher is more punishing).",
+                    "Basado en impacto, vibración e inestabilidad (más alto es más castigador)."
                 ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
@@ -521,8 +518,8 @@ private fun QualityOverviewCard(
                     label = {
                         Text(
                             tr(
-                                "Impact ${formatScore0to100(impactQuality)}",
-                                "Impacto ${formatScore0to100(impactQuality)}"
+                                "Impact ${formatScore0to100(impactBurden)}",
+                                "Impacto ${formatScore0to100(impactBurden)}"
                             )
                         )
                     }
@@ -532,8 +529,8 @@ private fun QualityOverviewCard(
                     label = {
                         Text(
                             tr(
-                                "Harsh ${formatScore0to100(harshnessQuality)}",
-                                "Vibr ${formatScore0to100(harshnessQuality)}"
+                                "Harsh ${formatScore0to100(harshnessBurden)}",
+                                "Vibr ${formatScore0to100(harshnessBurden)}"
                             )
                         )
                     }
@@ -543,8 +540,8 @@ private fun QualityOverviewCard(
                     label = {
                         Text(
                             tr(
-                                "Instab ${formatScore0to100(stabilityQuality)}",
-                                "Inest ${formatScore0to100(stabilityQuality)}"
+                                "Instab ${formatScore0to100(stabilityBurden)}",
+                                "Inest ${formatScore0to100(stabilityBurden)}"
                             )
                         )
                     }
@@ -719,22 +716,25 @@ private fun RunChartsSection(
                 )
 
                 if (events.isNotEmpty()) {
+                    val chartEventMarkers = remember(events) { events.toChartMarkers() }
                     Text(
                         text = tr("Events over Distance %", "Eventos sobre Distancia %"),
                         style = MaterialTheme.typography.titleSmall
                     )
                     EventMarkers(
-                        markers = events.toChartMarkers(),
+                        markers = chartEventMarkers,
                         xMin = 0f,
                         xMax = 100f,
                         showLabels = true
                     )
                 }
 
-                val speedHeatmapPoints = speedSeries
-                    ?.toSpeedHeatmapPoints(distanceMeters)
-                    .orEmpty()
-                    .ifEmpty { fallbackSpeedHeatmapPoints(avgSpeedMps) }
+                val speedHeatmapPoints = remember(speedSeries, distanceMeters, avgSpeedMps) {
+                    speedSeries
+                        ?.toSpeedHeatmapPoints(distanceMeters)
+                        .orEmpty()
+                        .ifEmpty { fallbackSpeedHeatmapPoints(avgSpeedMps) }
+                }
                 if (speedHeatmapPoints.isNotEmpty()) {
                     val maxSpeed = speedHeatmapPoints.maxOfOrNull { it.value } ?: 0f
                     Text(
@@ -765,7 +765,7 @@ private fun SingleRunChartSection(
             style = MaterialTheme.typography.titleSmall
         )
 
-        val points = series?.toChartPoints().orEmpty()
+        val points = remember(series) { series?.toChartPoints().orEmpty() }
         if (points.isEmpty()) {
             Text(
                 text = tr("No data available", "No hay datos disponibles"),
@@ -818,10 +818,12 @@ private fun SpeedChartSection(
             style = MaterialTheme.typography.titleSmall
         )
 
-        val points = series
-            ?.toSpeedChartPoints(distanceMeters)
-            .orEmpty()
-            .ifEmpty { fallbackSpeedChartPoints(fallbackAvgSpeedMps) }
+        val points = remember(series, distanceMeters, fallbackAvgSpeedMps) {
+            series
+                ?.toSpeedChartPoints(distanceMeters)
+                .orEmpty()
+                .ifEmpty { fallbackSpeedChartPoints(fallbackAvgSpeedMps) }
+        }
         if (points.isEmpty()) {
             Text(
                 text = tr("No data available", "No hay datos disponibles"),

@@ -63,6 +63,7 @@ fun HeatmapBar(
     minValue: Float = 0f,
     maxValue: Float = 1f,
     cornerRadius: Float = 4f,
+    @Suppress("UNUSED_PARAMETER")
     label: String? = null
 ) {
     Canvas(
@@ -123,7 +124,7 @@ fun GradientHeatmapBar(
         val barWidth = size.width
 
         // Create color stops for gradient
-        val colorStops = points.mapIndexed { index, point ->
+        val colorStops = points.mapIndexed { _, point ->
             val normalizedValue = ((point.value - minValue) / (maxValue - minValue))
                 .coerceIn(0f, 1f)
             val position = point.x / 100f  // Assuming x is percentage

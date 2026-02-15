@@ -53,6 +53,7 @@ class ButterworthFilter(
          * Design bandpass Butterworth filter coefficients.
          * Simplified implementation for 4th order.
          */
+        @Suppress("UNUSED_PARAMETER")
         fun designBandpass(
             order: Int,
             fs: Double,

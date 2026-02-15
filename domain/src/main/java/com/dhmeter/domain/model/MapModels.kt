@@ -69,7 +69,7 @@ data class MapEventMarker(
     val type: MapEventType,
     val severity: Float,
     val distPct: Float,
-    val meta: Map<String, Any> // peak, energy300ms, recoveryMs
+    val meta: Map<String, Any> // peak, energy300ms, recoveryMs, rmsValue, durationMs
 )
 
 /**
@@ -77,7 +77,9 @@ data class MapEventMarker(
  */
 enum class MapEventType(val displayName: String) {
     IMPACT_PEAK("Strong Impact"),
-    LANDING("Hard Landing")
+    LANDING("Hard Landing"),
+    HARSHNESS_BURST("Harshness Burst"),
+    OTHER("Event")
 }
 
 /**

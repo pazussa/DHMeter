@@ -3,6 +3,7 @@ package com.dhmeter.signal.processor
 import com.dhmeter.domain.model.*
 import com.dhmeter.domain.repository.SensorSensitivityRepository
 import com.dhmeter.domain.usecase.RunProcessor
+import com.dhmeter.sensing.data.AccelSample
 import com.dhmeter.sensing.data.SensorBuffers
 import com.dhmeter.signal.metrics.*
 import com.dhmeter.signal.validation.RunValidator
@@ -35,6 +36,12 @@ class SignalProcessor @Inject constructor(
         const val NUM_OUTPUT_POINTS = 200
         const val WINDOW_SIZE_SEC = 1.0f
         const val HOP_SIZE_SEC = 0.25f
+        private const val IMPACT_EVENT_DEBOUNCE_MS = 250L
+        private const val IMPACT_NEAR_LANDING_MS = 350L
+        private const val HARSHNESS_BURST_WINDOW_SEC = 0.35f
+        private const val HARSHNESS_BURST_HOP_SEC = 0.10f
+        private const val HARSHNESS_BURST_MIN_DURATION_MS = 180L
+        private const val HARSHNESS_BURST_MERGE_GAP_MS = 220L
     }
 
     override suspend fun process(handle: RawCaptureHandle): ProcessedRun = withContext(Dispatchers.Default) {
@@ -209,18 +216,33 @@ class SignalProcessor @Inject constructor(
         val sampleRate = resolveSampleRate(handle.accelSampleRate, accelSamples)
         val windowSamples = (WINDOW_SIZE_SEC * sampleRate).roundToInt().coerceAtLeast(1)
         val hopSamples = (HOP_SIZE_SEC * sampleRate).roundToInt().coerceAtLeast(1)
+        val gyroCount = gyroSamples.size
+        var gyroStartIdx = 0
+        var gyroEndExclusive = 0
 
         var windowStart = 0
         while (windowStart < accelSamples.size) {
             val windowEnd = (windowStart + windowSamples).coerceAtMost(accelSamples.size)
             if (windowEnd - windowStart < 3) break
             val windowAccel = accelSamples.subList(windowStart, windowEnd)
+            val windowStartNs = windowAccel.first().timestampNs
+            val windowEndNs = windowAccel.last().timestampNs
             val centerTimeNs = windowAccel[windowAccel.size / 2].timestampNs
             val distPct = distMapping.getDistPct(centerTimeNs)
 
-            val windowGyro = gyroSamples.filter { sample ->
-                sample.timestampNs >= windowAccel.first().timestampNs &&
-                sample.timestampNs <= windowAccel.last().timestampNs
+            while (gyroStartIdx < gyroCount && gyroSamples[gyroStartIdx].timestampNs < windowStartNs) {
+                gyroStartIdx++
+            }
+            if (gyroEndExclusive < gyroStartIdx) {
+                gyroEndExclusive = gyroStartIdx
+            }
+            while (gyroEndExclusive < gyroCount && gyroSamples[gyroEndExclusive].timestampNs <= windowEndNs) {
+                gyroEndExclusive++
+            }
+            val windowGyro = if (gyroStartIdx < gyroEndExclusive) {
+                gyroSamples.subList(gyroStartIdx, gyroEndExclusive)
+            } else {
+                emptyList()
             }
 
             val impact = impactAnalyzer.analyzeWindow(windowAccel)
@@ -244,9 +266,10 @@ class SignalProcessor @Inject constructor(
         distMapping: DistanceMapping,
         handle: RawCaptureHandle
     ): List<RunEvent> {
-        val events = mutableListOf<RunEvent>()
         val startTimeNs = handle.startTimeNs
         val sampleRate = resolveSampleRate(handle.accelSampleRate, accelSamples)
+
+        val events = mutableListOf<RunEvent>()
 
         val landings = landingDetector.detectLandings(accelSamples, sampleRate)
         landings.forEach { landing ->
@@ -271,7 +294,227 @@ class SignalProcessor @Inject constructor(
             )
         }
 
+        val landingTimesNs = landings.map { it.timestampMs * 1_000_000L }
+        events += detectImpactPeakEvents(
+            accelSamples = accelSamples,
+            sampleRate = sampleRate,
+            distMapping = distMapping,
+            startTimeNs = startTimeNs,
+            landingTimesNs = landingTimesNs
+        )
+        events += detectHarshnessBurstEvents(
+            accelSamples = accelSamples,
+            sampleRate = sampleRate,
+            distMapping = distMapping,
+            startTimeNs = startTimeNs
+        )
+
         return events.sortedBy { it.distPct }
+    }
+
+    private fun detectImpactPeakEvents(
+        accelSamples: List<com.dhmeter.sensing.data.AccelSample>,
+        sampleRate: Float,
+        distMapping: DistanceMapping,
+        startTimeNs: Long,
+        landingTimesNs: List<Long>
+    ): List<RunEvent> {
+        val peaks = impactAnalyzer.detectPeaks(accelSamples, sampleRate)
+        if (peaks.isEmpty()) return emptyList()
+
+        val impactEvents = mutableListOf<RunEvent>()
+        val debounceNs = IMPACT_EVENT_DEBOUNCE_MS * 1_000_000L
+        val nearLandingNs = IMPACT_NEAR_LANDING_MS * 1_000_000L
+        val sortedLandingTimes = landingTimesNs.sorted()
+        var lastImpactNs = Long.MIN_VALUE
+
+        peaks.forEach { peak ->
+            val timestampNs = peak.timestampNs
+            if (timestampNs - lastImpactNs < debounceNs) return@forEach
+            if (isTimestampNearAny(sortedLandingTimes, timestampNs, nearLandingNs)) return@forEach
+
+            val timeSec = ((timestampNs - startTimeNs).coerceAtLeast(0L)) / 1_000_000_000f
+            val distPct = distMapping.getDistPct(timestampNs)
+            val peakG = peak.peakG.coerceAtLeast(0f)
+
+            impactEvents.add(
+                RunEvent(
+                    eventId = UUID.randomUUID().toString(),
+                    runId = "",
+                    type = EventType.IMPACT_PEAK,
+                    distPct = distPct,
+                    timeSec = timeSec,
+                    severity = peakG,
+                    meta = EventMeta(
+                        peakG = peakG
+                    )
+                )
+            )
+            lastImpactNs = timestampNs
+        }
+
+        return impactEvents
+    }
+
+    private fun isTimestampNearAny(
+        sortedTimestamps: List<Long>,
+        targetNs: Long,
+        toleranceNs: Long
+    ): Boolean {
+        if (sortedTimestamps.isEmpty()) return false
+
+        var low = 0
+        var high = sortedTimestamps.lastIndex
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            val value = sortedTimestamps[mid]
+            when {
+                value < targetNs -> low = mid + 1
+                value > targetNs -> high = mid - 1
+                else -> return true
+            }
+        }
+
+        val leftIdx = high.coerceAtLeast(0)
+        val rightIdx = low.coerceAtMost(sortedTimestamps.lastIndex)
+        return abs(sortedTimestamps[leftIdx] - targetNs) <= toleranceNs ||
+                abs(sortedTimestamps[rightIdx] - targetNs) <= toleranceNs
+    }
+
+    private fun detectHarshnessBurstEvents(
+        accelSamples: List<AccelSample>,
+        sampleRate: Float,
+        distMapping: DistanceMapping,
+        startTimeNs: Long
+    ): List<RunEvent> {
+        if (sampleRate <= 0f || accelSamples.size < 50) return emptyList()
+
+        val windowSamples = (HARSHNESS_BURST_WINDOW_SEC * sampleRate).roundToInt().coerceAtLeast(30)
+        val hopSamples = (HARSHNESS_BURST_HOP_SEC * sampleRate).roundToInt().coerceAtLeast(8)
+        if (windowSamples >= accelSamples.size) return emptyList()
+
+        val windows = mutableListOf<HarshnessWindow>()
+        var startIdx = 0
+        while (startIdx + windowSamples <= accelSamples.size) {
+            val endIdxExclusive = startIdx + windowSamples
+            val window = accelSamples.subList(startIdx, endIdxExclusive)
+            val rms = harshnessAnalyzer.analyzeWindow(window, sampleRate)
+            if (rms.isFinite() && rms > 0f) {
+                windows.add(
+                    HarshnessWindow(
+                        startNs = window.first().timestampNs,
+                        endNs = window.last().timestampNs,
+                        rms = rms
+                    )
+                )
+            }
+            startIdx += hopSamples
+        }
+
+        if (windows.size < 3) return emptyList()
+
+        val rmsValues = windows.map { it.rms }
+        val p75 = percentile(rmsValues, 75)
+        val p90 = percentile(rmsValues, 90)
+        val burstThreshold = maxOf(0.25f, p75 + (p90 - p75) * 0.65f)
+        if (!burstThreshold.isFinite() || burstThreshold <= 0f) return emptyList()
+
+        val rawBursts = mutableListOf<HarshnessBurst>()
+        var activeStartNs = -1L
+        var activeEndNs = -1L
+        var activePeakNs = -1L
+        var activePeakRms = 0f
+
+        fun flushActiveBurst() {
+            if (activeStartNs < 0L || activeEndNs < activeStartNs) return
+            val durationMs = ((activeEndNs - activeStartNs) / 1_000_000L).coerceAtLeast(0L)
+            if (durationMs >= HARSHNESS_BURST_MIN_DURATION_MS && activePeakNs >= 0L) {
+                rawBursts.add(
+                    HarshnessBurst(
+                        startNs = activeStartNs,
+                        endNs = activeEndNs,
+                        peakNs = activePeakNs,
+                        peakRms = activePeakRms
+                    )
+                )
+            }
+            activeStartNs = -1L
+            activeEndNs = -1L
+            activePeakNs = -1L
+            activePeakRms = 0f
+        }
+
+        windows.forEach { window ->
+            if (window.rms >= burstThreshold) {
+                if (activeStartNs < 0L) {
+                    activeStartNs = window.startNs
+                    activeEndNs = window.endNs
+                    activePeakNs = window.centerNs
+                    activePeakRms = window.rms
+                } else {
+                    activeEndNs = window.endNs
+                    if (window.rms > activePeakRms) {
+                        activePeakRms = window.rms
+                        activePeakNs = window.centerNs
+                    }
+                }
+            } else {
+                flushActiveBurst()
+            }
+        }
+        flushActiveBurst()
+
+        if (rawBursts.isEmpty()) return emptyList()
+        val mergedBursts = mergeHarshnessBursts(rawBursts)
+
+        return mergedBursts.map { burst ->
+            val durationMs = ((burst.endNs - burst.startNs) / 1_000_000L).coerceAtLeast(0L)
+            val timeSec = ((burst.peakNs - startTimeNs).coerceAtLeast(0L)) / 1_000_000_000f
+            val distPct = distMapping.getDistPct(burst.peakNs)
+            val severity = ((burst.peakRms / burstThreshold) * 2f).coerceIn(1f, 6f)
+
+            RunEvent(
+                eventId = UUID.randomUUID().toString(),
+                runId = "",
+                type = EventType.HARSHNESS_BURST,
+                distPct = distPct,
+                timeSec = timeSec,
+                severity = severity,
+                meta = EventMeta(
+                    rmsValue = burst.peakRms,
+                    durationMs = durationMs.toInt()
+                )
+            )
+        }
+    }
+
+    private fun mergeHarshnessBursts(bursts: List<HarshnessBurst>): List<HarshnessBurst> {
+        if (bursts.isEmpty()) return emptyList()
+        val sorted = bursts.sortedBy { it.startNs }
+        val merged = mutableListOf<HarshnessBurst>()
+        val mergeGapNs = HARSHNESS_BURST_MERGE_GAP_MS * 1_000_000L
+
+        var current = sorted.first()
+        for (i in 1 until sorted.size) {
+            val next = sorted[i]
+            if (next.startNs - current.endNs <= mergeGapNs) {
+                current = if (next.peakRms > current.peakRms) {
+                    current.copy(
+                        endNs = maxOf(current.endNs, next.endNs),
+                        peakNs = next.peakNs,
+                        peakRms = next.peakRms
+                    )
+                } else {
+                    current.copy(endNs = maxOf(current.endNs, next.endNs))
+                }
+            } else {
+                merged.add(current)
+                current = next
+            }
+        }
+        merged.add(current)
+
+        return merged
     }
 
     private fun resolveSampleRate(
@@ -448,4 +691,20 @@ data class WindowResults(
 private data class SeriesSample(
     val x: Float,
     val y: Float
+)
+
+private data class HarshnessWindow(
+    val startNs: Long,
+    val endNs: Long,
+    val rms: Float
+) {
+    val centerNs: Long
+        get() = startNs + (endNs - startNs) / 2L
+}
+
+private data class HarshnessBurst(
+    val startNs: Long,
+    val endNs: Long,
+    val peakNs: Long,
+    val peakRms: Float
 )

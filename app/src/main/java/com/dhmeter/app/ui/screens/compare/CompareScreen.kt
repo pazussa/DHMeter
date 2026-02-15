@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -76,7 +78,7 @@ fun CompareScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = tr("Back", "Atrás"))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "Atrás"))
                     }
                 }
             )
@@ -92,7 +94,7 @@ fun CompareScreen(
                         .padding(horizontal = 16.dp),
                     enabled = uiState.comparison != null
                 ) {
-                    Icon(Icons.Default.ShowChart, contentDescription = null)
+                    Icon(Icons.AutoMirrored.Filled.ShowChart, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         tr(

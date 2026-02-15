@@ -184,17 +184,19 @@ class GetRunMapDataUseCase @Inject constructor(
         polyline: GpsPolyline
     ): List<MapEventMarker> {
         if (polyline.points.isEmpty()) return emptyList()
+        val sortedPoints = polyline.points.sortedBy { it.distPct }
         
         return events.mapNotNull { event ->
-            // Find closest GPS point to event's distPct
-            val closestPoint = polyline.points.minByOrNull { 
-                kotlin.math.abs(it.distPct - event.distPct) 
-            } ?: return@mapNotNull null
+            val closestPoint = findClosestPointByDistPct(
+                points = sortedPoints,
+                targetDistPct = event.distPct
+            ) ?: return@mapNotNull null
             
             val eventType = when (event.type) {
                 EventType.LANDING -> MapEventType.LANDING
                 EventType.IMPACT_PEAK -> MapEventType.IMPACT_PEAK
-                else -> return@mapNotNull null
+                EventType.HARSHNESS_BURST -> MapEventType.HARSHNESS_BURST
+                else -> MapEventType.OTHER
             }
             
             MapEventMarker(
@@ -207,9 +209,41 @@ class GetRunMapDataUseCase @Inject constructor(
                     event.meta?.peakG?.let { put("peakG", it) }
                     event.meta?.energy300ms?.let { put("energy300ms", it) }
                     event.meta?.recoveryMs?.let { put("recoveryMs", it) }
+                    event.meta?.rmsValue?.let { put("rmsValue", it) }
+                    event.meta?.durationMs?.let { put("durationMs", it) }
                 }
             )
         }
+    }
+
+    private fun findClosestPointByDistPct(
+        points: List<GpsPoint>,
+        targetDistPct: Float
+    ): GpsPoint? {
+        if (points.isEmpty()) return null
+        if (points.size == 1) return points.first()
+
+        if (targetDistPct <= points.first().distPct) return points.first()
+        if (targetDistPct >= points.last().distPct) return points.last()
+
+        var low = 0
+        var high = points.lastIndex
+
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            val midValue = points[mid].distPct
+            when {
+                midValue < targetDistPct -> low = mid + 1
+                midValue > targetDistPct -> high = mid - 1
+                else -> return points[mid]
+            }
+        }
+
+        val lower = points[high.coerceAtLeast(0)]
+        val upper = points[low.coerceAtMost(points.lastIndex)]
+        val lowerDelta = abs(lower.distPct - targetDistPct)
+        val upperDelta = abs(upper.distPct - targetDistPct)
+        return if (lowerDelta <= upperDelta) lower else upper
     }
 }
 

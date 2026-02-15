@@ -10,7 +10,6 @@ import androidx.navigation.navArgument
 import com.dropindh.app.ui.screens.charts.ChartsScreen
 import com.dropindh.app.ui.screens.community.CommunityScreen
 import com.dropindh.app.ui.screens.compare.CompareScreen
-import com.dropindh.app.ui.screens.events.EventsScreen
 import com.dropindh.app.ui.screens.history.HistoryScreen
 import com.dropindh.app.ui.screens.home.HomeScreen
 import com.dropindh.app.ui.screens.map.MapScreen
@@ -40,9 +39,6 @@ sealed class Screen(val route: String) {
         // Legacy support for 2 runs
         fun createRoute(trackId: String, runAId: String, runBId: String) = 
             "charts/$trackId/$runAId,$runBId"
-    }
-    data object Events : Screen("events/{runId}") {
-        fun createRoute(runId: String) = "events/$runId"
     }
     data object RunMap : Screen("run_map/{runId}") {
         fun createRoute(runId: String) = "run_map/$runId"
@@ -108,9 +104,6 @@ fun DHMeterNavHost(
                 onCompare = { trackId, runAId, runBId ->
                     navController.navigate(Screen.Compare.createRoute(trackId, runAId, runBId))
                 },
-                onViewEvents = {
-                    navController.navigate(Screen.Events.createRoute(runId))
-                },
                 onViewMap = {
                     navController.navigate(Screen.RunMap.createRoute(runId))
                 },
@@ -159,19 +152,6 @@ fun DHMeterNavHost(
             ChartsScreen(
                 trackId = trackId,
                 runIds = runIds,
-                onBack = {
-                    navController.popBackStack()
-                }
-            )
-        }
-
-        composable(
-            route = Screen.Events.route,
-            arguments = listOf(navArgument("runId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val runId = backStackEntry.arguments?.getString("runId") ?: return@composable
-            EventsScreen(
-                runId = runId,
                 onBack = {
                     navController.popBackStack()
                 }

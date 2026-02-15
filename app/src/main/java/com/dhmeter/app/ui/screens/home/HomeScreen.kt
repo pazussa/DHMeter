@@ -15,11 +15,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -98,7 +98,7 @@ fun HomeScreen(
                 actions = {
                     IconButton(onClick = { showHelpDialog = true }) {
                         Icon(
-                            Icons.Default.HelpOutline,
+                            Icons.AutoMirrored.Filled.HelpOutline,
                             contentDescription = tr("Help", "Ayuda")
                         )
                     }

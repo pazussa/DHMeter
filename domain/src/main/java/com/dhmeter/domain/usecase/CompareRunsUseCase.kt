@@ -127,6 +127,7 @@ class CompareRunsUseCase @Inject constructor(
         return insights.take(5) // Limit to 5 most significant insights
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun determineVerdict(
         impact: MetricComparison?,
         harshness: MetricComparison?,

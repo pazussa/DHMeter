@@ -9,9 +9,11 @@ import com.dhmeter.domain.usecase.GetRunMapDataUseCase
 import com.dhmeter.domain.usecase.GetRunSectionComparisonUseCase
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class MapUiState(
@@ -22,7 +24,6 @@ data class MapUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val selectedMetric: MapMetricType = MapMetricType.SPEED,
-    val showEvents: Boolean = true,
     val selectedEvent: MapEventMarker? = null
 )
 
@@ -55,8 +56,12 @@ class MapViewModel @Inject constructor(
         }
         
         loadJob = viewModelScope.launch {
-            val mapResult = getRunMapDataUseCase(runId)
-            val sectionResult = getRunSectionComparisonUseCase(runId)
+            val (mapResult, sectionResult) = withContext(Dispatchers.Default) {
+                Pair(
+                    getRunMapDataUseCase(runId),
+                    getRunSectionComparisonUseCase(runId)
+                )
+            }
 
             mapResult
                 .onSuccess { mapData ->
@@ -101,7 +106,10 @@ class MapViewModel @Inject constructor(
         _uiState.update { it.copy(selectedMetric = metric, isLoading = true, error = null) }
         
         metricJob = viewModelScope.launch {
-            getRunMapDataUseCase.withMetric(currentRunId, metric)
+            val mapResult = withContext(Dispatchers.Default) {
+                getRunMapDataUseCase.withMetric(currentRunId, metric)
+            }
+            mapResult
                 .onSuccess { mapData ->
                     _uiState.update { 
                         it.copy(
@@ -130,10 +138,6 @@ class MapViewModel @Inject constructor(
                     }
                 }
         }
-    }
-
-    fun toggleEvents() {
-        _uiState.update { it.copy(showEvents = !it.showEvents) }
     }
 
     fun selectEvent(event: MapEventMarker?) {

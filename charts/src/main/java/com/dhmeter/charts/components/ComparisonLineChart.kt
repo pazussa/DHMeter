@@ -38,6 +38,7 @@ fun ComparisonLineChart(
     yAxisConfig: AxisConfig,
     modifier: Modifier = Modifier,
     showGrid: Boolean = true,
+    @Suppress("UNUSED_PARAMETER")
     showLegend: Boolean = true,
     eventMarkers: List<ChartEventMarker> = emptyList(),
     onPointSelected: ((seriesIndex: Int, pointIndex: Int, value: Float) -> Unit)? = null
@@ -56,7 +57,6 @@ fun ComparisonLineChart(
                 detectTapGestures { offset ->
                     // Find nearest point
                     val chartWidth = size.width - 60f
-                    val chartHeight = size.height - 40f
                     val chartLeft = 50f
 
                     val xPercent = ((offset.x - chartLeft) / chartWidth)
@@ -84,7 +84,6 @@ fun ComparisonLineChart(
                 chartTop = chartTop,
                 chartWidth = chartWidth,
                 chartHeight = chartHeight,
-                xAxisConfig = xAxisConfig,
                 yAxisConfig = yAxisConfig,
                 gridColor = gridColor
             )
@@ -214,7 +213,6 @@ private fun DrawScope.drawGrid(
     chartTop: Float,
     chartWidth: Float,
     chartHeight: Float,
-    xAxisConfig: AxisConfig,
     yAxisConfig: AxisConfig,
     gridColor: Color
 ) {

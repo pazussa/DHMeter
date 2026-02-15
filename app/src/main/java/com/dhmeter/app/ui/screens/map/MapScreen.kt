@@ -67,9 +67,7 @@ fun MapScreen(
                         MapContent(
                             mapData = uiState.mapData!!,
                             selectedMetric = uiState.selectedMetric,
-                            showEvents = uiState.showEvents,
                             onMetricChange = viewModel::changeMetric,
-                            onToggleEvents = viewModel::toggleEvents,
                             onRoutePressed = viewModel::showSectionComparison,
                             onEventSelected = viewModel::selectEvent
                         )
@@ -198,9 +196,7 @@ fun MapScreen(
 private fun MapContent(
     mapData: RunMapData,
     selectedMetric: MapMetricType,
-    showEvents: Boolean,
     onMetricChange: (MapMetricType) -> Unit,
-    onToggleEvents: () -> Unit,
     onRoutePressed: () -> Unit,
     onEventSelected: (MapEventMarker) -> Unit
 ) {
@@ -297,22 +293,20 @@ private fun MapContent(
                 )
             }
 
-            // Draw event markers
-            if (showEvents) {
-                mapData.events.forEach { event ->
-                    Marker(
-                        state = MarkerState(
-                            position = LatLng(event.location.lat, event.location.lon)
-                        ),
-                        title = localizedMapEventTypeName(event.type),
-                        snippet = tr("Tap for details", "Toca para ver detalles"),
-                        icon = BitmapDescriptorFactory.defaultMarker(event.toMarkerHue()),
-                        onClick = {
-                            onEventSelected(event)
-                            true
-                        }
-                    )
-                }
+            // Draw all event markers detected during the run.
+            mapData.events.forEach { event ->
+                Marker(
+                    state = MarkerState(
+                        position = LatLng(event.location.lat, event.location.lon)
+                    ),
+                    title = localizedMapEventTypeName(event.type),
+                    snippet = tr("Tap for details", "Toca para ver detalles"),
+                    icon = BitmapDescriptorFactory.defaultMarker(event.toMarkerHue()),
+                    onClick = {
+                        onEventSelected(event)
+                        true
+                    }
+                )
             }
         }
 
@@ -328,9 +322,7 @@ private fun MapContent(
         // Controls overlay
         MapControls(
             selectedMetric = selectedMetric,
-            showEvents = showEvents,
             onMetricChange = onMetricChange,
-            onToggleEvents = onToggleEvents,
             onCenterRoute = {
                 if (!mapLoaded) return@MapControls
                 boundsBuilder?.let { builder ->
@@ -390,9 +382,7 @@ private fun GpsQualityBanner(modifier: Modifier = Modifier) {
 @Composable
 private fun MapControls(
     selectedMetric: MapMetricType,
-    showEvents: Boolean,
     onMetricChange: (MapMetricType) -> Unit,
-    onToggleEvents: () -> Unit,
     onCenterRoute: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -422,7 +412,7 @@ private fun MapControls(
             }
         }
 
-        // Layers and visibility
+        // Route controls
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
@@ -432,19 +422,6 @@ private fun MapControls(
                 modifier = Modifier.padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = tr("Events", "Eventos"),
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Switch(
-                        checked = showEvents,
-                        onCheckedChange = { onToggleEvents() }
-                    )
-                }
                 OutlinedButton(
                     onClick = onCenterRoute,
                     modifier = Modifier.fillMaxWidth()
@@ -683,11 +660,15 @@ private fun EventBottomSheet(
                     imageVector = when (event.type) {
                         MapEventType.LANDING -> Icons.Default.FlightLand
                         MapEventType.IMPACT_PEAK -> Icons.Default.Bolt
+                        MapEventType.HARSHNESS_BURST -> Icons.Default.Vibration
+                        MapEventType.OTHER -> Icons.Default.Info
                     },
                     contentDescription = null,
                     tint = when (event.type) {
                         MapEventType.LANDING -> ChartStability
                         MapEventType.IMPACT_PEAK -> ChartImpact
+                        MapEventType.HARSHNESS_BURST -> YellowWarning
+                        MapEventType.OTHER -> MaterialTheme.colorScheme.primary
                     },
                     modifier = Modifier.size(32.dp)
                 )
@@ -742,6 +723,20 @@ private fun EventBottomSheet(
                 )
             }
 
+            (event.meta["rmsValue"] as? Number)?.let { rms ->
+                MetricRow(
+                    label = tr("Burst RMS", "RMS de rafaga"),
+                    value = String.format(Locale.US, "%.3f", rms.toFloat())
+                )
+            }
+
+            (event.meta["durationMs"] as? Number)?.let { duration ->
+                MetricRow(
+                    label = tr("Burst Duration", "Duracion de rafaga"),
+                    value = "${duration.toInt()} ms"
+                )
+            }
+
             MetricRow(
                 label = tr("Severity", "Severidad"),
                 value = String.format(Locale.US, "%.1f", event.severity)
@@ -784,6 +779,8 @@ private fun SegmentSeverity.toColor(): Color = when (this) {
 private fun MapEventMarker.toMarkerHue(): Float = when (type) {
     MapEventType.IMPACT_PEAK -> BitmapDescriptorFactory.HUE_RED
     MapEventType.LANDING -> BitmapDescriptorFactory.HUE_ORANGE
+    MapEventType.HARSHNESS_BURST -> BitmapDescriptorFactory.HUE_YELLOW
+    MapEventType.OTHER -> BitmapDescriptorFactory.HUE_VIOLET
 }
 
 private fun formatMetricThreshold(value: Float): String {
@@ -818,11 +815,15 @@ private fun localizedMapEventTypeName(type: MapEventType): String {
         return when (type) {
             MapEventType.IMPACT_PEAK -> "Strong Impact"
             MapEventType.LANDING -> "Hard Landing"
+            MapEventType.HARSHNESS_BURST -> "Harshness Burst"
+            MapEventType.OTHER -> "Event"
         }
     }
     return when (type) {
         MapEventType.IMPACT_PEAK -> "Impacto fuerte"
         MapEventType.LANDING -> "Aterrizaje duro"
+        MapEventType.HARSHNESS_BURST -> "Rafaga de vibracion"
+        MapEventType.OTHER -> "Evento"
     }
 }
 

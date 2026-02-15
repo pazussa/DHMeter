@@ -68,6 +68,7 @@ private val LightColorScheme = lightColorScheme(
     onError = Color(0xFF250202)
 )
 
+@Suppress("DEPRECATION")
 @Composable
 fun DHMeterTheme(
     darkTheme: Boolean = true,

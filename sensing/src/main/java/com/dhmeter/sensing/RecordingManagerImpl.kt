@@ -1,7 +1,6 @@
 package com.dhmeter.sensing
 
 import android.os.Build
-import com.dhmeter.domain.model.GpsQuality
 import com.dhmeter.domain.model.RawCaptureHandle
 import com.dhmeter.sensing.collector.GpsCollector
 import com.dhmeter.sensing.collector.ImuCollector
@@ -102,12 +101,6 @@ class RecordingManagerImpl @Inject constructor(
         val gpsStats = gpsCollector.stop()
 
         val endTimeNs = System.nanoTime()
-
-        val gpsQuality = when {
-            gpsStats.avgAccuracy <= 5f -> GpsQuality.GOOD
-            gpsStats.avgAccuracy <= 15f -> GpsQuality.MEDIUM
-            else -> GpsQuality.POOR
-        }
 
         val handle = RawCaptureHandle(
             sessionId = sessionId ?: UUID.randomUUID().toString(),

@@ -49,19 +49,27 @@ fun burdenToQualityScore(burdenScore: Float): Float {
     return (100f - burdenScore).coerceIn(0f, 100f)
 }
 
-fun runMetricQualityScore(seriesType: SeriesType, rawValue: Float?): Float? {
+fun runMetricBurdenScore(seriesType: SeriesType, rawValue: Float?): Float? {
     rawValue ?: return null
-    return burdenToQualityScore(normalizeBurdenScore(seriesType, rawValue))
+    return normalizeBurdenScore(seriesType, rawValue)
 }
 
-fun runOverallQualityScore(run: Run): Float? {
+fun runOverallBurdenScore(run: Run): Float? {
     val scores = listOfNotNull(
-        runMetricQualityScore(SeriesType.IMPACT_DENSITY, run.impactScore),
-        runMetricQualityScore(SeriesType.HARSHNESS, run.harshnessAvg),
-        runMetricQualityScore(SeriesType.STABILITY, run.stabilityScore)
+        runMetricBurdenScore(SeriesType.IMPACT_DENSITY, run.impactScore),
+        runMetricBurdenScore(SeriesType.HARSHNESS, run.harshnessAvg),
+        runMetricBurdenScore(SeriesType.STABILITY, run.stabilityScore)
     )
     if (scores.isEmpty()) return null
     return scores.average().toFloat().coerceIn(0f, 100f)
+}
+
+fun runMetricQualityScore(seriesType: SeriesType, rawValue: Float?): Float? {
+    return runMetricBurdenScore(seriesType, rawValue)?.let(::burdenToQualityScore)
+}
+
+fun runOverallQualityScore(run: Run): Float? {
+    return runOverallBurdenScore(run)?.let(::burdenToQualityScore)
 }
 
 fun formatScore0to100(value: Float?): String {
