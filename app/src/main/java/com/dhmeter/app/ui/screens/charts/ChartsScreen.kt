@@ -158,6 +158,7 @@ private fun ChartsContent(
         )
 
         SpeedComparisonSection(runs = uiState.runs)
+        AltitudeComparisonSection(runs = uiState.runs)
 
         // Events over distPct - Combined view
         if (uiState.runs.any { it.events.isNotEmpty() }) {
@@ -332,6 +333,77 @@ private fun SpeedComparisonSection(
     }
 }
 
+@Composable
+private fun AltitudeComparisonSection(
+    runs: List<RunChartData>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = tr("Altitude vs Distance %", "Altitud vs Distancia %"),
+            style = MaterialTheme.typography.titleMedium
+        )
+        Text(
+            text = tr(
+                "Elevation profile from recorded route altitude.",
+                "Perfil de elevacion a partir de la altitud registrada en la ruta."
+            ),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline
+        )
+
+        val chartSeriesList = runs.mapNotNull { run ->
+            val profile = run.elevationProfile ?: return@mapNotNull null
+            val points = profile.points
+                .filter { it.distPct.isFinite() && it.altitudeM.isFinite() }
+                .sortedBy { it.distPct }
+                .map { point -> ChartPoint(point.distPct.coerceIn(0f, 100f), point.altitudeM) }
+            if (points.size < 2) {
+                null
+            } else {
+                ChartSeries(run.runLabel, points, run.color)
+            }
+        }
+
+        if (chartSeriesList.isEmpty()) {
+            Text(
+                text = tr("No altitude data available", "No hay datos de altitud disponibles"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@Column
+        }
+
+        val altitudes = chartSeriesList.flatMap { it.points }.map { it.y }
+        val minAltitude = altitudes.minOrNull() ?: 0f
+        val maxAltitude = altitudes.maxOrNull() ?: 0f
+        val range = (maxAltitude - minAltitude).coerceAtLeast(1f)
+        val padding = (range * 0.08f).coerceAtLeast(5f)
+        val axisMin = (minAltitude - padding).coerceAtMost(minAltitude)
+        val axisMax = (maxAltitude + padding).coerceAtLeast(maxAltitude + 1f)
+
+        ComparisonLineChart(
+            series = chartSeriesList,
+            xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
+            yAxisConfig = AxisConfig(axisMin, axisMax, label = tr("Altitude (m)", "Altitud (m)")),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+        )
+
+        runs.forEach { run ->
+            val profile = run.elevationProfile ?: return@forEach
+            Text(
+                text = tr(
+                    "${run.runLabel}: down ${formatMeters(profile.totalDescentM)} | up ${formatMeters(profile.totalAscentM)}",
+                    "${run.runLabel}: bajada ${formatMeters(profile.totalDescentM)} | subida ${formatMeters(profile.totalAscentM)}"
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = run.color
+            )
+        }
+    }
+}
+
 /**
  * Extension function to convert RunSeries to list of ChartPoint
  */
@@ -390,6 +462,10 @@ private fun fallbackSpeedHeatmapPoints(avgSpeedMps: Float?): List<HeatmapPoint> 
         HeatmapPoint(0f, speedKmh),
         HeatmapPoint(100f, speedKmh)
     )
+}
+
+private fun formatMeters(value: Float): String {
+    return String.format("%.1f m", value)
 }
 
 private fun normalizeToScore(seriesType: SeriesType, value: Float): Float {
