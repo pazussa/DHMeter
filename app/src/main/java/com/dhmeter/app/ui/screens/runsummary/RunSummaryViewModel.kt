@@ -1,14 +1,16 @@
-package com.dropindh.app.ui.screens.runsummary
+﻿package com.dropindh.app.ui.screens.runsummary
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dropindh.app.ui.i18n.tr
+import com.dhmeter.domain.model.ElevationProfile
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.RunSeries
 import com.dhmeter.domain.model.SeriesType
 import com.dhmeter.domain.model.Run
 import com.dhmeter.domain.usecase.GetComparableRunsUseCase
+import com.dhmeter.domain.usecase.GetRunMapDataUseCase
 import com.dhmeter.domain.usecase.GetRunByIdUseCase
 import com.dhmeter.domain.usecase.GetRunEventsUseCase
 import com.dhmeter.domain.usecase.GetRunSeriesUseCase
@@ -28,6 +30,7 @@ data class RunSummaryUiState(
     val harshnessSeries: RunSeries? = null,
     val stabilitySeries: RunSeries? = null,
     val speedSeries: RunSeries? = null,
+    val elevationProfile: ElevationProfile? = null,
     val events: List<RunEvent> = emptyList(),
     val isChartsLoading: Boolean = false,
     val chartsError: String? = null,
@@ -41,6 +44,7 @@ class RunSummaryViewModel @Inject constructor(
     private val getRunByIdUseCase: GetRunByIdUseCase,
     private val getComparableRunsUseCase: GetComparableRunsUseCase,
     private val getRunSeriesUseCase: GetRunSeriesUseCase,
+    private val getRunMapDataUseCase: GetRunMapDataUseCase,
     private val getRunEventsUseCase: GetRunEventsUseCase
 ) : ViewModel() {
 
@@ -65,6 +69,7 @@ class RunSummaryViewModel @Inject constructor(
                     harshnessSeries = null,
                     stabilitySeries = null,
                     speedSeries = null,
+                    elevationProfile = null,
                     events = emptyList(),
                     isChartsLoading = false,
                     chartsError = null
@@ -114,6 +119,9 @@ class RunSummaryViewModel @Inject constructor(
                 val speedDeferred = async {
                     getRunSeriesUseCase(runId, SeriesType.SPEED_TIME).getOrNull()
                 }
+                val mapDataDeferred = async {
+                    getRunMapDataUseCase(runId).getOrNull()
+                }
                 val eventsDeferred = async {
                     getRunEventsUseCase(runId).getOrDefault(emptyList())
                 }
@@ -124,6 +132,7 @@ class RunSummaryViewModel @Inject constructor(
                         harshnessSeries = harshnessDeferred.await(),
                         stabilitySeries = stabilityDeferred.await(),
                         speedSeries = speedDeferred.await(),
+                        elevationProfile = mapDataDeferred.await()?.elevationProfile,
                         events = eventsDeferred.await(),
                         isChartsLoading = false,
                         chartsError = null

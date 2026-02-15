@@ -9,9 +9,7 @@ import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.RunSeries
 import com.dhmeter.domain.model.SeriesType
 import com.dhmeter.domain.model.Run
-import com.dhmeter.domain.model.ElevationProfile
 import com.dhmeter.domain.usecase.GetRunEventsUseCase
-import com.dhmeter.domain.usecase.GetRunMapDataUseCase
 import com.dhmeter.domain.usecase.GetRunByIdUseCase
 import com.dhmeter.domain.usecase.GetRunSeriesUseCase
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -31,7 +29,6 @@ data class RunChartData(
     val harshnessSeries: RunSeries? = null,
     val stabilitySeries: RunSeries? = null,
     val speedSeries: RunSeries? = null,
-    val elevationProfile: ElevationProfile? = null,
     val events: List<RunEvent> = emptyList()
 )
 
@@ -56,7 +53,6 @@ class ChartsViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val getRunByIdUseCase: GetRunByIdUseCase,
     private val getRunSeriesUseCase: GetRunSeriesUseCase,
-    private val getRunMapDataUseCase: GetRunMapDataUseCase,
     private val getRunEventsUseCase: GetRunEventsUseCase
 ) : ViewModel() {
 
@@ -99,7 +95,6 @@ class ChartsViewModel @Inject constructor(
                         val harshness = async { getRunSeriesUseCase(runId, SeriesType.HARSHNESS) }
                         val stability = async { getRunSeriesUseCase(runId, SeriesType.STABILITY) }
                         val speed = async { getRunSeriesUseCase(runId, SeriesType.SPEED_TIME) }
-                        val mapData = async { getRunMapDataUseCase(runId).getOrNull() }
                         val events = async { getRunEventsUseCase(runId) }
                         
                         RunChartData(
@@ -115,7 +110,6 @@ class ChartsViewModel @Inject constructor(
                             harshnessSeries = harshness.await().getOrNull(),
                             stabilitySeries = stability.await().getOrNull(),
                             speedSeries = speed.await().getOrNull(),
-                            elevationProfile = mapData.await()?.elevationProfile,
                             events = events.await().getOrDefault(emptyList())
                         )
                     }

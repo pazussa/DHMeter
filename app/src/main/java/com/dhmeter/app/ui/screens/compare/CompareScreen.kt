@@ -78,7 +78,7 @@ fun CompareScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "AtrÃ¡s"))
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "Atrás"))
                     }
                 }
             )
@@ -99,7 +99,7 @@ fun CompareScreen(
                     Text(
                         tr(
                             "View Charts (${runIds.size} runs)",
-                            "Ver grÃ¡ficas (${runIds.size} bajadas)"
+                            "Ver gráficas (${runIds.size} bajadas)"
                         )
                     )
                 }
@@ -130,7 +130,7 @@ fun CompareScreen(
                         .padding(paddingValues),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(uiState.error ?: tr("Could not load comparison", "No se pudo cargar la comparaciÃ³n"))
+                    Text(uiState.error ?: tr("Could not load comparison", "No se pudo cargar la comparación"))
                 }
             }
         }
@@ -160,14 +160,14 @@ private fun MultiRunComparisonContent(
 
         // Metrics comparison table
         Text(
-            text = tr("Metrics Comparison", "ComparaciÃ³n de mÃ©tricas"),
+            text = tr("Metrics Comparison", "Comparación de métricas"),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(bottom = 12.dp)
         )
         Text(
             text = tr(
                 "Lower score means smoother/less punishing.",
-                "Menor puntaje significa mÃ¡s suave/menos castigador."
+                "Menor puntaje significa más suave/menos castigador."
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
@@ -182,7 +182,7 @@ private fun MultiRunComparisonContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = tr("Speed Comparison", "ComparaciÃ³n de velocidad"),
+            text = tr("Speed Comparison", "Comparación de velocidad"),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(bottom = 12.dp)
         )
@@ -192,7 +192,7 @@ private fun MultiRunComparisonContent(
 
         comparison.mapComparison?.let { mapComparison ->
             Text(
-                text = tr("Route Comparison", "ComparaciÃ³n de ruta"),
+                text = tr("Route Comparison", "Comparación de ruta"),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
@@ -203,18 +203,6 @@ private fun MultiRunComparisonContent(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
-
-        comparison.altitudeComparison?.let { altitudeComparison ->
-            Text(
-                text = tr("Altitude Route Comparison", "ComparaciÃ³n de altitud del recorrido"),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-            AltitudeComparisonSection(
-                comparison = altitudeComparison
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-        }
 
         // Section analysis
         if (comparison.sectionInsights.isNotEmpty()) {
@@ -410,146 +398,6 @@ private fun buildSpeedComparisonSeries(comparison: MultiRunComparisonResult): Li
 }
 
 @Composable
-private fun AltitudeComparisonSection(
-    comparison: AltitudeComparisonData
-) {
-    val chartSeries = remember(comparison) { buildAltitudeChartSeries(comparison) }
-    val allAltitudes = chartSeries.flatMap { series -> series.points.map { it.y } }
-
-    if (chartSeries.isEmpty() || allAltitudes.isEmpty()) {
-        Text(
-            text = tr("No altitude data available", "No hay datos de altitud disponibles"),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        return
-    }
-
-    val minAltitude = allAltitudes.minOrNull() ?: 0f
-    val maxAltitude = allAltitudes.maxOrNull() ?: 0f
-    val range = (maxAltitude - minAltitude).coerceAtLeast(1f)
-    val padding = (range * 0.08f).coerceAtLeast(5f)
-    val axisMin = (minAltitude - padding).coerceAtMost(minAltitude)
-    val axisMax = (maxAltitude + padding).coerceAtLeast(maxAltitude + 1f)
-
-    ComparisonLineChart(
-        series = chartSeries,
-        xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
-        yAxisConfig = AxisConfig(axisMin, axisMax, label = tr("Altitude (m)", "Altitud (m)")),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(240.dp)
-    )
-
-    Spacer(modifier = Modifier.height(12.dp))
-    AltitudeTotalsCard(comparison = comparison)
-    Spacer(modifier = Modifier.height(12.dp))
-    AltitudeSectionCard(comparison = comparison)
-}
-
-private fun buildAltitudeChartSeries(comparison: AltitudeComparisonData): List<ChartSeries> {
-    return comparison.runs.mapNotNull { run ->
-        val points = run.profilePoints
-            .filter { it.distPct.isFinite() && it.altitudeM.isFinite() }
-            .sortedBy { it.distPct }
-            .map { point ->
-                ChartPoint(
-                    x = point.distPct.coerceIn(0f, 100f),
-                    y = point.altitudeM
-                )
-            }
-
-        if (points.size < 2) {
-            null
-        } else {
-            ChartSeries(
-                label = localizedRunLabel(run.runLabel),
-                points = points,
-                color = Color(run.color)
-            )
-        }
-    }
-}
-
-@Composable
-private fun AltitudeTotalsCard(comparison: AltitudeComparisonData) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = tr("Total Vertical Change", "Cambio vertical total"),
-                style = MaterialTheme.typography.titleSmall
-            )
-            comparison.runs.forEach { run ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = localizedRunLabel(run.runLabel),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(run.color)
-                    )
-                    Text(
-                        text = tr(
-                            "down ${formatMeters(run.totalDescentM)}   up ${formatMeters(run.totalAscentM)}",
-                            "bajada ${formatMeters(run.totalDescentM)}   subida ${formatMeters(run.totalAscentM)}"
-                        ),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AltitudeSectionCard(comparison: AltitudeComparisonData) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = tr("Vertical Change by Section", "Cambio vertical por secciÃ³n"),
-                style = MaterialTheme.typography.titleSmall
-            )
-            comparison.sections.forEach { section ->
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "S${section.sectionIndex} (${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%)",
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                    for (runIndex in section.descentMeters.indices) {
-                        val run = comparison.runs.getOrNull(runIndex) ?: continue
-                        val descent = section.descentMeters.getOrNull(runIndex)
-                        val ascent = section.ascentMeters.getOrNull(runIndex)
-                        Text(
-                            text = "${localizedRunLabel(run.runLabel)}: down ${formatMetersNullable(descent)} | up ${formatMetersNullable(ascent)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun MultiMetricsTable(
     runs: List<RunWithColor>,
     comparisons: List<MultiMetricComparison>
@@ -573,7 +421,7 @@ private fun MultiMetricsTable(
                 horizontalArrangement = Arrangement.Start
             ) {
                 Text(
-                    text = tr("Metric", "MÃ©trica"),
+                    text = tr("Metric", "Métrica"),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.width(132.dp)
@@ -624,7 +472,7 @@ private fun MapComparisonSection(
         Text(
             text = tr(
                 "Tap an S marker on the map to highlight that section in the table.",
-                "Toca un marcador S en el mapa para resaltar esa secciÃ³n en la tabla."
+                "Toca un marcador S en el mapa para resaltar esa sección en la tabla."
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
@@ -633,7 +481,7 @@ private fun MapComparisonSection(
             Text(
                 text = tr(
                     "Some runs lack timing profile data; section times are estimated from total duration.",
-                    "Algunas bajadas no tienen perfil de tiempos; los tiempos por secciÃ³n se estiman desde la duraciÃ³n total."
+                    "Algunas bajadas no tienen perfil de tiempos; los tiempos por sección se estiman desde la duración total."
                 ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
@@ -786,7 +634,7 @@ private fun SplitSectionTable(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = tr("Section", "SecciÃ³n"),
+                    text = tr("Section", "Sección"),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.width(132.dp)
@@ -962,11 +810,11 @@ private fun localizedMetricName(metricName: String): String {
     if (!isSpanishLanguage()) return metricName
     return when (metricName) {
         "Impact" -> "Impacto"
-        "Harshness" -> "VibraciÃ³n"
+        "Harshness" -> "Vibración"
         "Stability" -> "Inestabilidad"
         "Landing Quality" -> "Calidad de aterrizaje"
-        "Duration" -> "DuraciÃ³n"
-        "Max Speed" -> "Velocidad mÃ¡xima"
+        "Duration" -> "Duración"
+        "Max Speed" -> "Velocidad máxima"
         else -> metricName
     }
 }
@@ -974,7 +822,7 @@ private fun localizedMetricName(metricName: String): String {
 private fun localizedVerdictTitle(verdict: MultiRunVerdict): String {
     if (!isSpanishLanguage()) return verdict.title
     return when (verdict.type) {
-        MultiRunVerdict.Type.CLEAR_WINNER -> "${localizedRunLabel(verdict.bestRunLabel)} fue la mÃ¡s suave"
+        MultiRunVerdict.Type.CLEAR_WINNER -> "${localizedRunLabel(verdict.bestRunLabel)} fue la más suave"
         MultiRunVerdict.Type.MIXED -> "Resultados mixtos"
         MultiRunVerdict.Type.SIMILAR -> "Rendimiento similar"
     }
@@ -983,8 +831,8 @@ private fun localizedVerdictTitle(verdict: MultiRunVerdict): String {
 private fun localizedInsightText(text: String): String {
     if (!isSpanishLanguage()) return text
     return text
-        .replace("Most metrics are similar across runs.", "La mayorÃ­a de mÃ©tricas son similares entre bajadas.")
-        .replace("Metrics are too close to declare a clear advantage.", "Las mÃ©tricas estÃ¡n demasiado cerca para una ventaja clara.")
+        .replace("Most metrics are similar across runs.", "La mayoría de métricas son similares entre bajadas.")
+        .replace("Metrics are too close to declare a clear advantage.", "Las métricas están demasiado cerca para una ventaja clara.")
         .replace("No significant differences detected between runs", "No se detectaron diferencias significativas entre bajadas")
         .replace("Mixed results", "Resultados mixtos")
         .replace("Similar performance", "Rendimiento similar")
@@ -994,15 +842,15 @@ private fun localizedInsightText(text: String): String {
         .replace(" spread is ", " tiene un rango de ")
         .replace(" points", " puntos")
         .replace(" has best ", " tiene mejor ")
-        .replace(" gained ", " ganÃ³ ")
-        .replace(" lost ", " perdiÃ³ ")
+        .replace(" gained ", " ganó ")
+        .replace(" lost ", " perdió ")
         .replace(" in S", " en S")
         .replace("Impact", "Impacto")
-        .replace("Harshness", "VibraciÃ³n")
+        .replace("Harshness", "Vibración")
         .replace("Stability", "Inestabilidad")
         .replace("Landing Quality", "Calidad de aterrizaje")
-        .replace("Duration", "DuraciÃ³n")
-        .replace("Max Speed", "Velocidad mÃ¡xima")
+        .replace("Duration", "Duración")
+        .replace("Max Speed", "Velocidad máxima")
 }
 
 private fun formatMs(value: Long?): String {
@@ -1019,19 +867,14 @@ private fun formatSpeed(speedMps: Float?): String {
     return String.format(Locale.US, "%.1f km/h", speedMps * 3.6f)
 }
 
-private fun formatMeters(value: Float): String {
-    return String.format(Locale.US, "%.1f m", value)
-}
-
-private fun formatMetersNullable(value: Float?): String {
-    value ?: return "--"
-    return formatMeters(value)
-}
 
 private fun findPointNearDistPct(points: List<GpsPoint>, targetPct: Float): GpsPoint? {
     if (points.isEmpty()) return null
     return points.minByOrNull { point -> abs(point.distPct - targetPct) }
 }
+
+
+
 
 
 

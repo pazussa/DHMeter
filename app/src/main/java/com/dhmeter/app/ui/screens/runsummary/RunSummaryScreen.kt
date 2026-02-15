@@ -1,4 +1,4 @@
-package com.dropindh.app.ui.screens.runsummary
+﻿package com.dropindh.app.ui.screens.runsummary
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -34,6 +34,7 @@ import com.dhmeter.charts.model.ChartMarkerIcon
 import com.dhmeter.charts.model.ChartPoint
 import com.dhmeter.charts.model.ChartSeries
 import com.dhmeter.charts.model.HeatmapPoint
+import com.dhmeter.domain.model.ElevationProfile
 import com.dhmeter.domain.model.EventType
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.Run
@@ -98,6 +99,7 @@ fun RunSummaryScreen(
                     harshnessSeries = uiState.harshnessSeries,
                     stabilitySeries = uiState.stabilitySeries,
                     speedSeries = uiState.speedSeries,
+                    elevationProfile = uiState.elevationProfile,
                     events = uiState.events,
                     isChartsLoading = uiState.isChartsLoading,
                     chartsError = uiState.chartsError,
@@ -138,6 +140,7 @@ private fun RunSummaryContent(
     harshnessSeries: RunSeries?,
     stabilitySeries: RunSeries?,
     speedSeries: RunSeries?,
+    elevationProfile: ElevationProfile?,
     events: List<RunEvent>,
     isChartsLoading: Boolean,
     chartsError: String?,
@@ -171,6 +174,7 @@ private fun RunSummaryContent(
             harshnessSeries = harshnessSeries,
             stabilitySeries = stabilitySeries,
             speedSeries = speedSeries,
+            elevationProfile = elevationProfile,
             distanceMeters = run.distanceMeters,
             avgSpeedMps = run.avgSpeed,
             events = events,
@@ -648,6 +652,7 @@ private fun RunChartsSection(
     harshnessSeries: RunSeries?,
     stabilitySeries: RunSeries?,
     speedSeries: RunSeries?,
+    elevationProfile: ElevationProfile?,
     distanceMeters: Float?,
     avgSpeedMps: Float?,
     events: List<RunEvent>,
@@ -712,6 +717,12 @@ private fun RunChartsSection(
                     series = speedSeries,
                     distanceMeters = distanceMeters,
                     fallbackAvgSpeedMps = avgSpeedMps,
+                    color = ChartSpeed
+                )
+
+                AltitudeChartSection(
+                    title = tr("Altitude vs Distance %", "Altitud vs Distancia %"),
+                    profile = elevationProfile,
                     color = ChartSpeed
                 )
 
@@ -853,6 +864,70 @@ private fun SpeedChartSection(
     }
 }
 
+@Composable
+private fun AltitudeChartSection(
+    title: String,
+    profile: ElevationProfile?,
+    color: Color
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall
+        )
+
+        val points = remember(profile) {
+            profile?.points
+                ?.filter { it.distPct.isFinite() && it.altitudeM.isFinite() }
+                ?.sortedBy { it.distPct }
+                ?.map { ChartPoint(it.distPct.coerceIn(0f, 100f), it.altitudeM) }
+                .orEmpty()
+        }
+
+        if (points.size < 2) {
+            Text(
+                text = tr("No altitude data available", "No hay datos de altitud disponibles"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            val minAltitude = points.minOf { it.y }
+            val maxAltitude = points.maxOf { it.y }
+            val range = (maxAltitude - minAltitude).coerceAtLeast(1f)
+            val padding = (range * 0.08f).coerceAtLeast(5f)
+            val axisMin = (minAltitude - padding).coerceAtMost(minAltitude)
+            val axisMax = (maxAltitude + padding).coerceAtLeast(maxAltitude + 1f)
+
+            ComparisonLineChart(
+                series = listOf(
+                    ChartSeries(
+                        label = tr("Altitude", "Altitud"),
+                        points = points,
+                        color = color
+                    )
+                ),
+                xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
+                yAxisConfig = AxisConfig(axisMin, axisMax, label = tr("Altitude (m)", "Altitud (m)")),
+                showLegend = false,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+            )
+
+            profile?.let {
+                Text(
+                    text = tr(
+                        "Descent ${formatMeters(it.totalDescentM)} | Ascent ${formatMeters(it.totalAscentM)}",
+                        "Bajada ${formatMeters(it.totalDescentM)} | Subida ${formatMeters(it.totalAscentM)}"
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        }
+    }
+}
+
 private fun RunSeries.toChartPoints(): List<ChartPoint> {
     val count = effectivePointCount
     return (0 until count).mapNotNull { i ->
@@ -950,6 +1025,10 @@ private fun String.shortLabel(): String {
         EventType.HARSHNESS_BURST -> "HRS"
         else -> "EVT"
     }
+}
+
+private fun formatMeters(value: Float): String {
+    return String.format(Locale.US, "%.1f m", value)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
