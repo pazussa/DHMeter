@@ -6,7 +6,8 @@ package com.dhmeter.domain.model
 data class GpsPoint(
     val lat: Double,
     val lon: Double,
-    val distPct: Float // 0..100
+    val distPct: Float, // 0..100
+    val altitudeM: Float? = null
 )
 
 /**
@@ -91,7 +92,24 @@ data class RunMapData(
     val segments: List<MapSegment>,
     val events: List<MapEventMarker>,
     val percentiles: MetricPercentiles,
-    val activeMetric: MapMetricType
+    val activeMetric: MapMetricType,
+    val elevationProfile: ElevationProfile? = null
+)
+
+/**
+ * Altitude profile for a run, aligned to distance percentage.
+ */
+data class ElevationProfile(
+    val points: List<ElevationProfilePoint>,
+    val totalDescentM: Float,
+    val totalAscentM: Float,
+    val minAltitudeM: Float,
+    val maxAltitudeM: Float
+)
+
+data class ElevationProfilePoint(
+    val distPct: Float,
+    val altitudeM: Float
 )
 
 /**

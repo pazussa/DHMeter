@@ -9,7 +9,8 @@ data class MultiRunComparisonResult(
     val metricComparisons: List<MultiMetricComparison>,
     val verdict: MultiRunVerdict,
     val sectionInsights: List<String> = emptyList(),
-    val mapComparison: MapComparisonData? = null
+    val mapComparison: MapComparisonData? = null,
+    val altitudeComparison: AltitudeComparisonData? = null
 )
 
 /**
@@ -58,6 +59,32 @@ data class MapSectionDelta(
     val deltaVsBaselineMs: List<Long?>, // per run
     val sectionAvgSpeedMps: List<Float?>, // per run
     val bestRunIndex: Int? // run with lowest section time
+)
+
+/**
+ * Altitude profile comparison across runs.
+ */
+data class AltitudeComparisonData(
+    val baselineRunIndex: Int = 0,
+    val runs: List<AltitudeComparisonRun>,
+    val sections: List<AltitudeSectionDelta>
+)
+
+data class AltitudeComparisonRun(
+    val runId: String,
+    val runLabel: String,
+    val color: Long,
+    val profilePoints: List<ElevationProfilePoint>,
+    val totalDescentM: Float,
+    val totalAscentM: Float
+)
+
+data class AltitudeSectionDelta(
+    val sectionIndex: Int,
+    val startDistPct: Float,
+    val endDistPct: Float,
+    val descentMeters: List<Float?>,
+    val ascentMeters: List<Float?>
 )
 
 /**

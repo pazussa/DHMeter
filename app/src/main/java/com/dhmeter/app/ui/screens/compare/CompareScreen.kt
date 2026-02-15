@@ -120,6 +120,7 @@ fun CompareScreen(
             uiState.comparison != null -> {
                 MultiRunComparisonContent(
                     comparison = uiState.comparison!!,
+                    isPro = uiState.isPro,
                     modifier = Modifier.padding(paddingValues)
                 )
             }
@@ -140,6 +141,7 @@ fun CompareScreen(
 @Composable
 private fun MultiRunComparisonContent(
     comparison: MultiRunComparisonResult,
+    isPro: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -203,6 +205,19 @@ private fun MultiRunComparisonContent(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+
+        comparison.altitudeComparison?.let { altitudeComparison ->
+            Text(
+                text = tr("Altitude Route Comparison", "Comparación de altitud del recorrido"),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+            AltitudeComparisonSection(
+                comparison = altitudeComparison,
+                isPro = isPro
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+        }
 
         // Section analysis
         if (comparison.sectionInsights.isNotEmpty()) {
@@ -393,6 +408,199 @@ private fun buildSpeedComparisonSeries(comparison: MultiRunComparisonResult): Li
                 points = points,
                 color = Color(runWithColor.color)
             )
+        }
+    }
+}
+
+@Composable
+private fun AltitudeComparisonSection(
+    comparison: AltitudeComparisonData,
+    isPro: Boolean
+) {
+    if (!isPro) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.WorkspacePremium,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = tr(
+                            "Pro feature: Altitude profile and section deltas",
+                            "Función Pro: perfil de altitud y deltas por sección"
+                        ),
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                }
+                val previewRun = comparison.runs.firstOrNull()
+                if (previewRun != null) {
+                    Text(
+                        text = tr(
+                            "Preview ${localizedRunLabel(previewRun.runLabel)}: drop ${formatMeters(previewRun.totalDescentM)} / gain ${formatMeters(previewRun.totalAscentM)}",
+                            "Vista previa ${localizedRunLabel(previewRun.runLabel)}: bajada ${formatMeters(previewRun.totalDescentM)} / subida ${formatMeters(previewRun.totalAscentM)}"
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = tr(
+                        "Upgrade to Pro to compare full altitude lines and section-by-section vertical changes.",
+                        "Pásate a Pro para comparar líneas completas de altitud y cambios verticales por sección."
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        }
+        return
+    }
+
+    val chartSeries = remember(comparison) { buildAltitudeChartSeries(comparison) }
+    val allAltitudes = chartSeries.flatMap { series -> series.points.map { it.y } }
+
+    if (chartSeries.isEmpty() || allAltitudes.isEmpty()) {
+        Text(
+            text = tr("No altitude data available", "No hay datos de altitud disponibles"),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        return
+    }
+
+    val minAltitude = allAltitudes.minOrNull() ?: 0f
+    val maxAltitude = allAltitudes.maxOrNull() ?: 0f
+    val range = (maxAltitude - minAltitude).coerceAtLeast(1f)
+    val padding = (range * 0.08f).coerceAtLeast(5f)
+    val axisMin = (minAltitude - padding).coerceAtMost(minAltitude)
+    val axisMax = (maxAltitude + padding).coerceAtLeast(maxAltitude + 1f)
+
+    ComparisonLineChart(
+        series = chartSeries,
+        xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
+        yAxisConfig = AxisConfig(axisMin, axisMax, label = tr("Altitude (m)", "Altitud (m)")),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(240.dp)
+    )
+
+    Spacer(modifier = Modifier.height(12.dp))
+    AltitudeTotalsCard(comparison = comparison)
+    Spacer(modifier = Modifier.height(12.dp))
+    AltitudeSectionCard(comparison = comparison)
+}
+
+private fun buildAltitudeChartSeries(comparison: AltitudeComparisonData): List<ChartSeries> {
+    return comparison.runs.mapNotNull { run ->
+        val points = run.profilePoints
+            .filter { it.distPct.isFinite() && it.altitudeM.isFinite() }
+            .sortedBy { it.distPct }
+            .map { point ->
+                ChartPoint(
+                    x = point.distPct.coerceIn(0f, 100f),
+                    y = point.altitudeM
+                )
+            }
+
+        if (points.size < 2) {
+            null
+        } else {
+            ChartSeries(
+                label = localizedRunLabel(run.runLabel),
+                points = points,
+                color = Color(run.color)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AltitudeTotalsCard(comparison: AltitudeComparisonData) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = tr("Total Vertical Change", "Cambio vertical total"),
+                style = MaterialTheme.typography.titleSmall
+            )
+            comparison.runs.forEach { run ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = localizedRunLabel(run.runLabel),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(run.color)
+                    )
+                    Text(
+                        text = tr(
+                            "↓ ${formatMeters(run.totalDescentM)}   ↑ ${formatMeters(run.totalAscentM)}",
+                            "↓ ${formatMeters(run.totalDescentM)}   ↑ ${formatMeters(run.totalAscentM)}"
+                        ),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AltitudeSectionCard(comparison: AltitudeComparisonData) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = tr("Vertical Change by Section", "Cambio vertical por sección"),
+                style = MaterialTheme.typography.titleSmall
+            )
+            comparison.sections.forEach { section ->
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "S${section.sectionIndex} (${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%)",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    for (runIndex in section.descentMeters.indices) {
+                        val run = comparison.runs.getOrNull(runIndex) ?: continue
+                        val descent = section.descentMeters.getOrNull(runIndex)
+                        val ascent = section.ascentMeters.getOrNull(runIndex)
+                        Text(
+                            text = "${localizedRunLabel(run.runLabel)}: down ${formatMetersNullable(descent)} | up ${formatMetersNullable(ascent)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -865,6 +1073,15 @@ private fun formatMs(value: Long?): String {
 private fun formatSpeed(speedMps: Float?): String {
     speedMps ?: return "--"
     return String.format(Locale.US, "%.1f km/h", speedMps * 3.6f)
+}
+
+private fun formatMeters(value: Float): String {
+    return String.format(Locale.US, "%.1f m", value)
+}
+
+private fun formatMetersNullable(value: Float?): String {
+    value ?: return "--"
+    return formatMeters(value)
 }
 
 private fun findPointNearDistPct(points: List<GpsPoint>, targetPct: Float): GpsPoint? {

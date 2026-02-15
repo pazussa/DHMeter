@@ -55,7 +55,8 @@ class GpsPolylineProcessor @Inject constructor() {
                 lon = sample.longitude,
                 distPct = if (totalDistanceM > 0) {
                     (cumulativeDist / totalDistanceM * 100f).coerceIn(0f, 100f)
-                } else 0f
+                } else 0f,
+                altitudeM = sample.altitude?.toFloat()
             )
         }
         

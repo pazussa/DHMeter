@@ -9,12 +9,14 @@ import java.nio.ByteOrder
 
 /**
  * Maps between GpsPolylineEntity and domain models.
- * Points are stored as packed: [lat (double), lon (double), distPct (float)] per point
- * = 8 + 8 + 4 = 20 bytes per point
+ * Backward-compatible packed formats:
+ * V1: [lat (double), lon (double), distPct (float)] = 20 bytes
+ * V2: [lat (double), lon (double), distPct (float), altitudeM (float)] = 24 bytes
  */
 object GpsPolylineMapper {
     
-    private const val BYTES_PER_POINT = 20 // 8 (lat) + 8 (lon) + 4 (distPct)
+    private const val BYTES_PER_POINT_V1 = 20 // 8 (lat) + 8 (lon) + 4 (distPct)
+    private const val BYTES_PER_POINT_V2 = 24 // + 4 (altitudeM)
     
     fun entityToDomain(entity: GpsPolylineEntity): GpsPolyline {
         val points = unpackPoints(entity.points, entity.pointCount)
@@ -45,13 +47,14 @@ object GpsPolylineMapper {
     }
     
     private fun packPoints(points: List<GpsPoint>): ByteArray {
-        val buffer = ByteBuffer.allocate(points.size * BYTES_PER_POINT)
+        val buffer = ByteBuffer.allocate(points.size * BYTES_PER_POINT_V2)
         buffer.order(ByteOrder.LITTLE_ENDIAN)
         
         points.forEach { point ->
             buffer.putDouble(point.lat)
             buffer.putDouble(point.lon)
             buffer.putFloat(point.distPct)
+            buffer.putFloat(point.altitudeM ?: Float.NaN)
         }
         
         return buffer.array()
@@ -59,18 +62,38 @@ object GpsPolylineMapper {
     
     private fun unpackPoints(data: ByteArray, count: Int): List<GpsPoint> {
         if (data.isEmpty() || count == 0) return emptyList()
-        val safeCount = minOf(count.coerceAtLeast(0), data.size / BYTES_PER_POINT)
+        val bytesPerPoint = resolveBytesPerPoint(data, count)
+        val safeCount = minOf(count.coerceAtLeast(0), data.size / bytesPerPoint)
         if (safeCount == 0) return emptyList()
         
         val buffer = ByteBuffer.wrap(data)
         buffer.order(ByteOrder.LITTLE_ENDIAN)
         
         return (0 until safeCount).map {
+            val lat = buffer.getDouble()
+            val lon = buffer.getDouble()
+            val distPct = buffer.getFloat()
+            val altitude = if (bytesPerPoint == BYTES_PER_POINT_V2) {
+                buffer.getFloat().takeIf { it.isFinite() }
+            } else null
             GpsPoint(
-                lat = buffer.getDouble(),
-                lon = buffer.getDouble(),
-                distPct = buffer.getFloat()
+                lat = lat,
+                lon = lon,
+                distPct = distPct,
+                altitudeM = altitude
             )
+        }
+    }
+
+    private fun resolveBytesPerPoint(data: ByteArray, count: Int): Int {
+        val safeCount = count.coerceAtLeast(0)
+        if (safeCount > 0) {
+            if (data.size == safeCount * BYTES_PER_POINT_V2) return BYTES_PER_POINT_V2
+            if (data.size == safeCount * BYTES_PER_POINT_V1) return BYTES_PER_POINT_V1
+        }
+        return when {
+            data.size % BYTES_PER_POINT_V2 == 0 -> BYTES_PER_POINT_V2
+            else -> BYTES_PER_POINT_V1
         }
     }
 }

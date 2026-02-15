@@ -29,6 +29,7 @@ class GetRunMapDataUseCase @Inject constructor(
             )
             val percentiles = calculatePercentiles(speedValues)
             val segments = createSegments(polyline, speedValues, percentiles)
+            val elevationProfile = createElevationProfile(polyline)
             
             // Create event markers
             val eventMarkers = createEventMarkers(events, polyline)
@@ -40,7 +41,8 @@ class GetRunMapDataUseCase @Inject constructor(
                     segments = segments,
                     events = eventMarkers,
                     percentiles = percentiles,
-                    activeMetric = MapMetricType.SPEED
+                    activeMetric = MapMetricType.SPEED,
+                    elevationProfile = elevationProfile
                 )
             )
         } catch (e: Exception) {
@@ -77,6 +79,7 @@ class GetRunMapDataUseCase @Inject constructor(
             val percentiles = calculatePercentiles(values)
             val segments = createSegments(polyline, values, percentiles)
             val eventMarkers = createEventMarkers(events, polyline)
+            val elevationProfile = createElevationProfile(polyline)
             
             Result.success(
                 RunMapData(
@@ -85,7 +88,8 @@ class GetRunMapDataUseCase @Inject constructor(
                     segments = segments,
                     events = eventMarkers,
                     percentiles = percentiles,
-                    activeMetric = metric
+                    activeMetric = metric,
+                    elevationProfile = elevationProfile
                 )
             )
         } catch (e: Exception) {
@@ -214,6 +218,57 @@ class GetRunMapDataUseCase @Inject constructor(
                 }
             )
         }
+    }
+
+    private fun createElevationProfile(polyline: GpsPolyline): ElevationProfile? {
+        val rawPoints = polyline.points
+            .filter { it.altitudeM != null && it.distPct.isFinite() }
+            .sortedBy { it.distPct }
+        if (rawPoints.size < 2) return null
+
+        val smoothedAltitudes = smoothAltitude(rawPoints.mapNotNull { it.altitudeM })
+        if (smoothedAltitudes.size != rawPoints.size) return null
+
+        val profilePoints = rawPoints.indices.map { index ->
+            ElevationProfilePoint(
+                distPct = rawPoints[index].distPct.coerceIn(0f, 100f),
+                altitudeM = smoothedAltitudes[index]
+            )
+        }
+
+        var totalDescent = 0f
+        var totalAscent = 0f
+        profilePoints.zipWithNext { a, b ->
+            val delta = b.altitudeM - a.altitudeM
+            if (delta < 0f) {
+                totalDescent += -delta
+            } else {
+                totalAscent += delta
+            }
+        }
+
+        val minAltitude = profilePoints.minOf { it.altitudeM }
+        val maxAltitude = profilePoints.maxOf { it.altitudeM }
+
+        return ElevationProfile(
+            points = profilePoints,
+            totalDescentM = totalDescent,
+            totalAscentM = totalAscent,
+            minAltitudeM = minAltitude,
+            maxAltitudeM = maxAltitude
+        )
+    }
+
+    private fun smoothAltitude(values: List<Float>): List<Float> {
+        if (values.size < 3) return values
+        val result = MutableList(values.size) { values[it] }
+        for (i in values.indices) {
+            val prev = values[(i - 1).coerceAtLeast(0)]
+            val current = values[i]
+            val next = values[(i + 1).coerceAtMost(values.lastIndex)]
+            result[i] = (prev + current + next) / 3f
+        }
+        return result
     }
 
     private fun findClosestPointByDistPct(

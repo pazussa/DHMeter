@@ -65,6 +65,7 @@ class CompareMultipleRunsUseCase @Inject constructor(
 
             // Build map comparison (route overlay + split deltas vs Run 1)
             val mapComparison = buildMapComparison(runs)
+            val altitudeComparison = buildAltitudeComparison(runs)
 
             // Determine verdict
             val verdict = determineVerdict(runs, metricComparisons)
@@ -81,7 +82,8 @@ class CompareMultipleRunsUseCase @Inject constructor(
                     metricComparisons = metricComparisons,
                     verdict = verdict,
                     sectionInsights = insights,
-                    mapComparison = mapComparison
+                    mapComparison = mapComparison,
+                    altitudeComparison = altitudeComparison
                 )
             )
         } catch (e: Exception) {
@@ -357,6 +359,140 @@ class CompareMultipleRunsUseCase @Inject constructor(
         }
 
         return insights
+    }
+
+    private suspend fun buildAltitudeComparison(runs: List<RunWithColor>): AltitudeComparisonData? {
+        val altitudeRuns = runs.mapNotNull { runWithColor ->
+            val polyline = runRepository.getGpsPolyline(runWithColor.run.runId) ?: return@mapNotNull null
+            val profile = createSmoothedElevationProfile(polyline.points) ?: return@mapNotNull null
+            val (descent, ascent) = calculateElevationTotals(profile)
+            AltitudeComparisonRun(
+                runId = runWithColor.run.runId,
+                runLabel = runWithColor.label,
+                color = runWithColor.color,
+                profilePoints = profile,
+                totalDescentM = descent,
+                totalAscentM = ascent
+            )
+        }
+
+        if (altitudeRuns.size < 2) return null
+
+        val sections = KEY_SECTION_BOUNDS.zipWithNext().mapIndexed { index, (startPct, endPct) ->
+            val sectionDeltas = altitudeRuns.map { run ->
+                calculateSectionElevation(run.profilePoints, startPct, endPct)
+            }
+            AltitudeSectionDelta(
+                sectionIndex = index + 1,
+                startDistPct = startPct,
+                endDistPct = endPct,
+                descentMeters = sectionDeltas.map { it?.first },
+                ascentMeters = sectionDeltas.map { it?.second }
+            )
+        }
+
+        return AltitudeComparisonData(
+            baselineRunIndex = 0,
+            runs = altitudeRuns,
+            sections = sections
+        )
+    }
+
+    private fun createSmoothedElevationProfile(points: List<GpsPoint>): List<ElevationProfilePoint>? {
+        val altitudePoints = points
+            .filter { it.altitudeM != null && it.distPct.isFinite() }
+            .sortedBy { it.distPct }
+        if (altitudePoints.size < 2) return null
+
+        val altitudes = altitudePoints.mapNotNull { it.altitudeM }
+        val smoothed = smoothAltitude(altitudes)
+        if (smoothed.size != altitudePoints.size) return null
+
+        return altitudePoints.indices.map { index ->
+            ElevationProfilePoint(
+                distPct = altitudePoints[index].distPct.coerceIn(0f, 100f),
+                altitudeM = smoothed[index]
+            )
+        }
+    }
+
+    private fun smoothAltitude(values: List<Float>): List<Float> {
+        if (values.size < 3) return values
+        val output = MutableList(values.size) { values[it] }
+        for (i in values.indices) {
+            val prev = values[(i - 1).coerceAtLeast(0)]
+            val current = values[i]
+            val next = values[(i + 1).coerceAtMost(values.lastIndex)]
+            output[i] = (prev + current + next) / 3f
+        }
+        return output
+    }
+
+    private fun calculateElevationTotals(profile: List<ElevationProfilePoint>): Pair<Float, Float> {
+        var descent = 0f
+        var ascent = 0f
+        profile.zipWithNext { a, b ->
+            val delta = b.altitudeM - a.altitudeM
+            if (delta < 0f) {
+                descent += -delta
+            } else {
+                ascent += delta
+            }
+        }
+        return descent to ascent
+    }
+
+    private fun calculateSectionElevation(
+        points: List<ElevationProfilePoint>,
+        startDistPct: Float,
+        endDistPct: Float
+    ): Pair<Float, Float>? {
+        if (points.size < 2) return null
+        val start = startDistPct.coerceIn(0f, 100f)
+        val end = endDistPct.coerceIn(0f, 100f)
+        if (end <= start) return null
+
+        val startAltitude = interpolateAltitude(points, start) ?: return null
+        val endAltitude = interpolateAltitude(points, end) ?: return null
+
+        val sectionPoints = buildList {
+            add(ElevationProfilePoint(start, startAltitude))
+            points.filterTo(this) { it.distPct > start && it.distPct < end }
+            add(ElevationProfilePoint(end, endAltitude))
+        }.sortedBy { it.distPct }
+
+        if (sectionPoints.size < 2) return null
+
+        var descent = 0f
+        var ascent = 0f
+        sectionPoints.zipWithNext { a, b ->
+            val delta = b.altitudeM - a.altitudeM
+            if (delta < 0f) {
+                descent += -delta
+            } else {
+                ascent += delta
+            }
+        }
+        return descent to ascent
+    }
+
+    private fun interpolateAltitude(points: List<ElevationProfilePoint>, targetDistPct: Float): Float? {
+        if (points.isEmpty()) return null
+        if (targetDistPct <= points.first().distPct) return points.first().altitudeM
+        if (targetDistPct >= points.last().distPct) return points.last().altitudeM
+
+        var lower = points.first()
+        for (i in 1 until points.size) {
+            val upper = points[i]
+            if (targetDistPct <= upper.distPct) {
+                val span = (upper.distPct - lower.distPct)
+                if (abs(span) < 1e-6f) return upper.altitudeM
+                val t = (targetDistPct - lower.distPct) / span
+                return lower.altitudeM + t * (upper.altitudeM - lower.altitudeM)
+            }
+            lower = upper
+        }
+        return points.last().altitudeM
     }
 
     private fun formatAbsDelta(deltaMs: Long): String {
