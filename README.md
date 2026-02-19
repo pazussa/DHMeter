@@ -47,6 +47,25 @@ Notas:
 - Si no configuras secrets de firma, el workflow publica `debug` (válido para pruebas rápidas).
 - Para instalar desde Android, habilita "instalar apps desconocidas" para tu navegador/gestor.
 
+## Enviar la última APK al Android por Wi-Fi (sin USB)
+Script incluido:
+- `scripts/send_latest_apk_to_android.sh`
+
+Ejemplo rápido (dispositivo ya conectado por adb inalámbrico):
+```bash
+./scripts/send_latest_apk_to_android.sh --device 192.168.1.25:5555 --open-installer
+```
+
+Ejemplo con pairing inalámbrico (Android 11+):
+```bash
+./scripts/send_latest_apk_to_android.sh \
+  --pair 192.168.1.25:37001 --pair-code 123456 \
+  --device 192.168.1.25:5555 --open-installer
+```
+
+El script descarga la APK más reciente de la release `testing-latest` y la deja en:
+- `/sdcard/Download/dropindh-testing-latest.apk`
+
 ## Notas rápidas
 - Umbral de impacto ajustado a 0.8g en la versión actual.
 - Comparación multi-run real implementada; la UI soporta muchos runs con scroll horizontal.
