@@ -14,6 +14,7 @@ import com.dropindh.app.ui.screens.history.HistoryScreen
 import com.dropindh.app.ui.screens.home.HomeScreen
 import com.dropindh.app.ui.screens.map.MapScreen
 import com.dropindh.app.ui.screens.pro.ProScreen
+import com.dropindh.app.ui.screens.gpslab.GpsCalibrationScreen
 import com.dropindh.app.ui.screens.recording.RecordingScreen
 import com.dropindh.app.ui.screens.runsummary.RunSummaryScreen
 import com.dropindh.app.ui.screens.trackdetail.TrackDetailScreen
@@ -45,6 +46,7 @@ sealed class Screen(val route: String) {
     }
     data object History : Screen("history")
     data object Pro : Screen("pro")
+    data object GpsCalibration : Screen("gps_calibration")
     data object Community : Screen("community")
     data object TrackDetail : Screen("track_detail/{trackId}") {
         fun createRoute(trackId: String) = "track_detail/$trackId"
@@ -72,6 +74,9 @@ fun DHMeterNavHost(
                 },
                 onNavigateToPro = {
                     navController.navigate(Screen.Pro.route)
+                },
+                onNavigateToGpsCalibration = {
+                    navController.navigate(Screen.GpsCalibration.route)
                 }
             )
         }
@@ -198,6 +203,14 @@ fun DHMeterNavHost(
             )
         }
 
+        composable(Screen.GpsCalibration.route) {
+            GpsCalibrationScreen(
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
         composable(
             route = Screen.TrackDetail.route,
             arguments = listOf(navArgument("trackId") { type = NavType.StringType })
@@ -221,4 +234,3 @@ fun DHMeterNavHost(
         }
     }
 }
-

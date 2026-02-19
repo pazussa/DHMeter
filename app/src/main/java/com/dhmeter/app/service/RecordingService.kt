@@ -146,10 +146,16 @@ class RecordingService : Service() {
                 stopForegroundOnly()
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent): IBinder = binder
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // Do not keep GPS monitoring alive after the user explicitly closes the app task.
+        disableAutoMonitoringAndStopService(cancelActiveRecording = true)
+        super.onTaskRemoved(rootIntent)
+    }
 
     override fun onDestroy() {
         previewManager.stopPreview(AUTO_PREVIEW_CLIENT_ID)
@@ -226,15 +232,25 @@ class RecordingService : Service() {
     }
 
     fun stopForegroundOnly() {
-        if (autoEnabledTrackId != null) {
-            ensureForegroundNotification(currentAutoStatusMessage())
-            _recordingState.value = RecordingState.Idle
-            return
+        when (recordingManager.recordingState.value) {
+            is SensorRecordingState.Recording -> {
+                ensureForegroundNotification(msgRecording())
+                _recordingState.value = RecordingState.Idle
+            }
+            is SensorRecordingState.Processing -> {
+                ensureForegroundNotification(msgProcessing())
+                _recordingState.value = RecordingState.Idle
+            }
+            else -> {
+                disableAutoMonitoringAndStopService()
+            }
         }
-        stopForegroundAndSelf()
     }
 
-    private fun disableAutoMonitoringAndStopService() {
+    private fun disableAutoMonitoringAndStopService(cancelActiveRecording: Boolean = false) {
+        if (cancelActiveRecording || recordingManager.recordingState.value is SensorRecordingState.Processing) {
+            recordingManager.cancelRecording()
+        }
         autoEnabledTrackId = null
         autoSegments = emptyList()
         activeAutoSegment = null
@@ -753,4 +769,3 @@ sealed class RecordingState {
     data class Completed(val handle: com.dhmeter.domain.model.RawCaptureHandle) : RecordingState()
     data class Error(val message: String) : RecordingState()
 }
-
