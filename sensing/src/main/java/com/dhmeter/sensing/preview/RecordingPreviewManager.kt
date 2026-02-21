@@ -77,11 +77,11 @@ class RecordingPreviewManagerImpl @Inject constructor(
 
     override fun resumeAll() {
         val shouldStart = synchronized(lock) {
-            val canStart = isPaused && clients.isNotEmpty()
-            if (canStart) {
-                isPaused = false
-            }
-            canStart
+            val wasPaused = isPaused
+            val hasClients = clients.isNotEmpty()
+            // Always clear paused mode when resuming so future startPreview calls can activate collectors.
+            isPaused = false
+            wasPaused && hasClients
         }
         if (shouldStart && previewJob?.isActive != true) {
             startCollectorsAndMonitoring()

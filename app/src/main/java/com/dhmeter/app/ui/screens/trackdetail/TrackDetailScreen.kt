@@ -31,15 +31,24 @@ fun TrackDetailScreen(
     onRunSelected: (runId: String) -> Unit,
     onCompareRuns: (runIds: List<String>) -> Unit,
     onStartNewRun: () -> Unit,
+    onTrackDeleted: () -> Unit,
     onBack: () -> Unit,
     viewModel: TrackDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var selectedRuns by remember { mutableStateOf(setOf<String>()) }
     var isCompareMode by remember { mutableStateOf(false) }
+    var showDeleteTrackDialog by remember { mutableStateOf(false) }
+    var runIdToDelete by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(trackId) {
         viewModel.loadTrack(trackId)
+    }
+    LaunchedEffect(uiState.trackDeleted) {
+        if (uiState.trackDeleted) {
+            viewModel.consumeTrackDeleted()
+            onTrackDeleted()
+        }
     }
 
     Scaffold(
@@ -66,6 +75,22 @@ fun TrackDetailScreen(
                             Icon(
                                 imageVector = if (isCompareMode) Icons.Default.Close else Icons.Default.Compare,
                                 contentDescription = tr("Compare mode", "Modo comparación")
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = { showDeleteTrackDialog = true },
+                        enabled = !uiState.isDeletingTrack
+                    ) {
+                        if (uiState.isDeletingTrack) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.DeleteForever,
+                                contentDescription = tr("Delete track", "Borrar track")
                             )
                         }
                     }
@@ -232,6 +257,7 @@ fun TrackDetailScreen(
                                     run = run,
                                     isSelected = selectedRuns.contains(run.runId),
                                     isCompareMode = isCompareMode,
+                                    isDeleting = uiState.deletingRunId == run.runId,
                                     onSelect = {
                                         if (isCompareMode) {
                                             selectedRuns = if (selectedRuns.contains(run.runId)) {
@@ -242,6 +268,9 @@ fun TrackDetailScreen(
                                         } else {
                                             onRunSelected(run.runId)
                                         }
+                                    },
+                                    onDelete = {
+                                        runIdToDelete = run.runId
                                     }
                                 )
                             }
@@ -260,6 +289,69 @@ fun TrackDetailScreen(
             confirmButton = {
                 TextButton(onClick = { viewModel.clearError() }) {
                     Text(tr("OK", "Aceptar"))
+                }
+            }
+        )
+    }
+
+    if (showDeleteTrackDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteTrackDialog = false },
+            title = { Text(tr("Delete track?", "¿Borrar track?")) },
+            text = {
+                Text(
+                    tr(
+                        "This will delete the track and all associated runs. This action cannot be undone.",
+                        "Esto borrará el track y todas sus bajadas asociadas. Esta acción no se puede deshacer."
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteTrackDialog = false
+                        viewModel.deleteTrack()
+                    }
+                ) {
+                    Text(tr("Delete", "Borrar"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteTrackDialog = false }) {
+                    Text(tr("Cancel", "Cancelar"))
+                }
+            }
+        )
+    }
+
+    if (runIdToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { runIdToDelete = null },
+            title = { Text(tr("Delete run?", "¿Borrar bajada?")) },
+            text = {
+                Text(
+                    tr(
+                        "The selected run will be removed permanently.",
+                        "La bajada seleccionada se eliminará permanentemente."
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val targetRunId = runIdToDelete
+                        runIdToDelete = null
+                        if (!targetRunId.isNullOrBlank()) {
+                            viewModel.deleteRun(targetRunId)
+                        }
+                    }
+                ) {
+                    Text(tr("Delete", "Borrar"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { runIdToDelete = null }) {
+                    Text(tr("Cancel", "Cancelar"))
                 }
             }
         )
@@ -332,7 +424,9 @@ private fun RunCard(
     run: Run,
     isSelected: Boolean,
     isCompareMode: Boolean,
-    onSelect: () -> Unit
+    isDeleting: Boolean,
+    onSelect: () -> Unit,
+    onDelete: () -> Unit
 ) {
     val dateFormat = remember { SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault()) }
     val overallQuality = runOverallQualityScore(run)
@@ -402,8 +496,24 @@ private fun RunCard(
                 }
             }
             
-            Spacer(modifier = Modifier.width(8.dp))
-            
+            IconButton(
+                onClick = onDelete,
+                enabled = !isDeleting
+            ) {
+                if (isDeleting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = tr("Delete run", "Borrar bajada"),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
             Icon(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
@@ -419,5 +529,4 @@ private fun formatDuration(ms: Long): String {
     val secs = seconds % 60
     return String.format(Locale.US, "%d:%02d", minutes, secs)
 }
-
 

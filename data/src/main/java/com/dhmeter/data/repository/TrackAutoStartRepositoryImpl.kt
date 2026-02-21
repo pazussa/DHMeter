@@ -30,5 +30,16 @@ class TrackAutoStartRepositoryImpl @Inject constructor(
             .apply()
     }
 
+    override fun getEnabledTrackIds(): List<String> {
+        return prefs.all.entries
+            .asSequence()
+            .filter { (key, value) ->
+                key.startsWith(KEY_PREFIX) && (value as? Boolean == true)
+            }
+            .map { (key, _) -> key.removePrefix(KEY_PREFIX) }
+            .filter { it.isNotBlank() }
+            .toList()
+    }
+
     private fun buildKey(trackId: String): String = "$KEY_PREFIX$trackId"
 }

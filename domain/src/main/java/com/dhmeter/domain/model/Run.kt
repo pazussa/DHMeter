@@ -6,6 +6,8 @@ data class Run(
     val startedAt: Long,
     val endedAt: Long,
     val durationMs: Long,
+    val isValid: Boolean = true,
+    val invalidReason: String? = null,
     val phonePlacement: String = "POCKET_THIGH",
     val deviceModel: String,
     val sampleRateAccelHz: Float,

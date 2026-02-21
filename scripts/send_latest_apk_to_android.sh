@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Downloads the latest testing APK from GitHub Releases and sends it to an Android phone
-# over Wi-Fi ADB, leaving it in /sdcard/Download ready to install.
+# Sends the testing APK to an Android phone over Wi-Fi ADB.
+# When using --install, it also uploads the latest local APK to GitHub Releases first.
 
 REPO_DEFAULT="pazussa/DHMeter"
 RELEASE_TAG_DEFAULT="testing-latest"
@@ -27,7 +27,8 @@ Options:
   --asset <name>        Release asset filename (default: ${ASSET_NAME_DEFAULT})
   --dest <path>         Destination path on phone (default: ${PHONE_DEST_DEFAULT})
   --open-installer      Try to open package installer after pushing APK
-  --install             Install directly using adb install -r (no manual tap)
+  --install             Upload latest local APK to GitHub, then install directly with adb
+  --skip-upload         Skip GitHub upload step (only relevant with --install)
   --keep-local          Keep downloaded APK in ./tmp-apk
   -h, --help            Show this help
 
@@ -57,6 +58,7 @@ PHONE_DEST="$PHONE_DEST_DEFAULT"
 OPEN_INSTALLER=false
 INSTALL_DIRECT=false
 KEEP_LOCAL=false
+SKIP_UPLOAD=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -102,6 +104,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --keep-local)
       KEEP_LOCAL=true
+      shift
+      ;;
+    --skip-upload)
+      SKIP_UPLOAD=true
       shift
       ;;
     -h|--help)
@@ -157,16 +163,76 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$ROOT_DIR/tmp-apk"
 mkdir -p "$TMP_DIR"
 LOCAL_APK="$TMP_DIR/$ASSET_NAME"
-
-echo "[1/5] Downloading latest APK from release '$TAG' in '$REPO'..."
 ASSET_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_NAME}"
-curl -fsSL "$ASSET_URL" -o "$LOCAL_APK"
-if [[ ! -s "$LOCAL_APK" ]]; then
-  echo "Error: failed to download APK from $ASSET_URL" >&2
-  exit 1
+
+find_latest_local_apk() {
+  local latest
+  latest="$(
+    find "$ROOT_DIR/app/build/outputs/apk" -type f -name "*.apk" -printf '%T@ %p\n' 2>/dev/null \
+      | sort -nr \
+      | head -n 1 \
+      | cut -d' ' -f2-
+  )"
+  printf '%s' "$latest"
+}
+
+upload_apk_to_release() {
+  local upload_apk_path="$1"
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "Error: gh is not authenticated. Run 'gh auth login' and retry." >&2
+    exit 1
+  fi
+
+  if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+    echo "Release '$TAG' not found in '$REPO'. Creating it..."
+    gh release create "$TAG" --repo "$REPO" --title "$TAG" --notes "Latest testing APK"
+  fi
+
+  gh release upload "$TAG" "$upload_apk_path" --repo "$REPO" --clobber
+}
+
+UPLOAD_TO_GITHUB=false
+if [[ "$INSTALL_DIRECT" = true && "$SKIP_UPLOAD" = false ]]; then
+  UPLOAD_TO_GITHUB=true
 fi
 
-echo "[2/5] Resolving Android device..."
+TOTAL_STEPS=5
+if [[ "$UPLOAD_TO_GITHUB" = true ]]; then
+  TOTAL_STEPS=6
+fi
+STEP=1
+
+log_step() {
+  echo "[${STEP}/${TOTAL_STEPS}] $1"
+  STEP=$((STEP + 1))
+}
+
+if [[ "$UPLOAD_TO_GITHUB" = true ]]; then
+  log_step "Resolving latest local APK..."
+  SOURCE_APK="$(find_latest_local_apk)"
+  if [[ -z "$SOURCE_APK" || ! -f "$SOURCE_APK" ]]; then
+    echo "No local APK found. Building debug APK..."
+    (cd "$ROOT_DIR" && ./gradlew :app:assembleDebug)
+    SOURCE_APK="$(find_latest_local_apk)"
+  fi
+  if [[ -z "$SOURCE_APK" || ! -f "$SOURCE_APK" ]]; then
+    echo "Error: could not find a local APK after build." >&2
+    exit 1
+  fi
+
+  cp -f "$SOURCE_APK" "$LOCAL_APK"
+  log_step "Uploading latest local APK to release '$TAG' in '$REPO'..."
+  upload_apk_to_release "$LOCAL_APK"
+else
+  log_step "Downloading latest APK from release '$TAG' in '$REPO'..."
+  curl -fsSL "$ASSET_URL" -o "$LOCAL_APK"
+  if [[ ! -s "$LOCAL_APK" ]]; then
+    echo "Error: failed to download APK from $ASSET_URL" >&2
+    exit 1
+  fi
+fi
+
+log_step "Resolving Android device..."
 PAIR_HOST=""
 if [[ -n "$PAIR_ENDPOINT" ]]; then
   echo "Pairing with device at $PAIR_ENDPOINT..."
@@ -229,10 +295,10 @@ if [[ "$DEVICE_STATE" != "device" ]]; then
   exit 1
 fi
 
-echo "[3/5] Pushing APK to phone: $PHONE_DEST"
+log_step "Pushing APK to phone: $PHONE_DEST"
 adb -s "$DEVICE" push "$LOCAL_APK" "$PHONE_DEST" >/dev/null
 
-echo "[4/5] Verifying file on phone..."
+log_step "Verifying file on phone..."
 PHONE_SIZE="$(adb -s "$DEVICE" shell "stat -c %s '$PHONE_DEST'" 2>/dev/null | tr -d '\r' || true)"
 LOCAL_SIZE="$(stat -c %s "$LOCAL_APK")"
 if [[ "$PHONE_SIZE" != "$LOCAL_SIZE" ]]; then
@@ -242,11 +308,17 @@ else
 fi
 
 if [[ "$INSTALL_DIRECT" = true ]]; then
-  echo "[5/5] Installing directly with adb..."
+  log_step "Installing directly with adb..."
+  for pkg in com.dropindh.app.debug com.dropindh.app; do
+    if adb -s "$DEVICE" shell pm list packages "$pkg" | grep -q "$pkg"; then
+      echo "Uninstalling previous app: $pkg"
+      adb -s "$DEVICE" uninstall "$pkg" >/dev/null || true
+    fi
+  done
   adb -s "$DEVICE" install -r "$LOCAL_APK"
   echo "Done: APK installed."
 elif [[ "$OPEN_INSTALLER" = true ]]; then
-  echo "[5/5] Opening installer intent on phone..."
+  log_step "Opening installer intent on phone..."
   # Use INSTALL_PACKAGE (not generic VIEW) to avoid unrelated apps handling .apk files.
   if adb -s "$DEVICE" shell am start \
     -a android.intent.action.INSTALL_PACKAGE \
@@ -261,7 +333,7 @@ elif [[ "$OPEN_INSTALLER" = true ]]; then
     echo "Done: APK installed with adb."
   fi
 else
-  echo "[5/5] Done: APK copied to phone and ready to install manually."
+  log_step "Done: APK copied to phone and ready to install manually."
   echo "Path on phone: $PHONE_DEST"
 fi
 

@@ -47,3 +47,20 @@ class CreateTrackUseCase @Inject constructor(
         }
     }
 }
+
+class DeleteTrackUseCase @Inject constructor(
+    private val trackRepository: TrackRepository
+) {
+    suspend operator fun invoke(trackId: String): Result<Unit> {
+        if (trackId.isBlank()) {
+            return Result.failure(IllegalArgumentException("Track id cannot be empty"))
+        }
+
+        return try {
+            trackRepository.deleteTrack(trackId)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+}

@@ -5,6 +5,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -18,6 +19,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dropindh.app.BuildConfig
 import com.dropindh.app.ui.i18n.tr
 import com.dropindh.app.ui.metrics.formatScore0to100
 import com.dropindh.app.ui.metrics.normalizeSeriesBurdenScore
@@ -25,21 +27,30 @@ import com.dropindh.app.ui.metrics.runMetricBurdenScore
 import com.dropindh.app.ui.metrics.runOverallBurdenScore
 import com.dropindh.app.ui.theme.*
 import com.dhmeter.charts.components.ComparisonLineChart
-import com.dhmeter.charts.components.EventMarkers
 import com.dhmeter.charts.components.HeatmapBar
 import com.dhmeter.charts.components.HeatmapColors
 import com.dhmeter.charts.model.AxisConfig
-import com.dhmeter.charts.model.ChartEventMarker
-import com.dhmeter.charts.model.ChartMarkerIcon
 import com.dhmeter.charts.model.ChartPoint
 import com.dhmeter.charts.model.ChartSeries
 import com.dhmeter.charts.model.HeatmapPoint
 import com.dhmeter.domain.model.ElevationProfile
 import com.dhmeter.domain.model.EventType
 import com.dhmeter.domain.model.RunEvent
+import com.dhmeter.domain.model.RunMapData
 import com.dhmeter.domain.model.Run
 import com.dhmeter.domain.model.RunSeries
+import com.dhmeter.domain.model.SegmentSeverity
 import com.dhmeter.domain.model.SeriesType
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapType
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Polyline
+import com.google.maps.android.compose.rememberCameraPositionState
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -48,19 +59,28 @@ import java.util.*
 fun RunSummaryScreen(
     runId: String,
     onCompare: (trackId: String, runAId: String, runBId: String) -> Unit,
-    onViewMap: () -> Unit,
     onBack: () -> Unit,
     viewModel: RunSummaryViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showCompareDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(runId) {
         viewModel.loadRun(runId)
     }
 
+    LaunchedEffect(uiState.exportMessage) {
+        val message = uiState.exportMessage ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(message)
+        viewModel.consumeExportMessage()
+    }
+
     Scaffold(
         containerColor = Color.Transparent,
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
+        },
         topBar = {
             TopAppBar(
                 colors = dhTopBarColors(),
@@ -71,9 +91,23 @@ fun RunSummaryScreen(
                     }
                 },
                 actions = {
-                    uiState.run?.let {
-                        IconButton(onClick = onViewMap) {
-                            Icon(Icons.Default.Map, contentDescription = tr("Map & Events", "Mapa y eventos"))
+                    IconButton(
+                        onClick = { viewModel.exportRunDiagnosticsJson() },
+                        enabled = uiState.run != null && !uiState.isExportingDiagnostics
+                    ) {
+                        if (uiState.isExportingDiagnostics) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = tr(
+                                    "Export diagnostics JSON",
+                                    "Exportar JSON de diagnóstico"
+                                )
+                            )
                         }
                     }
                 }
@@ -99,6 +133,7 @@ fun RunSummaryScreen(
                     harshnessSeries = uiState.harshnessSeries,
                     stabilitySeries = uiState.stabilitySeries,
                     speedSeries = uiState.speedSeries,
+                    mapData = uiState.mapData,
                     elevationProfile = uiState.elevationProfile,
                     events = uiState.events,
                     isChartsLoading = uiState.isChartsLoading,
@@ -140,6 +175,7 @@ private fun RunSummaryContent(
     harshnessSeries: RunSeries?,
     stabilitySeries: RunSeries?,
     speedSeries: RunSeries?,
+    mapData: RunMapData?,
     elevationProfile: ElevationProfile?,
     events: List<RunEvent>,
     isChartsLoading: Boolean,
@@ -177,7 +213,6 @@ private fun RunSummaryContent(
             elevationProfile = elevationProfile,
             distanceMeters = run.distanceMeters,
             avgSpeedMps = run.avgSpeed,
-            events = events,
             isLoading = isChartsLoading,
             error = chartsError
         )
@@ -208,6 +243,16 @@ private fun RunSummaryContent(
         NotesSection(
             setupNote = run.setupNote,
             conditionsNote = run.conditionsNote
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        RunMapAndEventsSection(
+            mapData = mapData,
+            events = events,
+            speedSeries = speedSeries,
+            runDistanceMeters = run.distanceMeters,
+            avgSpeedMps = run.avgSpeed
         )
     }
 }
@@ -655,7 +700,6 @@ private fun RunChartsSection(
     elevationProfile: ElevationProfile?,
     distanceMeters: Float?,
     avgSpeedMps: Float?,
-    events: List<RunEvent>,
     isLoading: Boolean,
     error: String?
 ) {
@@ -725,20 +769,6 @@ private fun RunChartsSection(
                     profile = elevationProfile,
                     color = ChartSpeed
                 )
-
-                if (events.isNotEmpty()) {
-                    val chartEventMarkers = remember(events) { events.toChartMarkers() }
-                    Text(
-                        text = tr("Events over Distance %", "Eventos sobre Distancia %"),
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    EventMarkers(
-                        markers = chartEventMarkers,
-                        xMin = 0f,
-                        xMax = 100f,
-                        showLabels = true
-                    )
-                }
 
                 val speedHeatmapPoints = remember(speedSeries, distanceMeters, avgSpeedMps) {
                     speedSeries
@@ -928,6 +958,452 @@ private fun AltitudeChartSection(
     }
 }
 
+@Composable
+private fun RunMapAndEventsSection(
+    mapData: RunMapData?,
+    events: List<RunEvent>,
+    speedSeries: RunSeries?,
+    runDistanceMeters: Float?,
+    avgSpeedMps: Float?
+) {
+    val sortedEvents = remember(events) { events.sortedBy { it.distPct } }
+    var selectedEventId by remember(events) { mutableStateOf<String?>(null) }
+
+    Text(
+        text = tr("Map & Events", "Mapa y eventos"),
+        style = MaterialTheme.typography.titleMedium
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+
+    val points = mapData?.polyline?.points.orEmpty()
+    if (mapData == null || points.size < 2) {
+        Text(
+            text = tr("No map data available", "No hay datos de mapa disponibles"),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    } else if (!BuildConfig.HAS_MAPS_API_KEY) {
+        Text(
+            text = tr(
+                "Google Maps API key is missing. Configure MAPS_API_KEY to render the map.",
+                "Falta la API key de Google Maps. Configura MAPS_API_KEY para renderizar el mapa."
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error
+        )
+    } else {
+        val startPoint = points.firstOrNull()
+        val endPoint = points.lastOrNull()
+        val selectedEvent = sortedEvents.firstOrNull { it.eventId == selectedEventId }
+        val selectedEventPoint = selectedEvent?.let {
+            findLatLngForDistPct(points, it.distPct)
+        }
+        var mapLoaded by remember(points) { mutableStateOf(false) }
+        val boundsBuilder = remember(points) {
+            LatLngBounds.builder().apply {
+                points.forEach { include(LatLng(it.lat, it.lon)) }
+            }
+        }
+        val cameraPositionState = rememberCameraPositionState {
+            position = CameraPosition.fromLatLngZoom(
+                LatLng(points.first().lat, points.first().lon),
+                15f
+            )
+        }
+
+        LaunchedEffect(boundsBuilder, mapLoaded) {
+            if (!mapLoaded) return@LaunchedEffect
+            runCatching {
+                cameraPositionState.animate(
+                    CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), 100)
+                )
+            }
+        }
+        LaunchedEffect(selectedEventPoint, mapLoaded) {
+            val marker = selectedEventPoint ?: return@LaunchedEffect
+            if (!mapLoaded) return@LaunchedEffect
+            runCatching {
+                cameraPositionState.animate(
+                    CameraUpdateFactory.newLatLngZoom(marker, 17f)
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            GoogleMap(
+                modifier = Modifier.fillMaxSize(),
+                cameraPositionState = cameraPositionState,
+                properties = MapProperties(
+                    mapType = MapType.HYBRID,
+                    isTrafficEnabled = false
+                ),
+                uiSettings = MapUiSettings(
+                    zoomControlsEnabled = true,
+                    mapToolbarEnabled = true,
+                    compassEnabled = true,
+                    myLocationButtonEnabled = false
+                ),
+                onMapLoaded = { mapLoaded = true }
+            ) {
+                Polyline(
+                    points = points.map { LatLng(it.lat, it.lon) },
+                    color = Color(0xFF607D8B),
+                    width = 4f
+                )
+
+                mapData.segments.forEach { segment ->
+                    Polyline(
+                        points = listOf(
+                            LatLng(segment.start.lat, segment.start.lon),
+                            LatLng(segment.end.lat, segment.end.lon)
+                        ),
+                        color = segment.severity.toMapColor(),
+                        width = 10f
+                    )
+                }
+
+                startPoint?.let { start ->
+                    com.google.maps.android.compose.Circle(
+                        center = LatLng(start.lat, start.lon),
+                        radius = 2.8,
+                        fillColor = Color(0xFF4FC3F7),
+                        strokeColor = Color.White,
+                        strokeWidth = 2f
+                    )
+                }
+
+                endPoint?.let { end ->
+                    com.google.maps.android.compose.Circle(
+                        center = LatLng(end.lat, end.lon),
+                        radius = 2.8,
+                        fillColor = Color(0xFF66BB6A),
+                        strokeColor = Color.White,
+                        strokeWidth = 2f
+                    )
+                }
+
+                selectedEvent?.let { selected ->
+                    selectedEventPoint?.let { marker ->
+                        com.google.maps.android.compose.Circle(
+                            center = marker,
+                            radius = 5.2,
+                            fillColor = Color.White.copy(alpha = 0.9f),
+                            strokeColor = Color.White,
+                            strokeWidth = 2f
+                        )
+                        com.google.maps.android.compose.Circle(
+                            center = marker,
+                            radius = 2.6,
+                            fillColor = eventTypeColor(selected.type),
+                            strokeColor = Color.Black.copy(alpha = 0.35f),
+                            strokeWidth = 1f
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+
+    Text(
+        text = tr("Event list", "Lista de eventos"),
+        style = MaterialTheme.typography.titleSmall
+    )
+
+    if (events.isEmpty()) {
+        Text(
+            text = tr("No events detected in this run.", "No se detectaron eventos en esta bajada."),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            sortedEvents.forEach { event ->
+                val eventName = eventTypeLabel(event.type)
+                val eventIcon = when (event.type) {
+                    EventType.IMPACT_PEAK -> Icons.Default.Bolt
+                    EventType.LANDING -> Icons.Default.FlightLand
+                    EventType.HARSHNESS_BURST -> Icons.Default.Vibration
+                    else -> Icons.Default.Info
+                }
+                val eventColor = eventTypeColor(event.type)
+                val isSelected = selectedEventId == event.eventId
+                OutlinedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            selectedEventId = if (isSelected) null else event.eventId
+                        },
+                    border = BorderStroke(
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = if (isSelected) eventColor else MaterialTheme.colorScheme.outlineVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = eventIcon,
+                            contentDescription = null,
+                            tint = eventColor
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = eventName,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = tr(
+                                    "Code ${eventTypeShortCode(event.type)}",
+                                    "Sigla ${eventTypeShortCode(event.type)}"
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = eventColor
+                            )
+                            Text(
+                                text = tr(
+                                    "Dist ${String.format(Locale.US, "%.1f", event.distPct)}% | Time ${String.format(Locale.US, "%.1f", event.timeSec)} s | Sev ${String.format(Locale.US, "%.2f", event.severity)}",
+                                    "Dist ${String.format(Locale.US, "%.1f", event.distPct)}% | Tiempo ${String.format(Locale.US, "%.1f", event.timeSec)} s | Sev ${String.format(Locale.US, "%.2f", event.severity)}"
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            val speedHeatmapPoints = remember(speedSeries, runDistanceMeters, avgSpeedMps) {
+                speedSeries
+                    ?.toSpeedHeatmapPoints(runDistanceMeters)
+                    .orEmpty()
+                    .ifEmpty { fallbackSpeedHeatmapPoints(avgSpeedMps) }
+            }
+            val correlationStats = remember(sortedEvents, speedHeatmapPoints) {
+                buildEventSpeedCorrelationStats(sortedEvents, speedHeatmapPoints)
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = tr(
+                    "Event-speed heatmap correlation",
+                    "Correlación eventos - mapa de calor de velocidad"
+                ),
+                style = MaterialTheme.typography.titleSmall
+            )
+            if (correlationStats == null) {
+                Text(
+                    text = tr(
+                        "Not enough data to build a correlation summary.",
+                        "No hay suficientes datos para generar el análisis de correlación."
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                val trendText = when {
+                    correlationStats.highSpeedEvents > correlationStats.lowSpeedEvents + 1 -> tr(
+                        "Most events occur in faster sections of the speed heatmap.",
+                        "La mayoría de eventos ocurre en secciones rápidas del mapa de calor."
+                    )
+
+                    correlationStats.lowSpeedEvents > correlationStats.highSpeedEvents + 1 -> tr(
+                        "Most events occur in slower sections of the speed heatmap.",
+                        "La mayoría de eventos ocurre en secciones lentas del mapa de calor."
+                    )
+
+                    else -> tr(
+                        "Events are distributed between fast and slow sections.",
+                        "Los eventos están distribuidos entre secciones rápidas y lentas."
+                    )
+                }
+
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = trendText,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = tr(
+                                "Mapped ${correlationStats.mappedEvents}/${correlationStats.totalEvents} events. Event avg ${String.format(Locale.US, "%.1f", correlationStats.avgEventSpeedKmh)} km/h vs run heatmap avg ${String.format(Locale.US, "%.1f", correlationStats.avgRunSpeedKmh)} km/h.",
+                                "Se mapearon ${correlationStats.mappedEvents}/${correlationStats.totalEvents} eventos. Promedio de velocidad en eventos ${String.format(Locale.US, "%.1f", correlationStats.avgEventSpeedKmh)} km/h vs promedio de heatmap ${String.format(Locale.US, "%.1f", correlationStats.avgRunSpeedKmh)} km/h."
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = tr(
+                                "Low-speed zone <= ${String.format(Locale.US, "%.1f", correlationStats.lowSpeedThresholdKmh)} km/h | High-speed zone >= ${String.format(Locale.US, "%.1f", correlationStats.highSpeedThresholdKmh)} km/h.",
+                                "Zona lenta <= ${String.format(Locale.US, "%.1f", correlationStats.lowSpeedThresholdKmh)} km/h | Zona rápida >= ${String.format(Locale.US, "%.1f", correlationStats.highSpeedThresholdKmh)} km/h."
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        correlationStats.mostFrequentEventCode?.let { code ->
+                            Text(
+                                text = tr(
+                                    "Most frequent event type: $code",
+                                    "Tipo de evento más frecuente: $code"
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        correlationStats.mostFrequentHighSpeedEventCode?.let { code ->
+                            Text(
+                                text = tr(
+                                    "Most frequent event in high-speed zones: $code",
+                                    "Evento más frecuente en zonas rápidas: $code"
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class EventSpeedCorrelationStats(
+    val totalEvents: Int,
+    val mappedEvents: Int,
+    val lowSpeedEvents: Int,
+    val highSpeedEvents: Int,
+    val avgEventSpeedKmh: Float,
+    val avgRunSpeedKmh: Float,
+    val lowSpeedThresholdKmh: Float,
+    val highSpeedThresholdKmh: Float,
+    val mostFrequentEventCode: String?,
+    val mostFrequentHighSpeedEventCode: String?
+)
+
+private fun buildEventSpeedCorrelationStats(
+    events: List<RunEvent>,
+    speedPoints: List<HeatmapPoint>
+): EventSpeedCorrelationStats? {
+    if (events.isEmpty() || speedPoints.isEmpty()) return null
+    val cleanSpeedPoints = speedPoints.filter { it.x.isFinite() && it.value.isFinite() }
+    if (cleanSpeedPoints.isEmpty()) return null
+
+    val speedValues = cleanSpeedPoints.map { it.value }.sorted()
+    if (speedValues.isEmpty()) return null
+
+    val lowThreshold = percentile(speedValues, 0.25f)
+    val highThreshold = percentile(speedValues, 0.75f)
+
+    val eventSpeeds = events.mapNotNull { event ->
+        nearestSpeedAtDistPct(cleanSpeedPoints, event.distPct)?.let { speed ->
+            event to speed
+        }
+    }
+    if (eventSpeeds.isEmpty()) return null
+
+    val lowCount = eventSpeeds.count { (_, speed) -> speed <= lowThreshold }
+    val highCount = eventSpeeds.count { (_, speed) -> speed >= highThreshold }
+    val avgEventSpeed = eventSpeeds.map { it.second }.average().toFloat()
+    val avgRunSpeed = speedValues.average().toFloat()
+
+    val mostFrequent = eventSpeeds
+        .groupingBy { (event, _) -> event.type }
+        .eachCount()
+        .maxByOrNull { it.value }
+        ?.key
+        ?.let(::eventTypeShortCode)
+
+    val mostFrequentHighSpeed = eventSpeeds
+        .filter { (_, speed) -> speed >= highThreshold }
+        .groupingBy { (event, _) -> event.type }
+        .eachCount()
+        .maxByOrNull { it.value }
+        ?.key
+        ?.let(::eventTypeShortCode)
+
+    return EventSpeedCorrelationStats(
+        totalEvents = events.size,
+        mappedEvents = eventSpeeds.size,
+        lowSpeedEvents = lowCount,
+        highSpeedEvents = highCount,
+        avgEventSpeedKmh = avgEventSpeed,
+        avgRunSpeedKmh = avgRunSpeed,
+        lowSpeedThresholdKmh = lowThreshold,
+        highSpeedThresholdKmh = highThreshold,
+        mostFrequentEventCode = mostFrequent,
+        mostFrequentHighSpeedEventCode = mostFrequentHighSpeed
+    )
+}
+
+private fun findLatLngForDistPct(
+    points: List<com.dhmeter.domain.model.GpsPoint>,
+    distPct: Float
+): LatLng? {
+    if (points.isEmpty()) return null
+    val target = distPct.coerceIn(0f, 100f)
+    val nearest = points.minByOrNull { point ->
+        kotlin.math.abs(point.distPct - target)
+    } ?: return null
+    return LatLng(nearest.lat, nearest.lon)
+}
+
+private fun nearestSpeedAtDistPct(speedPoints: List<HeatmapPoint>, distPct: Float): Float? {
+    if (speedPoints.isEmpty()) return null
+    val target = distPct.coerceIn(0f, 100f)
+    return speedPoints.minByOrNull { point ->
+        kotlin.math.abs(point.x - target)
+    }?.value
+}
+
+private fun percentile(sortedValues: List<Float>, fraction: Float): Float {
+    if (sortedValues.isEmpty()) return 0f
+    if (sortedValues.size == 1) return sortedValues.first()
+    val clamped = fraction.coerceIn(0f, 1f)
+    val index = (clamped * (sortedValues.lastIndex)).toInt().coerceIn(0, sortedValues.lastIndex)
+    return sortedValues[index]
+}
+
+private fun eventTypeShortCode(type: String): String {
+    return when (type) {
+        EventType.IMPACT_PEAK -> "IMP"
+        EventType.LANDING -> "LAN"
+        EventType.HARSHNESS_BURST -> "HAR"
+        else -> type.take(3).uppercase(Locale.US)
+    }
+}
+
+@Composable
+private fun eventTypeLabel(type: String): String {
+    return when (type) {
+        EventType.IMPACT_PEAK -> tr("Strong Impact", "Impacto fuerte")
+        EventType.LANDING -> tr("Hard Landing", "Aterrizaje duro")
+        EventType.HARSHNESS_BURST -> tr("Harshness Burst", "Ráfaga de vibración")
+        else -> tr("Event", "Evento")
+    }
+}
+
+private fun eventTypeColor(type: String): Color {
+    return when (type) {
+        EventType.IMPACT_PEAK -> ChartImpact
+        EventType.LANDING -> Color(0xFFFF9800)
+        EventType.HARSHNESS_BURST -> YellowWarning
+        else -> Color(0xFF90CAF9)
+    }
+}
+
 private fun RunSeries.toChartPoints(): List<ChartPoint> {
     val count = effectivePointCount
     return (0 until count).mapNotNull { i ->
@@ -989,41 +1465,13 @@ private fun normalizeToScore(seriesType: SeriesType, value: Float): Float {
     return normalizeSeriesBurdenScore(seriesType, value)
 }
 
-private fun List<RunEvent>.toChartMarkers(): List<ChartEventMarker> {
-    return map { event ->
-        ChartEventMarker(
-            x = event.distPct,
-            icon = event.type.toMarkerIcon(),
-            color = event.type.toMarkerColor(),
-            label = event.type.shortLabel()
-        )
-    }
-}
-
-private fun String.toMarkerIcon(): ChartMarkerIcon {
+private fun SegmentSeverity.toMapColor(): Color {
     return when (this) {
-        EventType.IMPACT_PEAK -> ChartMarkerIcon.TRIANGLE
-        EventType.LANDING -> ChartMarkerIcon.DIAMOND
-        EventType.HARSHNESS_BURST -> ChartMarkerIcon.SQUARE
-        else -> ChartMarkerIcon.CIRCLE
-    }
-}
-
-private fun String.toMarkerColor(): Color {
-    return when (this) {
-        EventType.IMPACT_PEAK -> Color(0xFFF44336)
-        EventType.LANDING -> Color(0xFFFF9800)
-        EventType.HARSHNESS_BURST -> Color(0xFFFFEB3B)
-        else -> Color(0xFF9E9E9E)
-    }
-}
-
-private fun String.shortLabel(): String {
-    return when (this) {
-        EventType.IMPACT_PEAK -> "IMP"
-        EventType.LANDING -> "LDG"
-        EventType.HARSHNESS_BURST -> "HRS"
-        else -> "EVT"
+        SegmentSeverity.VERY_LOW -> Color(0xFF1B5E20)
+        SegmentSeverity.LOW -> Color(0xFF4CAF50)
+        SegmentSeverity.MEDIUM -> Color(0xFFFFC107)
+        SegmentSeverity.HIGH -> Color(0xFFFF9800)
+        SegmentSeverity.VERY_HIGH -> Color(0xFFD32F2F)
     }
 }
 
@@ -1076,6 +1524,3 @@ private fun formatDuration(ms: Long): String {
     val secs = seconds % 60
     return String.format(Locale.US, "%d:%02d", minutes, secs)
 }
-
-
-

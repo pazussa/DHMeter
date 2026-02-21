@@ -1,6 +1,7 @@
 package com.dropindh.app.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -55,8 +56,44 @@ sealed class Screen(val route: String) {
 
 @Composable
 fun DHMeterNavHost(
-    navController: NavHostController = rememberNavController()
+    navController: NavHostController = rememberNavController(),
+    autoNavigateTrackId: String? = null,
+    autoNavigateRunId: String? = null,
+    onAutoNavigateHandled: (String) -> Unit = {},
+    onAutoRunNavigateHandled: (String) -> Unit = {}
 ) {
+    LaunchedEffect(autoNavigateTrackId) {
+        val trackId = autoNavigateTrackId ?: return@LaunchedEffect
+        val currentRoute = navController.currentDestination?.route
+        val currentTrackId = navController.currentBackStackEntry
+            ?.arguments
+            ?.getString("trackId")
+        val isAlreadyOnTargetRecording =
+            currentRoute == Screen.Recording.route && currentTrackId == trackId
+        if (!isAlreadyOnTargetRecording) {
+            navController.navigate(Screen.Recording.createRoute(trackId)) {
+                launchSingleTop = true
+            }
+        }
+        onAutoNavigateHandled(trackId)
+    }
+
+    LaunchedEffect(autoNavigateRunId) {
+        val runId = autoNavigateRunId ?: return@LaunchedEffect
+        val currentRoute = navController.currentDestination?.route
+        val currentRunId = navController.currentBackStackEntry
+            ?.arguments
+            ?.getString("runId")
+        val isAlreadyOnTargetRunSummary =
+            currentRoute == Screen.RunSummary.route && currentRunId == runId
+        if (!isAlreadyOnTargetRunSummary) {
+            navController.navigate(Screen.RunSummary.createRoute(runId)) {
+                launchSingleTop = true
+            }
+        }
+        onAutoRunNavigateHandled(runId)
+    }
+
     NavHost(
         navController = navController,
         startDestination = Screen.Home.route
@@ -108,9 +145,6 @@ fun DHMeterNavHost(
                 runId = runId,
                 onCompare = { trackId, runAId, runBId ->
                     navController.navigate(Screen.Compare.createRoute(trackId, runAId, runBId))
-                },
-                onViewMap = {
-                    navController.navigate(Screen.RunMap.createRoute(runId))
                 },
                 onBack = {
                     if (!navController.popBackStack()) {
@@ -226,6 +260,9 @@ fun DHMeterNavHost(
                 },
                 onStartNewRun = {
                     navController.navigate(Screen.Recording.createRoute(trackId))
+                },
+                onTrackDeleted = {
+                    navController.popBackStack()
                 },
                 onBack = {
                     navController.popBackStack()

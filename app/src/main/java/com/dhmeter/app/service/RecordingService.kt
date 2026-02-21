@@ -56,6 +56,8 @@ class RecordingService : Service() {
         const val ACTION_STOP = "com.dhmeter.action.STOP_RECORDING"
         const val ACTION_STOP_FOREGROUND = "com.dhmeter.action.STOP_FOREGROUND"
         const val EXTRA_TRACK_ID = "track_id"
+        const val EXTRA_AUTO_NAVIGATE_TRACK_ID = "auto_navigate_track_id"
+        const val EXTRA_AUTO_NAVIGATE_RUN_ID = "auto_navigate_run_id"
 
         private const val AUTO_PREVIEW_CLIENT_ID = "recording_service"
         private const val SEGMENT_START_ARM_RADIUS_M = 40.0
@@ -207,7 +209,7 @@ class RecordingService : Service() {
         _recordingState.value = RecordingState.Idle
     }
 
-    fun stopRecording() {
+    fun stopRecording(navigateToRunSummary: Boolean = false) {
         serviceScope.launch {
             _recordingState.value = RecordingState.Stopping
 
@@ -215,9 +217,14 @@ class RecordingService : Service() {
 
             if (handle != null) {
                 val runResult = processRunUseCase(handle)
+                runResult.onSuccess { runId ->
+                    if (navigateToRunSummary) {
+                        redirectAppToRunSummary(runId)
+                    }
+                }
                 recordingManager.cancelRecording()
                 _recordingState.value = runResult.fold(
-                    onSuccess = { RecordingState.Completed(handle) },
+                    onSuccess = { runId -> RecordingState.Completed(handle, runId) },
                     onFailure = {
                         RecordingState.Error(it.message ?: msgFailedProcessRun())
                     }
@@ -484,6 +491,13 @@ class RecordingService : Service() {
 
         serviceScope.launch {
             recordingManager.startRecording(trackId, "POCKET_THIGH")
+                .onSuccess {
+                    _recordingState.value = RecordingState.Recording(
+                        trackId = trackId,
+                        startTimeMs = startTimeMs
+                    )
+                    redirectAppToRecording(trackId)
+                }
                 .onFailure {
                     Log.w(TAG, "Auto recording start failed for segment ${segment.id}: ${it.message}")
                     activeAutoSegment = null
@@ -493,6 +507,28 @@ class RecordingService : Service() {
                     ensureForegroundNotification(currentAutoStatusMessage())
                 }
         }
+    }
+
+    private fun redirectAppToRecording(trackId: String) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_AUTO_NAVIGATE_TRACK_ID, trackId)
+        }
+        runCatching { startActivity(intent) }
+            .onFailure { Log.w(TAG, "Failed to redirect UI to recording screen", it) }
+    }
+
+    private fun redirectAppToRunSummary(runId: String) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_AUTO_NAVIGATE_RUN_ID, runId)
+        }
+        runCatching { startActivity(intent) }
+            .onFailure { Log.w(TAG, "Failed to redirect UI to run summary", it) }
     }
 
     private fun maybeAutoStopAtSegmentEnd(state: SensorRecordingState.Recording) {
@@ -544,7 +580,7 @@ class RecordingService : Service() {
             isAutoStopInProgress = true
             autoCooldownUntilMs = System.currentTimeMillis() + AUTO_TRIGGER_COOLDOWN_MS
             activeAutoSegment = null
-            stopRecording()
+            stopRecording(navigateToRunSummary = true)
         }
     }
 
@@ -766,6 +802,9 @@ sealed class RecordingState {
     data object Idle : RecordingState()
     data class Recording(val trackId: String, val startTimeMs: Long) : RecordingState()
     data object Stopping : RecordingState()
-    data class Completed(val handle: com.dhmeter.domain.model.RawCaptureHandle) : RecordingState()
+    data class Completed(
+        val handle: com.dhmeter.domain.model.RawCaptureHandle,
+        val runId: String? = null
+    ) : RecordingState()
     data class Error(val message: String) : RecordingState()
 }

@@ -165,6 +165,14 @@ private fun ChartsContent(
                 text = tr("Events over Distance %", "Eventos sobre Distancia %"),
                 style = MaterialTheme.typography.titleMedium
             )
+            Text(
+                text = tr(
+                    "Legend: IMP = Impact Peak, LAN = Landing, HAR = Harshness Burst",
+                    "Leyenda: IMP = Impacto pico, LAN = Aterrizaje, HAR = Ráfaga de vibración"
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
             
             uiState.runs.forEach { run ->
                 if (run.events.isNotEmpty()) {
@@ -446,7 +454,6 @@ private fun String.toMarkerColor(): Color {
         else -> Color(0xFF9C27B0)                        // Purple
     }
 }
-
 
 
 

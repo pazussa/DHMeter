@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -9,10 +11,21 @@ android {
     namespace = "com.dropindh.app"
     compileSdk = 35
 
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { localProperties.load(it) }
+    }
+    val localMapsApiKey = (localProperties.getProperty("MAPS_API_KEY") ?: "").trim()
     val mapsApiKey = providers.gradleProperty("MAPS_API_KEY")
         .orElse(providers.environmentVariable("MAPS_API_KEY"))
+        .orElse(localMapsApiKey)
         .orNull
+        ?.trim()
         ?: ""
+    if (mapsApiKey.isBlank()) {
+        logger.warn("MAPS_API_KEY is empty. Google Maps will appear blank until it is configured.")
+    }
 
     val releaseStoreFile = providers.gradleProperty("RELEASE_STORE_FILE")
         .orElse(providers.environmentVariable("RELEASE_STORE_FILE"))
@@ -51,6 +64,7 @@ android {
         
         // Do not hardcode API keys in VCS; inject via Gradle properties or CI env vars.
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
+        buildConfigField("boolean", "HAS_MAPS_API_KEY", mapsApiKey.isNotBlank().toString())
 
         buildConfigField("String", "FIREBASE_API_KEY", "\"$firebaseApiKey\"")
         buildConfigField("String", "FIREBASE_APP_ID", "\"$firebaseAppId\"")
@@ -181,4 +195,3 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
-

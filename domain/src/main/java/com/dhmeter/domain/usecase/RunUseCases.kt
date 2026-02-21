@@ -79,3 +79,20 @@ class GetRunEventsUseCase @Inject constructor(
         }
     }
 }
+
+class DeleteRunUseCase @Inject constructor(
+    private val runRepository: RunRepository
+) {
+    suspend operator fun invoke(runId: String): Result<Unit> {
+        if (runId.isBlank()) {
+            return Result.failure(IllegalArgumentException("Run id cannot be empty"))
+        }
+
+        return try {
+            runRepository.deleteRun(runId)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+}

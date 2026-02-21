@@ -267,7 +267,7 @@ class RecordingViewModel @Inject constructor(
                         isAutoStopInProgress = false
                         activeAutoSegment = null
                         processingRecoveryJob?.cancel()
-                        stopForegroundRecordingService()
+                        stopForegroundRecordingServiceOrKeepAutoMonitoring()
                         _uiState.update { 
                             it.copy(
                                 isRecording = false,
@@ -302,7 +302,7 @@ class RecordingViewModel @Inject constructor(
                 }
             },
             onLocation = { location ->
-                updateLastPreviewLocation(location)
+                maybeAutoStartAtSegmentStart(location)
             }
         )
         if (!started) {
@@ -434,7 +434,7 @@ class RecordingViewModel @Inject constructor(
                 activeAutoSegment = null
                 isAutoStopInProgress = false
                 previewManager.resumeAll()
-                stopForegroundRecordingService()
+                stopForegroundRecordingServiceOrKeepAutoMonitoring()
                 _uiState.update {
                     it.copy(
                         canStartRecording = true,
@@ -775,7 +775,7 @@ class RecordingViewModel @Inject constructor(
         processingRecoveryJob?.cancel()
         recordingManager.cancelRecording()
         previewManager.resumeAll()
-        stopForegroundRecordingService()
+        stopForegroundRecordingServiceOrKeepAutoMonitoring()
         lastDistanceToSegmentEndM = null
         lastRecordingLatitude = null
         lastRecordingLongitude = null
@@ -819,6 +819,31 @@ class RecordingViewModel @Inject constructor(
         }
     }
 
+    private fun keepAutoMonitoringForegroundIfEnabled(): Boolean {
+        val currentTrackId = _uiState.value.trackId
+        val targetTrackId = when {
+            currentTrackId.isNotBlank() && trackAutoStartRepository.isAutoStartEnabled(currentTrackId) -> currentTrackId
+            else -> trackAutoStartRepository.getEnabledTrackIds().firstOrNull()
+        } ?: return false
+
+        return runCatching {
+            val intent = Intent(appContext, RecordingService::class.java).apply {
+                action = RecordingService.ACTION_START_FOREGROUND
+                putExtra(RecordingService.EXTRA_TRACK_ID, targetTrackId)
+            }
+            appContext.startForegroundService(intent)
+        }.isSuccess
+    }
+
+    private fun stopForegroundRecordingServiceOrKeepAutoMonitoring(forceStop: Boolean = false) {
+        isManualStartForegroundArmed = false
+        isPreviewForegroundArmed = false
+        if (!forceStop && keepAutoMonitoringForegroundIfEnabled()) {
+            return
+        }
+        stopForegroundRecordingService()
+    }
+
     private fun armForegroundForPreview() {
         if (isPreviewForegroundArmed || _uiState.value.trackId.isBlank()) return
         if (startForegroundRecordingService(_uiState.value.trackId)) {
@@ -830,7 +855,7 @@ class RecordingViewModel @Inject constructor(
         if (!isPreviewForegroundArmed) return
         isPreviewForegroundArmed = false
         if (forceStop || (!isManualStartForegroundArmed && !_uiState.value.isRecording && !_uiState.value.isProcessing)) {
-            stopForegroundRecordingService()
+            stopForegroundRecordingServiceOrKeepAutoMonitoring(forceStop = forceStop)
         }
     }
 
@@ -848,7 +873,7 @@ class RecordingViewModel @Inject constructor(
         if (!isManualStartForegroundArmed) return
         isManualStartForegroundArmed = false
         if (!isPreviewForegroundArmed && !_uiState.value.isRecording && !_uiState.value.isProcessing) {
-            stopForegroundRecordingService()
+            stopForegroundRecordingServiceOrKeepAutoMonitoring()
         }
     }
 
