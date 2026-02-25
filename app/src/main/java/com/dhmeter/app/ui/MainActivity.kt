@@ -17,16 +17,11 @@ import com.dropindh.app.service.RecordingService
 import com.dropindh.app.ui.navigation.DHMeterNavHost
 import com.dropindh.app.ui.theme.DHMeterTheme
 import com.dropindh.app.ui.theme.DHRaceBackground
-import com.dhmeter.domain.repository.TrackAutoStartRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    @Inject
-    lateinit var trackAutoStartRepository: TrackAutoStartRepository
-
     private val autoNavigateTrackId = MutableStateFlow<String?>(null)
     private val autoNavigateRunId = MutableStateFlow<String?>(null)
 
@@ -36,7 +31,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         handleAutoNavigateIntent(intent)
-        startGlobalAutoMonitoringIfEnabled()
 
         setContent {
             val pendingAutoTrackId by autoNavigateTrackId.collectAsState()
@@ -84,17 +78,6 @@ class MainActivity : ComponentActivity() {
         if (!runId.isNullOrBlank()) {
             autoNavigateRunId.value = runId
             intent.removeExtra(RecordingService.EXTRA_AUTO_NAVIGATE_RUN_ID)
-        }
-    }
-
-    private fun startGlobalAutoMonitoringIfEnabled() {
-        val trackId = trackAutoStartRepository.getEnabledTrackIds().firstOrNull() ?: return
-        runCatching {
-            val intent = Intent(this, RecordingService::class.java).apply {
-                action = RecordingService.ACTION_START_FOREGROUND
-                putExtra(RecordingService.EXTRA_TRACK_ID, trackId)
-            }
-            startForegroundService(intent)
         }
     }
 }

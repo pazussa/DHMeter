@@ -309,8 +309,8 @@ private fun AutoSegmentsCard(
             if (segmentCount > 0) {
                 Text(
                     text = tr(
-                        "Auto-start triggers near start, above ~9 km/h, and aligned direction.",
-                        "El auto-inicio se activa cerca del inicio, sobre ~9 km/h y con dirección alineada."
+                        "Local segments are available for this track.",
+                        "Hay segmentos locales disponibles para este track."
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline

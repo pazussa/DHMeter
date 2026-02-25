@@ -14,10 +14,12 @@ usage() {
 Usage:
   $(basename "$0") --device <ip:port> [options]
   $(basename "$0") --auto [options]
+  $(basename "$0") --upload-only [options]
 
 Required (one of):
   --device <ip:port>    Android device endpoint (e.g. 192.168.1.25:5555)
   --auto                Use first online device from 'adb devices'
+  --upload-only         Upload latest local APK to GitHub release and exit
 
 Options:
   --pair <ip:port>      Pair endpoint from Android Wireless Debugging (optional)
@@ -59,6 +61,7 @@ OPEN_INSTALLER=false
 INSTALL_DIRECT=false
 KEEP_LOCAL=false
 SKIP_UPLOAD=false
+UPLOAD_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -110,6 +113,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_UPLOAD=true
       shift
       ;;
+    --upload-only)
+      UPLOAD_ONLY=true
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -122,8 +129,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$DEVICE" && "$AUTO_DEVICE" = false ]]; then
-  echo "Error: you must pass --device <ip:port> or --auto" >&2
+if [[ "$UPLOAD_ONLY" = false && -z "$DEVICE" && "$AUTO_DEVICE" = false ]]; then
+  echo "Error: you must pass --device <ip:port>, --auto, or --upload-only" >&2
   usage
   exit 1
 fi
@@ -133,9 +140,16 @@ if [[ -n "$PAIR_ENDPOINT" && -z "$PAIR_CODE" ]]; then
   exit 1
 fi
 
+if [[ "$UPLOAD_ONLY" = true && "$SKIP_UPLOAD" = true ]]; then
+  echo "Error: --upload-only cannot be used with --skip-upload" >&2
+  exit 1
+fi
+
 require_cmd gh
-require_cmd adb
 require_cmd curl
+if [[ "$UPLOAD_ONLY" = false ]]; then
+  require_cmd adb
+fi
 
 discover_mdns_connect_endpoint() {
   local host_filter="${1:-}"
@@ -192,13 +206,18 @@ upload_apk_to_release() {
 }
 
 UPLOAD_TO_GITHUB=false
-if [[ "$INSTALL_DIRECT" = true && "$SKIP_UPLOAD" = false ]]; then
+if [[ "$UPLOAD_ONLY" = true ]]; then
+  UPLOAD_TO_GITHUB=true
+elif [[ "$INSTALL_DIRECT" = true && "$SKIP_UPLOAD" = false ]]; then
   UPLOAD_TO_GITHUB=true
 fi
 
 TOTAL_STEPS=5
 if [[ "$UPLOAD_TO_GITHUB" = true ]]; then
   TOTAL_STEPS=6
+fi
+if [[ "$UPLOAD_ONLY" = true ]]; then
+  TOTAL_STEPS=3
 fi
 STEP=1
 
@@ -230,6 +249,12 @@ else
     echo "Error: failed to download APK from $ASSET_URL" >&2
     exit 1
   fi
+fi
+
+if [[ "$UPLOAD_ONLY" = true ]]; then
+  log_step "Upload completed. Skipping device transfer (--upload-only)."
+  echo "Direct download URL used: $ASSET_URL"
+  exit 0
 fi
 
 log_step "Resolving Android device..."

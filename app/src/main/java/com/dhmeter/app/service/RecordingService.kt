@@ -14,14 +14,9 @@ import com.dropindh.app.DHMeterApplication
 import com.dropindh.app.R
 import com.dropindh.app.ui.MainActivity
 import com.dropindh.app.ui.i18n.tr
-import com.dhmeter.domain.model.TrackSegment
-import com.dhmeter.domain.repository.SensorSensitivityRepository
-import com.dhmeter.domain.repository.TrackAutoStartRepository
-import com.dhmeter.domain.usecase.GetTrackSegmentsUseCase
 import com.dhmeter.domain.usecase.ProcessRunUseCase
 import com.dhmeter.sensing.RecordingManager
 import com.dhmeter.sensing.RecordingState as SensorRecordingState
-import com.dhmeter.sensing.preview.PreviewLocation
 import com.dhmeter.sensing.preview.RecordingPreviewManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -33,16 +28,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 /**
- * Foreground service for recording and background auto-start monitoring.
+ * Foreground service for active recording and manual recording standby.
  */
 @AndroidEntryPoint
 class RecordingService : Service() {
@@ -59,17 +47,6 @@ class RecordingService : Service() {
         const val EXTRA_AUTO_NAVIGATE_TRACK_ID = "auto_navigate_track_id"
         const val EXTRA_AUTO_NAVIGATE_RUN_ID = "auto_navigate_run_id"
 
-        private const val AUTO_PREVIEW_CLIENT_ID = "recording_service"
-        private const val SEGMENT_START_ARM_RADIUS_M = 40.0
-        private const val SEGMENT_START_TRIGGER_RADIUS_M = 24.0
-        private const val SEGMENT_START_RELEASE_RADIUS_M = 55.0
-        private const val SEGMENT_END_RADIUS_M = 24.0
-        private const val MAX_PREVIEW_ACCURACY_M = 25f
-        private const val AUTO_START_MIN_SPEED_MPS = 2.5f
-        private const val AUTO_TRIGGER_COOLDOWN_MS = 20_000L
-        private const val MIN_RECORDING_BEFORE_AUTO_STOP_MS = 5_000L
-        private const val MIN_START_CONFIRMATION_HITS = 2
-        private const val MIN_DIRECTION_DOT = 0.15
         private const val WAKE_LOCK_TIMEOUT_MS = 2 * 60 * 60 * 1000L
     }
 
@@ -80,16 +57,7 @@ class RecordingService : Service() {
     lateinit var processRunUseCase: ProcessRunUseCase
 
     @Inject
-    lateinit var getTrackSegmentsUseCase: GetTrackSegmentsUseCase
-
-    @Inject
     lateinit var previewManager: RecordingPreviewManager
-
-    @Inject
-    lateinit var sensitivityRepository: SensorSensitivityRepository
-
-    @Inject
-    lateinit var trackAutoStartRepository: TrackAutoStartRepository
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val binder = RecordingBinder()
@@ -98,24 +66,10 @@ class RecordingService : Service() {
     val recordingState: StateFlow<RecordingState> = _recordingState.asStateFlow()
 
     private var currentTrackId: String? = null
-    private var autoEnabledTrackId: String? = null
-    private var autoSegments: List<TrackSegment> = emptyList()
 
     private var startTimeMs: Long = 0
     private var isForegroundActive: Boolean = false
     private var wakeLock: PowerManager.WakeLock? = null
-
-    private var activeAutoSegment: TrackSegment? = null
-    private var autoCooldownUntilMs: Long = 0L
-    private var isAutoStopInProgress: Boolean = false
-
-    private var startCandidateSegment: TrackSegment? = null
-    private var startCandidateHits: Int = 0
-    private var lastPreviewLatitude: Double? = null
-    private var lastPreviewLongitude: Double? = null
-    private var lastRecordingLatitude: Double? = null
-    private var lastRecordingLongitude: Double? = null
-    private var lastDistanceToSegmentEndM: Double? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -140,7 +94,7 @@ class RecordingService : Service() {
                 if (recordingManager.recordingState.value is SensorRecordingState.Recording) {
                     stopRecording()
                 } else {
-                    disableAutoMonitoringAndStopService()
+                    stopServiceSafely()
                 }
             }
 
@@ -154,13 +108,12 @@ class RecordingService : Service() {
     override fun onBind(intent: Intent): IBinder = binder
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // Do not keep GPS monitoring alive after the user explicitly closes the app task.
-        disableAutoMonitoringAndStopService(cancelActiveRecording = true)
+        // Stop standby/recording service when the user explicitly closes the app task.
+        stopServiceSafely(cancelActiveRecording = true)
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
-        previewManager.stopPreview(AUTO_PREVIEW_CLIENT_ID)
         releaseWakeLock()
         super.onDestroy()
         serviceScope.cancel()
@@ -168,11 +121,7 @@ class RecordingService : Service() {
 
     fun startRecording(trackId: String) {
         currentTrackId = trackId
-        configureAutoMonitoringForTrack(trackId)
         startTimeMs = System.currentTimeMillis()
-        activeAutoSegment = null
-        isAutoStopInProgress = false
-        resetStartCandidate()
 
         ensureForegroundNotification(msgRecording())
         previewManager.pauseAll()
@@ -188,11 +137,10 @@ class RecordingService : Service() {
                 .onFailure {
                     Log.w(TAG, "Manual recording start failed: ${it.message}")
                     previewManager.resumeAll()
-                    startAutoPreviewIfPossible()
                     _recordingState.value = RecordingState.Error(
                         it.message ?: msgFailedStartRecording()
                     )
-                    ensureForegroundNotification(currentAutoStatusMessage())
+                    ensureForegroundNotification(msgReadyMonitoring())
                 }
         }
     }
@@ -201,11 +149,9 @@ class RecordingService : Service() {
         val sanitizedTrackId = trackId?.takeIf { it.isNotBlank() }
         if (sanitizedTrackId != null) {
             currentTrackId = sanitizedTrackId
-            configureAutoMonitoringForTrack(sanitizedTrackId)
         }
 
-        ensureForegroundNotification(currentAutoStatusMessage())
-        startAutoPreviewIfPossible()
+        ensureForegroundNotification(msgReadyMonitoring())
         _recordingState.value = RecordingState.Idle
     }
 
@@ -249,91 +195,22 @@ class RecordingService : Service() {
                 _recordingState.value = RecordingState.Idle
             }
             else -> {
-                disableAutoMonitoringAndStopService()
+                stopServiceSafely()
             }
         }
     }
 
-    private fun disableAutoMonitoringAndStopService(cancelActiveRecording: Boolean = false) {
+    private fun stopServiceSafely(cancelActiveRecording: Boolean = false) {
         if (cancelActiveRecording || recordingManager.recordingState.value is SensorRecordingState.Processing) {
             recordingManager.cancelRecording()
         }
-        autoEnabledTrackId = null
-        autoSegments = emptyList()
-        activeAutoSegment = null
-        isAutoStopInProgress = false
-        resetStartCandidate()
-        previewManager.stopPreview(AUTO_PREVIEW_CLIENT_ID)
+        previewManager.resumeAll()
         stopForegroundAndSelf()
     }
 
     private fun onRecordingFinished() {
-        isAutoStopInProgress = false
-        activeAutoSegment = null
-        lastDistanceToSegmentEndM = null
-        lastRecordingLatitude = null
-        lastRecordingLongitude = null
-        resetStartCandidate()
-
         previewManager.resumeAll()
-        startAutoPreviewIfPossible()
-
-        if (autoEnabledTrackId != null) {
-            ensureForegroundNotification(currentAutoStatusMessage())
-        } else {
-            stopForegroundAndSelf()
-        }
-    }
-
-    private fun startAutoPreviewIfPossible() {
-        if (autoEnabledTrackId.isNullOrBlank()) return
-        if (recordingManager.recordingState.value is SensorRecordingState.Recording) return
-        if (recordingManager.recordingState.value is SensorRecordingState.Processing) return
-
-        val started = previewManager.startPreview(
-            clientId = AUTO_PREVIEW_CLIENT_ID,
-            onMetrics = { },
-            onLocation = { location ->
-                maybeAutoStartAtSegmentStart(location)
-            }
-        )
-
-        if (!started) {
-            Log.w(TAG, "Auto preview could not start. Waiting for sensors/location availability.")
-            ensureForegroundNotification(msgWaitingSensors())
-        }
-    }
-
-    private fun loadLocalSegments(trackId: String) {
-        serviceScope.launch {
-            getTrackSegmentsUseCase(trackId)
-                .onSuccess { segments ->
-                    autoSegments = segments.sortedByDescending { it.startedAt }
-                }
-                .onFailure {
-                    autoSegments = emptyList()
-                }
-        }
-    }
-
-    private fun configureAutoMonitoringForTrack(trackId: String) {
-        val enabled = trackAutoStartRepository.isAutoStartEnabled(trackId)
-        autoEnabledTrackId = trackId.takeIf { enabled }
-        if (enabled) {
-            loadLocalSegments(trackId)
-        } else {
-            autoSegments = emptyList()
-            activeAutoSegment = null
-            resetStartCandidate()
-        }
-    }
-
-    private fun currentAutoStatusMessage(): String {
-        return if (autoEnabledTrackId != null) {
-            msgAutoArmed()
-        } else {
-            msgAutoDisabled()
-        }
+        stopForegroundAndSelf()
     }
 
     private fun observeRecordingState() {
@@ -341,13 +218,11 @@ class RecordingService : Service() {
             recordingManager.recordingState.collect { state ->
                 when (state) {
                     is SensorRecordingState.Idle -> {
-                        if (!isAutoStopInProgress) {
-                            ensureForegroundNotification(currentAutoStatusMessage())
-                        }
+                        ensureForegroundNotification(msgReadyMonitoring())
                     }
 
                     is SensorRecordingState.Completed -> {
-                        ensureForegroundNotification(currentAutoStatusMessage())
+                        ensureForegroundNotification(msgReadyMonitoring())
                     }
 
                     is SensorRecordingState.Error -> {
@@ -372,152 +247,10 @@ class RecordingService : Service() {
                                 speed = speed
                             )
                         )
-                        maybeAutoStopAtSegmentEnd(state)
                     }
                 }
             }
         }
-    }
-
-    private fun maybeAutoStartAtSegmentStart(location: PreviewLocation) {
-        if (autoEnabledTrackId == null) {
-            updateLastPreviewLocation(location)
-            return
-        }
-        if (recordingManager.recordingState.value is SensorRecordingState.Recording) {
-            updateLastPreviewLocation(location)
-            return
-        }
-        if (recordingManager.recordingState.value is SensorRecordingState.Processing) {
-            updateLastPreviewLocation(location)
-            return
-        }
-        if (autoSegments.isEmpty()) {
-            updateLastPreviewLocation(location)
-            return
-        }
-
-        val gpsSensitivity = sensitivityRepository.currentSettings.gpsSensitivity
-        val maxPreviewAccuracy = (MAX_PREVIEW_ACCURACY_M / gpsSensitivity.coerceAtLeast(0.01f))
-            .coerceIn(10f, 60f)
-
-        if (location.accuracy <= 0f || location.accuracy > maxPreviewAccuracy) {
-            resetStartCandidate()
-            updateLastPreviewLocation(location)
-            return
-        }
-        if (location.speed < AUTO_START_MIN_SPEED_MPS) {
-            resetStartCandidate()
-            updateLastPreviewLocation(location)
-            return
-        }
-
-        val now = System.currentTimeMillis()
-        if (now < autoCooldownUntilMs) {
-            updateLastPreviewLocation(location)
-            return
-        }
-
-        var closestSegment: TrackSegment? = null
-        var closestDistance = Double.MAX_VALUE
-
-        for (segment in autoSegments) {
-            val distance = haversineMeters(
-                lat1 = location.latitude,
-                lon1 = location.longitude,
-                lat2 = segment.start.lat,
-                lon2 = segment.start.lon
-            )
-            if (distance < closestDistance) {
-                closestDistance = distance
-                closestSegment = segment
-            }
-        }
-
-        if (closestSegment == null || closestDistance > SEGMENT_START_ARM_RADIUS_M) {
-            resetStartCandidate()
-            updateLastPreviewLocation(location)
-            return
-        }
-
-        if (startCandidateSegment?.id != closestSegment.id) {
-            startCandidateSegment = closestSegment
-            startCandidateHits = 0
-        }
-
-        if (closestDistance > SEGMENT_START_RELEASE_RADIUS_M) {
-            startCandidateHits = 0
-            updateLastPreviewLocation(location)
-            return
-        }
-
-        val movingInDirection = isMovingInSegmentDirection(
-            previousLat = lastPreviewLatitude,
-            previousLon = lastPreviewLongitude,
-            currentLat = location.latitude,
-            currentLon = location.longitude,
-            segment = closestSegment
-        )
-
-        if (closestDistance <= SEGMENT_START_TRIGGER_RADIUS_M && movingInDirection) {
-            startCandidateHits++
-        } else {
-            startCandidateHits = max(0, startCandidateHits - 1)
-        }
-
-        if (startCandidateHits >= MIN_START_CONFIRMATION_HITS) {
-            autoCooldownUntilMs = now + AUTO_TRIGGER_COOLDOWN_MS
-            startAutoSegmentRecording(closestSegment)
-            resetStartCandidate()
-        }
-
-        updateLastPreviewLocation(location)
-    }
-
-    private fun startAutoSegmentRecording(segment: TrackSegment) {
-        val trackId = autoEnabledTrackId ?: currentTrackId ?: return
-        if (recordingManager.recordingState.value is SensorRecordingState.Recording) return
-        if (recordingManager.recordingState.value is SensorRecordingState.Processing) return
-
-        activeAutoSegment = segment
-        isAutoStopInProgress = false
-        lastDistanceToSegmentEndM = null
-        lastRecordingLatitude = null
-        lastRecordingLongitude = null
-        startTimeMs = System.currentTimeMillis()
-
-        ensureForegroundNotification(msgRecording())
-        previewManager.pauseAll()
-
-        serviceScope.launch {
-            recordingManager.startRecording(trackId, "POCKET_THIGH")
-                .onSuccess {
-                    _recordingState.value = RecordingState.Recording(
-                        trackId = trackId,
-                        startTimeMs = startTimeMs
-                    )
-                    redirectAppToRecording(trackId)
-                }
-                .onFailure {
-                    Log.w(TAG, "Auto recording start failed for segment ${segment.id}: ${it.message}")
-                    activeAutoSegment = null
-                    isAutoStopInProgress = false
-                    previewManager.resumeAll()
-                    startAutoPreviewIfPossible()
-                    ensureForegroundNotification(currentAutoStatusMessage())
-                }
-        }
-    }
-
-    private fun redirectAppToRecording(trackId: String) {
-        val intent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_SINGLE_TOP or
-                Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(EXTRA_AUTO_NAVIGATE_TRACK_ID, trackId)
-        }
-        runCatching { startActivity(intent) }
-            .onFailure { Log.w(TAG, "Failed to redirect UI to recording screen", it) }
     }
 
     private fun redirectAppToRunSummary(runId: String) {
@@ -529,130 +262,6 @@ class RecordingService : Service() {
         }
         runCatching { startActivity(intent) }
             .onFailure { Log.w(TAG, "Failed to redirect UI to run summary", it) }
-    }
-
-    private fun maybeAutoStopAtSegmentEnd(state: SensorRecordingState.Recording) {
-        if (isAutoStopInProgress) return
-        val segment = activeAutoSegment ?: return
-        val latitude = state.currentLatitude ?: return
-        val longitude = state.currentLongitude ?: return
-
-        val elapsedMs = System.currentTimeMillis() - startTimeMs
-        if (elapsedMs < MIN_RECORDING_BEFORE_AUTO_STOP_MS) return
-
-        val movingInDirection = isMovingInSegmentDirection(
-            previousLat = lastRecordingLatitude,
-            previousLon = lastRecordingLongitude,
-            currentLat = latitude,
-            currentLon = longitude,
-            segment = segment
-        )
-        updateLastRecordingLocation(latitude, longitude)
-        if (!movingInDirection) return
-
-        val distanceToEnd = haversineMeters(
-            lat1 = latitude,
-            lon1 = longitude,
-            lat2 = segment.end.lat,
-            lon2 = segment.end.lon
-        )
-        val previousDistance = lastDistanceToSegmentEndM
-        lastDistanceToSegmentEndM = distanceToEnd
-
-        if (previousDistance != null && distanceToEnd > previousDistance + 6.0) return
-
-        val startToEndDistance = haversineMeters(
-            lat1 = segment.start.lat,
-            lon1 = segment.start.lon,
-            lat2 = segment.end.lat,
-            lon2 = segment.end.lon
-        )
-        val distanceFromStart = haversineMeters(
-            lat1 = latitude,
-            lon1 = longitude,
-            lat2 = segment.start.lat,
-            lon2 = segment.start.lon
-        )
-        val minProgressFromStart = min(startToEndDistance * 0.35, 120.0)
-        if (distanceFromStart < minProgressFromStart) return
-
-        if (distanceToEnd <= SEGMENT_END_RADIUS_M) {
-            isAutoStopInProgress = true
-            autoCooldownUntilMs = System.currentTimeMillis() + AUTO_TRIGGER_COOLDOWN_MS
-            activeAutoSegment = null
-            stopRecording(navigateToRunSummary = true)
-        }
-    }
-
-    private fun resetStartCandidate() {
-        startCandidateSegment = null
-        startCandidateHits = 0
-    }
-
-    private fun updateLastPreviewLocation(location: PreviewLocation) {
-        lastPreviewLatitude = location.latitude
-        lastPreviewLongitude = location.longitude
-    }
-
-    private fun updateLastRecordingLocation(latitude: Double, longitude: Double) {
-        lastRecordingLatitude = latitude
-        lastRecordingLongitude = longitude
-    }
-
-    private fun isMovingInSegmentDirection(
-        previousLat: Double?,
-        previousLon: Double?,
-        currentLat: Double,
-        currentLon: Double,
-        segment: TrackSegment
-    ): Boolean {
-        if (previousLat == null || previousLon == null) return true
-
-        val (moveX, moveY) = projectDeltaMeters(previousLat, previousLon, currentLat, currentLon)
-        val moveNorm = sqrt(moveX * moveX + moveY * moveY)
-        if (moveNorm < 1.0) return true
-
-        val (segmentX, segmentY) = projectDeltaMeters(
-            segment.start.lat,
-            segment.start.lon,
-            segment.end.lat,
-            segment.end.lon
-        )
-        val segmentNorm = sqrt(segmentX * segmentX + segmentY * segmentY)
-        if (segmentNorm < 1.0) return true
-
-        val dot = (moveX * segmentX + moveY * segmentY) / (moveNorm * segmentNorm)
-        return dot >= MIN_DIRECTION_DOT
-    }
-
-    private fun projectDeltaMeters(
-        fromLat: Double,
-        fromLon: Double,
-        toLat: Double,
-        toLon: Double
-    ): Pair<Double, Double> {
-        val avgLatRad = Math.toRadians((fromLat + toLat) / 2.0)
-        val metersPerDegLat = 111_132.0
-        val metersPerDegLon = 111_320.0 * cos(avgLatRad)
-        val dx = (toLon - fromLon) * metersPerDegLon
-        val dy = (toLat - fromLat) * metersPerDegLat
-        return dx to dy
-    }
-
-    private fun haversineMeters(
-        lat1: Double,
-        lon1: Double,
-        lat2: Double,
-        lon2: Double
-    ): Double {
-        val r = 6371000.0
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = sin(dLat / 2).pow(2) +
-            cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
-            sin(dLon / 2).pow(2)
-        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return r * c
     }
 
     private fun createNotification(
@@ -769,14 +378,8 @@ class RecordingService : Service() {
         }
     }
 
-    private fun msgAutoArmed(): String =
-        tr(this, "Auto-start armed", "Auto-inicio armado")
-
-    private fun msgAutoDisabled(): String =
-        tr(this, "Auto-start disabled", "Auto-start desactivado")
-
-    private fun msgWaitingSensors(): String =
-        tr(this, "Waiting for sensor preview", "Esperando vista previa de sensores")
+    private fun msgReadyMonitoring(): String =
+        tr(this, "Recording standby", "Grabación en espera")
 
     private fun msgRecording(): String =
         tr(this, "Recording...", "Grabando...")

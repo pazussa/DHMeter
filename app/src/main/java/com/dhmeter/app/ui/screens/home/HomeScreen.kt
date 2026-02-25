@@ -19,7 +19,6 @@ import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material.icons.filled.Terrain
@@ -67,7 +66,6 @@ fun HomeScreen(
     onNavigateToHistory: () -> Unit,
     onNavigateToTrackDetail: (trackId: String) -> Unit,
     onNavigateToPro: () -> Unit,
-    onNavigateToGpsCalibration: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -147,12 +145,6 @@ fun HomeScreen(
                         Icon(
                             Icons.Default.WorkspacePremium,
                             contentDescription = tr("Pro", "Pro")
-                        )
-                    }
-                    IconButton(onClick = onNavigateToGpsCalibration) {
-                        Icon(
-                            Icons.Default.GpsFixed,
-                            contentDescription = tr("GPS Lab", "Laboratorio GPS")
                         )
                     }
                 }
