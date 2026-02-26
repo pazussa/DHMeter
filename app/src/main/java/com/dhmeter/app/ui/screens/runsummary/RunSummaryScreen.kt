@@ -41,6 +41,7 @@ import com.dhmeter.charts.model.ChartSeries
 import com.dhmeter.charts.model.HeatmapPoint
 import com.dhmeter.domain.model.ElevationProfile
 import com.dhmeter.domain.model.EventType
+import com.dhmeter.domain.model.GpsPoint
 import com.dhmeter.domain.model.RunEvent
 import com.dhmeter.domain.model.RunMapData
 import com.dhmeter.domain.model.Run
@@ -1284,7 +1285,10 @@ private fun RunDynamicsAnalysisSection(
         buildTrailPointInsights(
             dynamicsInsights = dynamicsInsights,
             events = events,
-            totalDistanceM = totalDistanceM
+            totalDistanceM = totalDistanceM,
+            polylinePoints = mapData?.polyline?.points.orEmpty(),
+            speedPoints = speedPoints,
+            accelerationPoints = accelerationPoints
         )
     }
     val focusDistanceM = selectedDistanceM
@@ -1477,14 +1481,31 @@ private enum class TrailObservationKind {
     RECOVERY,
     LANDING,
     IMPACT,
+    CURVE,
     TRANSITION
 }
+
+private enum class CurveDirection {
+    LEFT,
+    RIGHT
+}
+
+private data class CurveInsight(
+    val centerDistanceM: Float,
+    val turnAngleDeg: Float,
+    val direction: CurveDirection,
+    val entrySpeedKmh: Float?,
+    val exitSpeedKmh: Float?,
+    val entryAccelerationMs2: Float?,
+    val exitAccelerationMs2: Float?
+)
 
 private data class TrailObservationCandidate(
     val distanceM: Float,
     val kind: TrailObservationKind,
     val speedDropKmh: Float? = null,
-    val decelerationAbsMs2: Float? = null
+    val decelerationAbsMs2: Float? = null,
+    val curveInsight: CurveInsight? = null
 )
 
 private data class TrailPointInsight(
@@ -1502,24 +1523,24 @@ private fun buildFocusAdvice(
     val hasImpact = focusEvents.any { it.type == EventType.IMPACT_PEAK }
     return when {
         hasLanding -> tr(
-            "Tip: Absorb this landing with bent elbows and knees, then look to the exit.",
-            "Consejo: Absorbe este aterrizaje con codos y rodillas flexionados y mira la salida."
+            "Enter with slightly lower speed and accelerate progressively on exit.",
+            "Entrar con un poco menos de velocidad y acelerar de forma progresiva en la salida."
         )
         hasImpact -> tr(
-            "Tip: Lighten the bike just before this hit or choose a cleaner line.",
-            "Consejo: Descarga peso de la bici justo antes del golpe o busca una linea mas limpia."
+            "Reduce speed slightly before impact and avoid hard braking right after it.",
+            "Reducir un poco la velocidad antes del impacto y evitar frenada fuerte justo despues."
         )
         focusAccelerationMs2 != null && focusAccelerationMs2 <= -1.0f -> tr(
-            "Tip: Start braking a little earlier and release before the exit to keep flow.",
-            "Consejo: Comienza a frenar un poco antes y suelta antes de la salida para mantener fluidez."
+            "For strong braking, start braking earlier and release before exit.",
+            "Ante frenada fuerte, iniciar frenado antes y soltar antes de la salida."
         )
         focusAccelerationMs2 != null && focusAccelerationMs2 <= -0.45f -> tr(
-            "Tip: Brake progressively and keep the bike stable to preserve traction.",
-            "Consejo: Frena progresivo y manten la bici estable para conservar traccion."
+            "To control speed, brake progressively and avoid sudden speed changes.",
+            "Para controlar velocidad, frenar de forma progresiva y evitar cambios bruscos."
         )
         focusAccelerationMs2 != null && focusAccelerationMs2 >= 0.75f -> tr(
-            "Tip: Keep your eyes on the next section and push speed only with control.",
-            "Consejo: Mira la siguiente seccion y acelera solo con control."
+            "To gain speed, accelerate in steps and avoid abrupt peaks.",
+            "Para ganar velocidad, acelerar por etapas y evitar picos bruscos."
         )
         else -> null
     }
@@ -1529,9 +1550,18 @@ private fun buildFocusAdvice(
 private fun buildTrailPointInsights(
     dynamicsInsights: RunDynamicsInsights,
     events: List<RunEvent>,
-    totalDistanceM: Float
+    totalDistanceM: Float,
+    polylinePoints: List<GpsPoint>,
+    speedPoints: List<ChartPoint>,
+    accelerationPoints: List<ChartPoint>
 ): List<TrailPointInsight> {
     val candidates = mutableListOf<TrailObservationCandidate>()
+    val curveInsights = detectCurveInsights(
+        polylinePoints = polylinePoints,
+        totalDistanceM = totalDistanceM,
+        speedPoints = speedPoints,
+        accelerationPoints = accelerationPoints
+    )
 
     dynamicsInsights.speedDrops.forEach { drop ->
         candidates += TrailObservationCandidate(
@@ -1571,6 +1601,13 @@ private fun buildTrailPointInsights(
             kind = kind
         )
     }
+    curveInsights.forEach { curve ->
+        candidates += TrailObservationCandidate(
+            distanceM = curve.centerDistanceM,
+            kind = TrailObservationKind.CURVE,
+            curveInsight = curve
+        )
+    }
 
     if (candidates.isEmpty()) return emptyList()
 
@@ -1593,7 +1630,20 @@ private fun buildTrailPointInsights(
     return clusters.map { cluster ->
         val kinds = cluster.map { it.kind }.toSet()
         val distanceM = cluster.map { it.distanceM }.average().toFloat()
+        val strongestCurve = cluster.mapNotNull { it.curveInsight }.maxByOrNull { it.turnAngleDeg }
         val title = when {
+            strongestCurve != null && TrailObservationKind.BRAKING in kinds -> tr(
+                "Curve with braking",
+                "Curva con frenada"
+            )
+            strongestCurve != null && strongestCurve.direction == CurveDirection.LEFT -> tr(
+                "Left curve",
+                "Curva a la izquierda"
+            )
+            strongestCurve != null -> tr(
+                "Right curve",
+                "Curva a la derecha"
+            )
             TrailObservationKind.BRAKING in kinds -> tr("Braking zone", "Zona de frenada")
             TrailObservationKind.LANDING in kinds -> tr("Landing point", "Punto de aterrizaje")
             TrailObservationKind.IMPACT in kinds -> tr("Impact point", "Punto de impacto")
@@ -1640,22 +1690,48 @@ private fun buildTrailPointInsights(
                 "Aqui empiezas a recuperar velocidad."
             )
         }
+        strongestCurve?.let { curve ->
+            details += tr(
+                "Turn angle about ${String.format(Locale.US, "%.0f", curve.turnAngleDeg)}°.",
+                "Angulo de giro aprox ${String.format(Locale.US, "%.0f", curve.turnAngleDeg)}°."
+            )
+            val entrySpeedText = curve.entrySpeedKmh?.let { String.format(Locale.US, "%.1f km/h", it) }
+                ?: tr("not available", "sin dato")
+            val exitSpeedText = curve.exitSpeedKmh?.let { String.format(Locale.US, "%.1f km/h", it) }
+                ?: tr("not available", "sin dato")
+            details += tr(
+                "Curve speed, entry: $entrySpeedText, exit: $exitSpeedText.",
+                "Velocidad en curva, entrada: $entrySpeedText, salida: $exitSpeedText."
+            )
+            val entryAccelText = curve.entryAccelerationMs2?.let { String.format(Locale.US, "%.2f m/s²", it) }
+                ?: tr("not available", "sin dato")
+            val exitAccelText = curve.exitAccelerationMs2?.let { String.format(Locale.US, "%.2f m/s²", it) }
+                ?: tr("not available", "sin dato")
+            details += tr(
+                "Curve acceleration, entry: $entryAccelText, exit: $exitAccelText.",
+                "Aceleracion en curva, entrada: $entryAccelText, salida: $exitAccelText."
+            )
+        }
         val tip = when {
+            strongestCurve != null -> tr(
+                "In this curve, control entry speed and prioritize clean speed at exit.",
+                "En esta curva, controlar la velocidad de entrada y priorizar una velocidad limpia en la salida."
+            )
             TrailObservationKind.LANDING in kinds -> tr(
-                "Tip: Stay loose on landing and prepare the next movement early.",
-                "Consejo: Mantente suelto en el aterrizaje y prepara el siguiente movimiento temprano."
+                "In this landing zone, enter with lower speed and recover speed on exit.",
+                "En esta zona de aterrizaje, entrar con menos velocidad y recuperar velocidad en la salida."
             )
             TrailObservationKind.IMPACT in kinds -> tr(
-                "Tip: Unweight the bike before this impact or open your line.",
-                "Consejo: Descarga la bici antes de este impacto o abre la linea."
+                "In this impact zone, smooth speed before contact and avoid braking spikes.",
+                "En esta zona de impacto, suavizar velocidad antes del contacto y evitar picos de frenada."
             )
             TrailObservationKind.BRAKING in kinds -> tr(
-                "Tip: Brake before the turn-in and release toward the exit.",
-                "Consejo: Frena antes de entrar y suelta hacia la salida."
+                "In this braking zone, complete most braking before entry and release on exit.",
+                "En esta zona de frenada, completar la mayor parte de la frenada antes de entrar y soltar en la salida."
             )
             TrailObservationKind.RECOVERY in kinds -> tr(
-                "Tip: Keep your eyes ahead and build speed only when traction is steady.",
-                "Consejo: Mira adelante y gana velocidad solo cuando la traccion este firme."
+                "In this section, recover speed progressively and avoid abrupt acceleration.",
+                "En esta seccion, recuperar velocidad de forma progresiva y evitar aceleracion brusca."
             )
             else -> null
         }
@@ -1798,6 +1874,13 @@ private data class RunDynamicsInsights(
     val keyPoints: List<KeyTrackPointInsight>
 )
 
+private data class TurnSample(
+    val centerDistanceM: Float,
+    val angleDeg: Float,
+    val signedAngleDeg: Float,
+    val spanM: Float
+)
+
 private fun buildRunDynamicsInsights(
     events: List<RunEvent>,
     speedPoints: List<ChartPoint>,
@@ -1900,6 +1983,112 @@ private fun buildRunDynamicsInsights(
         decelerationDrops = significantDecelerationDrops,
         keyPoints = keyPoints
     )
+}
+
+private fun detectCurveInsights(
+    polylinePoints: List<GpsPoint>,
+    totalDistanceM: Float,
+    speedPoints: List<ChartPoint>,
+    accelerationPoints: List<ChartPoint>
+): List<CurveInsight> {
+    if (polylinePoints.size < 3) return emptyList()
+    val orderedPoints = polylinePoints
+        .filter { point ->
+            point.distPct.isFinite() &&
+                point.lat.isFinite() &&
+                point.lon.isFinite()
+        }
+        .sortedBy { it.distPct }
+    if (orderedPoints.size < 3) return emptyList()
+
+    val turnSamples = mutableListOf<TurnSample>()
+    for (index in 1 until orderedPoints.lastIndex) {
+        val prev = orderedPoints[index - 1]
+        val curr = orderedPoints[index]
+        val next = orderedPoints[index + 1]
+
+        val prevDist = distanceFromPct(prev.distPct, totalDistanceM) ?: continue
+        val currDist = distanceFromPct(curr.distPct, totalDistanceM) ?: continue
+        val nextDist = distanceFromPct(next.distPct, totalDistanceM) ?: continue
+        val spanM = (nextDist - prevDist).coerceAtLeast(0f)
+        if (!spanM.isFinite() || spanM < 4f) continue
+
+        val entryBearing = bearingDegrees(prev, curr)
+        val exitBearing = bearingDegrees(curr, next)
+        val signedTurn = normalizeSignedAngleDeg(exitBearing - entryBearing)
+        val absTurn = kotlin.math.abs(signedTurn)
+        if (!absTurn.isFinite() || absTurn < 1f) continue
+
+        turnSamples += TurnSample(
+            centerDistanceM = currDist.coerceIn(0f, totalDistanceM),
+            angleDeg = absTurn,
+            signedAngleDeg = signedTurn,
+            spanM = spanM
+        )
+    }
+    if (turnSamples.isEmpty()) return emptyList()
+
+    val angleThreshold = kotlin.math.max(
+        14f,
+        percentile(turnSamples.map { it.angleDeg }.sorted(), 0.70f)
+    )
+    val minSpacingM = (totalDistanceM * 0.015f).coerceIn(10f, 22f)
+
+    val selectedTurns = mutableListOf<TurnSample>()
+    turnSamples
+        .asSequence()
+        .filter { it.angleDeg >= angleThreshold }
+        .sortedByDescending { it.angleDeg }
+        .forEach { sample ->
+            val tooClose = selectedTurns.any { picked ->
+                kotlin.math.abs(picked.centerDistanceM - sample.centerDistanceM) < minSpacingM
+            }
+            if (!tooClose) selectedTurns += sample
+        }
+
+    return selectedTurns
+        .sortedBy { it.centerDistanceM }
+        .take(12)
+        .map { sample ->
+            val windowM = (sample.spanM * 0.7f).coerceIn(6f, 20f)
+            val entryDistanceM = (sample.centerDistanceM - windowM).coerceIn(0f, totalDistanceM)
+            val exitDistanceM = (sample.centerDistanceM + windowM).coerceIn(0f, totalDistanceM)
+            CurveInsight(
+                centerDistanceM = sample.centerDistanceM,
+                turnAngleDeg = sample.angleDeg,
+                direction = if (sample.signedAngleDeg < 0f) CurveDirection.LEFT else CurveDirection.RIGHT,
+                entrySpeedKmh = interpolatedChartValueAtDist(speedPoints, entryDistanceM, totalDistanceM),
+                exitSpeedKmh = interpolatedChartValueAtDist(speedPoints, exitDistanceM, totalDistanceM),
+                entryAccelerationMs2 = interpolatedChartValueAtDist(
+                    accelerationPoints,
+                    entryDistanceM,
+                    totalDistanceM
+                ),
+                exitAccelerationMs2 = interpolatedChartValueAtDist(
+                    accelerationPoints,
+                    exitDistanceM,
+                    totalDistanceM
+                )
+            )
+        }
+}
+
+private fun bearingDegrees(from: GpsPoint, to: GpsPoint): Float {
+    val lat1 = Math.toRadians(from.lat)
+    val lat2 = Math.toRadians(to.lat)
+    val dLon = Math.toRadians(to.lon - from.lon)
+    val y = kotlin.math.sin(dLon) * kotlin.math.cos(lat2)
+    val x = kotlin.math.cos(lat1) * kotlin.math.sin(lat2) -
+        kotlin.math.sin(lat1) * kotlin.math.cos(lat2) * kotlin.math.cos(dLon)
+    val raw = Math.toDegrees(kotlin.math.atan2(y, x))
+    return ((raw + 360.0) % 360.0).toFloat()
+}
+
+private fun normalizeSignedAngleDeg(angleDeg: Float): Float {
+    var normalized = angleDeg % 360f
+    if (normalized > 180f) normalized -= 360f
+    if (normalized < -180f) normalized += 360f
+    return normalized
 }
 
 private fun findLatLngForDistPct(
