@@ -38,6 +38,7 @@ class SignalProcessor @Inject constructor(
         const val HOP_SIZE_SEC = 0.25f
         private const val IMPACT_EVENT_DEBOUNCE_MS = 250L
         private const val IMPACT_NEAR_LANDING_MS = 350L
+        private const val IMPACT_EVENT_BASE_MIN_G = 1.6f
         private const val HARSHNESS_BURST_WINDOW_SEC = 0.35f
         private const val HARSHNESS_BURST_HOP_SEC = 0.10f
         private const val HARSHNESS_BURST_MIN_DURATION_MS = 180L
@@ -268,6 +269,8 @@ class SignalProcessor @Inject constructor(
     ): List<RunEvent> {
         val startTimeNs = handle.startTimeNs
         val sampleRate = resolveSampleRate(handle.accelSampleRate, accelSamples)
+        val eventSensitivity = sensitivityRepository.currentSettings.eventSensitivity
+            .coerceIn(SensorSensitivitySettings.MIN_SENSITIVITY, SensorSensitivitySettings.MAX_SENSITIVITY)
 
         val events = mutableListOf<RunEvent>()
 
@@ -300,13 +303,15 @@ class SignalProcessor @Inject constructor(
             sampleRate = sampleRate,
             distMapping = distMapping,
             startTimeNs = startTimeNs,
-            landingTimesNs = landingTimesNs
+            landingTimesNs = landingTimesNs,
+            eventSensitivity = eventSensitivity
         )
         events += detectHarshnessBurstEvents(
             accelSamples = accelSamples,
             sampleRate = sampleRate,
             distMapping = distMapping,
-            startTimeNs = startTimeNs
+            startTimeNs = startTimeNs,
+            eventSensitivity = eventSensitivity
         )
 
         return events.sortedBy { it.distPct }
@@ -317,7 +322,8 @@ class SignalProcessor @Inject constructor(
         sampleRate: Float,
         distMapping: DistanceMapping,
         startTimeNs: Long,
-        landingTimesNs: List<Long>
+        landingTimesNs: List<Long>,
+        eventSensitivity: Float
     ): List<RunEvent> {
         val peaks = impactAnalyzer.detectPeaks(accelSamples, sampleRate)
         if (peaks.isEmpty()) return emptyList()
@@ -325,6 +331,8 @@ class SignalProcessor @Inject constructor(
         val impactEvents = mutableListOf<RunEvent>()
         val debounceNs = IMPACT_EVENT_DEBOUNCE_MS * 1_000_000L
         val nearLandingNs = IMPACT_NEAR_LANDING_MS * 1_000_000L
+        val minAcceptedPeakG = (IMPACT_EVENT_BASE_MIN_G / eventSensitivity)
+            .coerceIn(0.7f, 3.5f)
         val sortedLandingTimes = landingTimesNs.sorted()
         var lastImpactNs = Long.MIN_VALUE
 
@@ -336,6 +344,7 @@ class SignalProcessor @Inject constructor(
             val timeSec = ((timestampNs - startTimeNs).coerceAtLeast(0L)) / 1_000_000_000f
             val distPct = distMapping.getDistPct(timestampNs)
             val peakG = peak.peakG.coerceAtLeast(0f)
+            if (peakG < minAcceptedPeakG) return@forEach
 
             impactEvents.add(
                 RunEvent(
@@ -385,7 +394,8 @@ class SignalProcessor @Inject constructor(
         accelSamples: List<AccelSample>,
         sampleRate: Float,
         distMapping: DistanceMapping,
-        startTimeNs: Long
+        startTimeNs: Long,
+        eventSensitivity: Float
     ): List<RunEvent> {
         if (sampleRate <= 0f || accelSamples.size < 50) return emptyList()
 
@@ -417,7 +427,9 @@ class SignalProcessor @Inject constructor(
         val p75 = percentile(rmsValues, 75)
         val p90 = percentile(rmsValues, 90)
         val burstThreshold = maxOf(0.25f, p75 + (p90 - p75) * 0.65f)
-        if (!burstThreshold.isFinite() || burstThreshold <= 0f) return emptyList()
+        val adjustedBurstThreshold = (burstThreshold / eventSensitivity)
+            .coerceAtLeast(0.10f)
+        if (!adjustedBurstThreshold.isFinite() || adjustedBurstThreshold <= 0f) return emptyList()
 
         val rawBursts = mutableListOf<HarshnessBurst>()
         var activeStartNs = -1L
@@ -445,7 +457,7 @@ class SignalProcessor @Inject constructor(
         }
 
         windows.forEach { window ->
-            if (window.rms >= burstThreshold) {
+            if (window.rms >= adjustedBurstThreshold) {
                 if (activeStartNs < 0L) {
                     activeStartNs = window.startNs
                     activeEndNs = window.endNs
@@ -471,7 +483,7 @@ class SignalProcessor @Inject constructor(
             val durationMs = ((burst.endNs - burst.startNs) / 1_000_000L).coerceAtLeast(0L)
             val timeSec = ((burst.peakNs - startTimeNs).coerceAtLeast(0L)) / 1_000_000_000f
             val distPct = distMapping.getDistPct(burst.peakNs)
-            val severity = ((burst.peakRms / burstThreshold) * 2f).coerceIn(1f, 6f)
+            val severity = ((burst.peakRms / adjustedBurstThreshold) * 2f).coerceIn(1f, 6f)
 
             RunEvent(
                 eventId = UUID.randomUUID().toString(),

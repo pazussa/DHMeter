@@ -1,10 +1,15 @@
 package com.dhmeter.charts.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -63,23 +68,46 @@ fun HeatmapBar(
     minValue: Float = 0f,
     maxValue: Float = 1f,
     cornerRadius: Float = 4f,
+    onPointSelected: ((xValue: Float, value: Float) -> Unit)? = null,
     @Suppress("UNUSED_PARAMETER")
     label: String? = null
 ) {
+    val selectedXValue = remember(points) { mutableStateOf<Float?>(null) }
+
     Canvas(
         modifier = modifier
             .fillMaxWidth()
             .height(24.dp)
+            .clipToBounds()
+            .pointerInput(points) {
+                detectTapGestures { offset ->
+                    if (points.isEmpty()) return@detectTapGestures
+                    val sorted = points.sortedBy { it.x }
+                    val minX = sorted.first().x
+                    val maxX = sorted.last().x
+                    val xRange = (maxX - minX).takeIf { kotlin.math.abs(it) > 1e-6f } ?: 1f
+                    val widthPx = size.width.toFloat().coerceAtLeast(1f)
+                    val clampedX = offset.x.coerceIn(0f, widthPx)
+                    val selectedX = minX + (clampedX / widthPx) * xRange
+                    val selectedValue = interpolateHeatmapValueAtX(sorted, selectedX) ?: sorted.first().value
+                    selectedXValue.value = selectedX
+                    onPointSelected?.invoke(selectedX, selectedValue)
+                }
+            }
     ) {
         if (points.isEmpty()) return@Canvas
 
         val barHeight = size.height
         val barWidth = size.width
         val segmentWidth = barWidth / points.size
+        val valueRange = (maxValue - minValue).takeIf { kotlin.math.abs(it) > 1e-6f } ?: 1f
+        val minX = points.minOfOrNull { it.x } ?: 0f
+        val maxX = points.maxOfOrNull { it.x } ?: 1f
+        val xRange = (maxX - minX).takeIf { kotlin.math.abs(it) > 1e-6f } ?: 1f
 
         points.forEachIndexed { index, point ->
             // Normalize value to 0-1 range
-            val normalizedValue = ((point.value - minValue) / (maxValue - minValue))
+            val normalizedValue = ((point.value - minValue) / valueRange)
                 .coerceIn(0f, 1f)
 
             // Interpolate color based on value
@@ -99,7 +127,35 @@ fun HeatmapBar(
                 }
             )
         }
+
+        selectedXValue.value?.let { xValue ->
+            val x = ((xValue - minX) / xRange).coerceIn(0f, 1f) * barWidth
+            drawLine(
+                color = Color.White.copy(alpha = 0.95f),
+                start = Offset(x, 0f),
+                end = Offset(x, barHeight),
+                strokeWidth = 2f
+            )
+        }
     }
+}
+
+private fun interpolateHeatmapValueAtX(points: List<HeatmapPoint>, x: Float): Float? {
+    if (points.isEmpty()) return null
+    if (points.size == 1) return points.first().value
+    if (x <= points.first().x) return points.first().value
+    if (x >= points.last().x) return points.last().value
+
+    for (i in 0 until points.lastIndex) {
+        val a = points[i]
+        val b = points[i + 1]
+        if (x < a.x || x > b.x) continue
+        val dx = b.x - a.x
+        if (kotlin.math.abs(dx) < 1e-6f) return a.value
+        val t = ((x - a.x) / dx).coerceIn(0f, 1f)
+        return a.value + (b.value - a.value) * t
+    }
+    return points.minByOrNull { kotlin.math.abs(it.x - x) }?.value
 }
 
 /**
@@ -122,12 +178,16 @@ fun GradientHeatmapBar(
 
         val barHeight = size.height
         val barWidth = size.width
+        val minX = points.minOfOrNull { it.x } ?: 0f
+        val maxX = points.maxOfOrNull { it.x } ?: 1f
+        val xRange = (maxX - minX).takeIf { kotlin.math.abs(it) > 1e-6f } ?: 1f
+        val valueRange = (maxValue - minValue).takeIf { kotlin.math.abs(it) > 1e-6f } ?: 1f
 
         // Create color stops for gradient
         val colorStops = points.mapIndexed { _, point ->
-            val normalizedValue = ((point.value - minValue) / (maxValue - minValue))
+            val normalizedValue = ((point.value - minValue) / valueRange)
                 .coerceIn(0f, 1f)
-            val position = point.x / 100f  // Assuming x is percentage
+            val position = ((point.x - minX) / xRange).coerceIn(0f, 1f)
             position to interpolateColor(colors, normalizedValue)
         }
 

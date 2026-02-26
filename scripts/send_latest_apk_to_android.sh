@@ -145,17 +145,48 @@ if [[ "$UPLOAD_ONLY" = true && "$SKIP_UPLOAD" = true ]]; then
   exit 1
 fi
 
-require_cmd gh
-require_cmd curl
+UPLOAD_TO_GITHUB=false
+USE_LOCAL_APK=false
+if [[ "$UPLOAD_ONLY" = true ]]; then
+  UPLOAD_TO_GITHUB=true
+elif [[ "$INSTALL_DIRECT" = true && "$SKIP_UPLOAD" = false ]]; then
+  UPLOAD_TO_GITHUB=true
+elif [[ "$INSTALL_DIRECT" = true && "$SKIP_UPLOAD" = true ]]; then
+  USE_LOCAL_APK=true
+fi
+
+if [[ "$UPLOAD_TO_GITHUB" = true ]]; then
+  require_cmd gh
+fi
+if [[ "$UPLOAD_TO_GITHUB" = false && "$USE_LOCAL_APK" = false ]]; then
+  require_cmd curl
+fi
 if [[ "$UPLOAD_ONLY" = false ]]; then
   require_cmd adb
 fi
+
+adb_cmd() {
+  if [[ -n "${MSYSTEM:-}" ]]; then
+    MSYS2_ARG_CONV_EXCL='*' adb "$@"
+  else
+    adb "$@"
+  fi
+}
+
+to_host_path_for_adb() {
+  local path="$1"
+  if [[ -n "${MSYSTEM:-}" ]] && command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$path"
+  else
+    printf '%s' "$path"
+  fi
+}
 
 discover_mdns_connect_endpoint() {
   local host_filter="${1:-}"
   local discovered
   discovered="$(
-    adb mdns services 2>/dev/null | awk -v host="$host_filter" '
+    adb_cmd mdns services 2>/dev/null | awk -v host="$host_filter" '
       $2 == "_adb-tls-connect._tcp" {
         endpoint = $3
         if (host == "") {
@@ -177,6 +208,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$ROOT_DIR/tmp-apk"
 mkdir -p "$TMP_DIR"
 LOCAL_APK="$TMP_DIR/$ASSET_NAME"
+LOCAL_APK_FOR_ADB="$(to_host_path_for_adb "$LOCAL_APK")"
 ASSET_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_NAME}"
 
 find_latest_local_apk() {
@@ -204,13 +236,6 @@ upload_apk_to_release() {
 
   gh release upload "$TAG" "$upload_apk_path" --repo "$REPO" --clobber
 }
-
-UPLOAD_TO_GITHUB=false
-if [[ "$UPLOAD_ONLY" = true ]]; then
-  UPLOAD_TO_GITHUB=true
-elif [[ "$INSTALL_DIRECT" = true && "$SKIP_UPLOAD" = false ]]; then
-  UPLOAD_TO_GITHUB=true
-fi
 
 TOTAL_STEPS=5
 if [[ "$UPLOAD_TO_GITHUB" = true ]]; then
@@ -242,6 +267,19 @@ if [[ "$UPLOAD_TO_GITHUB" = true ]]; then
   cp -f "$SOURCE_APK" "$LOCAL_APK"
   log_step "Uploading latest local APK to release '$TAG' in '$REPO'..."
   upload_apk_to_release "$LOCAL_APK"
+elif [[ "$USE_LOCAL_APK" = true ]]; then
+  log_step "Resolving latest local APK..."
+  SOURCE_APK="$(find_latest_local_apk)"
+  if [[ -z "$SOURCE_APK" || ! -f "$SOURCE_APK" ]]; then
+    echo "No local APK found. Building debug APK..."
+    (cd "$ROOT_DIR" && ./gradlew :app:assembleDebug)
+    SOURCE_APK="$(find_latest_local_apk)"
+  fi
+  if [[ -z "$SOURCE_APK" || ! -f "$SOURCE_APK" ]]; then
+    echo "Error: could not find a local APK after build." >&2
+    exit 1
+  fi
+  cp -f "$SOURCE_APK" "$LOCAL_APK"
 else
   log_step "Downloading latest APK from release '$TAG' in '$REPO'..."
   curl -fsSL "$ASSET_URL" -o "$LOCAL_APK"
@@ -262,7 +300,7 @@ PAIR_HOST=""
 if [[ -n "$PAIR_ENDPOINT" ]]; then
   echo "Pairing with device at $PAIR_ENDPOINT..."
   PAIR_HOST="${PAIR_ENDPOINT%%:*}"
-  if pair_output="$(printf '%s\n' "$PAIR_CODE" | adb pair "$PAIR_ENDPOINT" 2>&1)"; then
+  if pair_output="$(printf '%s\n' "$PAIR_CODE" | adb_cmd pair "$PAIR_ENDPOINT" 2>&1)"; then
     echo "$pair_output"
   else
     echo "Warning: adb pair failed. Continuing with adb connect attempt..."
@@ -272,47 +310,47 @@ if [[ -n "$PAIR_ENDPOINT" ]]; then
 fi
 
 if [[ -n "$DEVICE" ]]; then
-  adb connect "$DEVICE" >/dev/null || true
+  adb_cmd connect "$DEVICE" >/dev/null || true
 fi
 
 if [[ -n "$PAIR_ENDPOINT" && -n "$DEVICE" ]]; then
-  DEVICE_STATE_TMP="$(adb -s "$DEVICE" get-state 2>/dev/null || true)"
+  DEVICE_STATE_TMP="$(adb_cmd -s "$DEVICE" get-state 2>/dev/null || true)"
   if [[ "$DEVICE_STATE_TMP" != "device" ]]; then
     MDNS_ENDPOINT="$(discover_mdns_connect_endpoint "$PAIR_HOST")"
     if [[ -n "$MDNS_ENDPOINT" && "$MDNS_ENDPOINT" != "$DEVICE" ]]; then
       echo "Using discovered connect endpoint from mDNS: $MDNS_ENDPOINT"
       DEVICE="$MDNS_ENDPOINT"
-      adb connect "$DEVICE" >/dev/null || true
+      adb_cmd connect "$DEVICE" >/dev/null || true
     fi
   fi
 fi
 
 if [[ "$AUTO_DEVICE" = true ]]; then
-  DEVICE="$(adb devices | awk 'NR>1 && $2=="device" {print $1; exit}')"
+  DEVICE="$(adb_cmd devices | awk 'NR>1 && $2=="device" {print $1; exit}')"
   if [[ -z "$DEVICE" ]]; then
     echo "Error: no online adb device found. Use --device <ip:port> or connect one first." >&2
     exit 1
   fi
 fi
 
-DEVICE_STATE="$(adb -s "$DEVICE" get-state 2>/dev/null || true)"
+DEVICE_STATE="$(adb_cmd -s "$DEVICE" get-state 2>/dev/null || true)"
 if [[ "$DEVICE_STATE" != "device" ]]; then
   # If there is exactly one online adb device, use it as fallback.
-  mapfile -t ONLINE_DEVICES < <(adb devices | awk 'NR>1 && $2=="device" {print $1}')
+  mapfile -t ONLINE_DEVICES < <(adb_cmd devices | awk 'NR>1 && $2=="device" {print $1}')
   if [[ "${#ONLINE_DEVICES[@]}" -eq 1 ]]; then
     echo "Device '$DEVICE' is not online; using only online adb device: ${ONLINE_DEVICES[0]}"
     DEVICE="${ONLINE_DEVICES[0]}"
-    DEVICE_STATE="$(adb -s "$DEVICE" get-state 2>/dev/null || true)"
+    DEVICE_STATE="$(adb_cmd -s "$DEVICE" get-state 2>/dev/null || true)"
   fi
 fi
 
 if [[ "$DEVICE_STATE" != "device" ]]; then
   echo "Error: device '$DEVICE' is not online in adb."
   echo "adb devices output:"
-  adb devices || true
-  if adb mdns services >/dev/null 2>&1; then
+  adb_cmd devices || true
+  if adb_cmd mdns services >/dev/null 2>&1; then
     echo "adb mdns services output (possible endpoints):"
-    adb mdns services || true
+    adb_cmd mdns services || true
   fi
   echo "Tip: enable Wireless debugging on phone and use fresh endpoints:"
   echo "  1) adb pair <ip:pair_port>"
@@ -321,10 +359,10 @@ if [[ "$DEVICE_STATE" != "device" ]]; then
 fi
 
 log_step "Pushing APK to phone: $PHONE_DEST"
-adb -s "$DEVICE" push "$LOCAL_APK" "$PHONE_DEST" >/dev/null
+adb_cmd -s "$DEVICE" push "$LOCAL_APK_FOR_ADB" "$PHONE_DEST" >/dev/null
 
 log_step "Verifying file on phone..."
-PHONE_SIZE="$(adb -s "$DEVICE" shell "stat -c %s '$PHONE_DEST'" 2>/dev/null | tr -d '\r' || true)"
+PHONE_SIZE="$(adb_cmd -s "$DEVICE" shell "stat -c %s '$PHONE_DEST'" 2>/dev/null | tr -d '\r' || true)"
 LOCAL_SIZE="$(stat -c %s "$LOCAL_APK")"
 if [[ "$PHONE_SIZE" != "$LOCAL_SIZE" ]]; then
   echo "Warning: size mismatch (local=$LOCAL_SIZE, phone=$PHONE_SIZE)."
@@ -335,17 +373,17 @@ fi
 if [[ "$INSTALL_DIRECT" = true ]]; then
   log_step "Installing directly with adb..."
   for pkg in com.dropindh.app.debug com.dropindh.app; do
-    if adb -s "$DEVICE" shell pm list packages "$pkg" | grep -q "$pkg"; then
+    if adb_cmd -s "$DEVICE" shell pm list packages "$pkg" | grep -q "$pkg"; then
       echo "Uninstalling previous app: $pkg"
-      adb -s "$DEVICE" uninstall "$pkg" >/dev/null || true
+      adb_cmd -s "$DEVICE" uninstall "$pkg" >/dev/null || true
     fi
   done
-  adb -s "$DEVICE" install -r "$LOCAL_APK"
+  adb_cmd -s "$DEVICE" install -r "$LOCAL_APK_FOR_ADB"
   echo "Done: APK installed."
 elif [[ "$OPEN_INSTALLER" = true ]]; then
   log_step "Opening installer intent on phone..."
   # Use INSTALL_PACKAGE (not generic VIEW) to avoid unrelated apps handling .apk files.
-  if adb -s "$DEVICE" shell am start \
+  if adb_cmd -s "$DEVICE" shell am start \
     -a android.intent.action.INSTALL_PACKAGE \
     -d "file://$PHONE_DEST" \
     -t "application/vnd.android.package-archive" \
@@ -354,7 +392,7 @@ elif [[ "$OPEN_INSTALLER" = true ]]; then
     echo "Done: APK copied and package installer intent sent."
   else
     echo "Warning: could not open package installer intent. Falling back to adb install -r..."
-    adb -s "$DEVICE" install -r "$LOCAL_APK"
+    adb_cmd -s "$DEVICE" install -r "$LOCAL_APK_FOR_ADB"
     echo "Done: APK installed with adb."
   fi
 else

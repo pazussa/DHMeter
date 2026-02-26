@@ -11,6 +11,6 @@ interface SensorSensitivityRepository {
     suspend fun updateHarshnessSensitivity(value: Float)
     suspend fun updateStabilitySensitivity(value: Float)
     suspend fun updateGpsSensitivity(value: Float)
+    suspend fun updateEventSensitivity(value: Float)
     suspend fun resetToDefaults()
 }
-

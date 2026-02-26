@@ -15,6 +15,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dropindh.app.ui.charts.distanceFromPct
+import com.dropindh.app.ui.charts.toAccelerationChartPointsMeters
+import com.dropindh.app.ui.charts.toBurdenChartPointsMeters
+import com.dropindh.app.ui.charts.toSpeedChartPointsMeters
+import com.dropindh.app.ui.charts.toSpeedHeatmapPointsMeters
 import com.dropindh.app.ui.metrics.normalizeSeriesBurdenScore
 import com.dhmeter.charts.components.ComparisonLineChart
 import com.dhmeter.charts.components.EventMarkers
@@ -138,37 +143,38 @@ private fun ChartsContent(
 
         // Impact Density vs distPct
         MultiRunChartSection(
-            title = tr("Impact Density vs Distance %", "Densidad de impacto vs Distancia %"),
+            title = tr("Impact Density vs Distance (m)", "Densidad de impacto vs Distancia (m)"),
             runs = uiState.runs,
             seriesSelector = { it.impactSeries }
         )
 
         // Harshness vs distPct
         MultiRunChartSection(
-            title = tr("Harshness vs Distance %", "Vibración vs Distancia %"),
+            title = tr("Harshness vs Distance (m)", "Vibración vs Distancia (m)"),
             runs = uiState.runs,
             seriesSelector = { it.harshnessSeries }
         )
 
         // Stability vs distPct
         MultiRunChartSection(
-            title = tr("Stability vs Distance %", "Estabilidad vs Distancia %"),
+            title = tr("Stability vs Distance (m)", "Estabilidad vs Distancia (m)"),
             runs = uiState.runs,
             seriesSelector = { it.stabilitySeries }
         )
 
         SpeedComparisonSection(runs = uiState.runs)
+        AccelerationComparisonSection(runs = uiState.runs)
 
         // Events over distPct - Combined view
         if (uiState.runs.any { it.events.isNotEmpty() }) {
             Text(
-                text = tr("Events over Distance %", "Eventos sobre Distancia %"),
+                text = tr("Events over Distance (m)", "Eventos sobre Distancia (m)"),
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
                 text = tr(
-                    "Legend: IMP = Impact Peak, LAN = Landing, HAR = Harshness Burst",
-                    "Leyenda: IMP = Impacto pico, LAN = Aterrizaje, HAR = Ráfaga de vibración"
+                    "Legend: IMP = Impact, LAN = Landing, VIB = Vibration event",
+                    "Leyenda: IMP = Impacto, LAN = Aterrizaje, VIB = Evento de vibracion"
                 ),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline
@@ -182,9 +188,9 @@ private fun ChartsContent(
                         color = run.color
                     )
                     EventMarkers(
-                        markers = run.events.toChartMarkers(run.color),
+                        markers = run.events.toChartMarkers(run.color, run.run?.distanceMeters),
                         xMin = 0f,
-                        xMax = 100f,
+                        xMax = run.run?.distanceMeters?.coerceAtLeast(10f) ?: 100f,
                         showLabels = true
                     )
                 }
@@ -198,10 +204,11 @@ private fun ChartsContent(
         )
         
         uiState.runs.forEach { run ->
+            val distanceMeters = run.run?.distanceMeters
             val speedPoints = run.speedSeries
-                ?.toSpeedHeatmapPoints(run.run?.distanceMeters)
+                ?.toSpeedHeatmapPointsMeters(distanceMeters)
                 .orEmpty()
-                .ifEmpty { fallbackSpeedHeatmapPoints(run.run?.avgSpeed) }
+                .ifEmpty { fallbackSpeedHeatmapPoints(run.run?.avgSpeed, distanceMeters) }
 
             if (speedPoints.isNotEmpty()) {
                 val maxSpeed = speedPoints.maxOfOrNull { it.value } ?: 0f
@@ -239,8 +246,8 @@ private fun MultiRunChartSection(
         )
         Text(
             text = tr(
-                "Burden score: 0 = smoother, 100 = more punishing (lower is better).",
-                "Puntaje de carga: 0 = más suave, 100 = más castigador (menor es mejor)."
+                "Lower values usually mean a smoother section.",
+                "Valores mas bajos suelen indicar una seccion mas suave."
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
@@ -248,15 +255,16 @@ private fun MultiRunChartSection(
 
         val chartSeriesList = runs.mapNotNull { run ->
             val series = seriesSelector(run)
-            series?.toChartPoints()?.takeIf { it.isNotEmpty() }?.let { points ->
+            series?.toChartPoints(run.run?.distanceMeters)?.takeIf { it.isNotEmpty() }?.let { points ->
                 ChartSeries(run.runLabel, points, run.color)
             }
         }
 
         if (chartSeriesList.isNotEmpty()) {
+            val axis = meterAxisConfig(chartSeriesList.flatMap { it.points })
             ComparisonLineChart(
                 series = chartSeriesList,
-                xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
+                xAxisConfig = axis,
                 yAxisConfig = AxisConfig(0f, 100f, label = tr("Score (0-100)", "Puntaje (0-100)")),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -265,14 +273,14 @@ private fun MultiRunChartSection(
             
             // Show event markers below the chart
             val allMarkers = runs.flatMap { run ->
-                run.events.map { event -> event.toChartMarker(run.color) }
+                run.events.mapNotNull { event -> event.toChartMarker(run.color, run.run?.distanceMeters) }
             }
             
             if (allMarkers.isNotEmpty()) {
                 EventMarkers(
                     markers = allMarkers,
                     xMin = 0f,
-                    xMax = 100f,
+                    xMax = axis.max,
                     showLabels = false
                 )
             }
@@ -293,13 +301,13 @@ private fun SpeedComparisonSection(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = tr("Speed vs Distance %", "Velocidad vs Distancia %"),
+            text = tr("Speed vs Distance (m)", "Velocidad vs Distancia (m)"),
             style = MaterialTheme.typography.titleMedium
         )
         Text(
             text = tr(
-                "Speed derived from timing profile and total distance.",
-                "Velocidad derivada del perfil de tiempos y la distancia total."
+                "Tap a point to compare where speed changes between runs.",
+                "Toca un punto para comparar donde cambia la velocidad entre bajadas."
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
@@ -308,9 +316,9 @@ private fun SpeedComparisonSection(
         val chartSeriesList = runs.mapNotNull { run ->
             val distanceMeters = run.run?.distanceMeters
             val points = run.speedSeries
-                ?.toSpeedChartPoints(distanceMeters)
+                ?.toSpeedChartPointsMeters(distanceMeters)
                 .orEmpty()
-                .ifEmpty { fallbackSpeedChartPoints(run.run?.avgSpeed) }
+                .ifEmpty { fallbackSpeedChartPoints(run.run?.avgSpeed, distanceMeters) }
             if (points.isNotEmpty()) {
                 ChartSeries(run.runLabel, points, run.color)
             } else {
@@ -327,10 +335,11 @@ private fun SpeedComparisonSection(
         } else {
             val maxSpeed = chartSeriesList.flatMap { it.points }.maxOfOrNull { it.y } ?: 0f
             val axisMax = (kotlin.math.ceil(maxSpeed / 5f) * 5f).coerceAtLeast(10f)
+            val axis = meterAxisConfig(chartSeriesList.flatMap { it.points })
 
             ComparisonLineChart(
                 series = chartSeriesList,
-                xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
+                xAxisConfig = axis,
                 yAxisConfig = AxisConfig(0f, axisMax, label = "km/h"),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -340,63 +349,106 @@ private fun SpeedComparisonSection(
     }
 }
 
-/**
- * Extension function to convert RunSeries to list of ChartPoint
- */
-private fun RunSeries.toChartPoints(): List<ChartPoint> {
-    val count = effectivePointCount
-    return (0 until count).mapNotNull { i ->
-        ChartPoint(points[i * 2], normalizeToScore(seriesType, points[i * 2 + 1]))
-            .takeIf { it.x.isFinite() && it.y.isFinite() }
+@Composable
+private fun AccelerationComparisonSection(
+    runs: List<RunChartData>
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = tr("Acceleration vs Distance (m)", "Aceleracion vs Distancia (m)"),
+            style = MaterialTheme.typography.titleMedium
+        )
+        Text(
+            text = tr(
+                "Highlights braking and acceleration zones.",
+                "Destaca zonas de frenada y aceleracion."
+            ),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline
+        )
+
+        val chartSeriesList = runs.mapNotNull { run ->
+            val distanceMeters = run.run?.distanceMeters
+            val points = run.speedSeries
+                ?.toAccelerationChartPointsMeters(distanceMeters)
+                .orEmpty()
+            if (points.isNotEmpty()) {
+                ChartSeries(run.runLabel, points, run.color)
+            } else {
+                null
+            }
+        }
+
+        if (chartSeriesList.isEmpty()) {
+            Text(
+                text = tr("No data available", "No hay datos disponibles"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            val maxAbsAcceleration = chartSeriesList
+                .flatMap { it.points }
+                .maxOfOrNull { kotlin.math.abs(it.y) } ?: 0f
+            val axisLimit = (kotlin.math.ceil(maxAbsAcceleration * 2f) / 2f).coerceAtLeast(0.5f)
+            val axis = meterAxisConfig(chartSeriesList.flatMap { it.points })
+
+            ComparisonLineChart(
+                series = chartSeriesList,
+                xAxisConfig = axis,
+                yAxisConfig = AxisConfig(-axisLimit, axisLimit, label = "m/s²"),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+            )
+        }
     }
 }
 
-private fun RunSeries.toSpeedChartPoints(distanceMeters: Float?): List<ChartPoint> {
-    if (seriesType != SeriesType.SPEED_TIME) return emptyList()
-    val totalDistanceM = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
-    val count = effectivePointCount
-    if (count < 2) return emptyList()
-
-    val result = ArrayList<ChartPoint>(count - 1)
-    for (i in 1 until count) {
-        val prevX = points[(i - 1) * 2]
-        val prevT = points[(i - 1) * 2 + 1]
-        val currX = points[i * 2]
-        val currT = points[i * 2 + 1]
-        val distPctDelta = (currX - prevX).coerceAtLeast(0f)
-        val timeDeltaSec = (currT - prevT).coerceAtLeast(0f)
-        if (timeDeltaSec <= 1e-3f) continue
-
-        val distM = totalDistanceM * (distPctDelta / 100f)
-        val speedMps = distM / timeDeltaSec
-        if (!speedMps.isFinite()) continue
-
-        val midX = (prevX + currX) / 2f
-        result.add(ChartPoint(midX, speedMps * 3.6f))
-    }
-    return result
+private fun RunSeries.toChartPoints(distanceMeters: Float?): List<ChartPoint> {
+    return toBurdenChartPointsMeters(distanceMeters)
+        .map { point -> ChartPoint(point.x, normalizeToScore(seriesType, point.y)) }
 }
 
-private fun fallbackSpeedChartPoints(avgSpeedMps: Float?): List<ChartPoint> {
+private fun fallbackSpeedChartPoints(
+    avgSpeedMps: Float?,
+    distanceMeters: Float?
+): List<ChartPoint> {
     val speedMps = avgSpeedMps?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
+    val totalDistance = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
     val speedKmh = speedMps * 3.6f
     return listOf(
         ChartPoint(0f, speedKmh),
-        ChartPoint(100f, speedKmh)
+        ChartPoint(totalDistance, speedKmh)
     )
 }
 
-private fun RunSeries.toSpeedHeatmapPoints(distanceMeters: Float?): List<HeatmapPoint> {
-    return toSpeedChartPoints(distanceMeters)
-        .map { HeatmapPoint(x = it.x, value = it.y.coerceAtLeast(0f)) }
-}
-
-private fun fallbackSpeedHeatmapPoints(avgSpeedMps: Float?): List<HeatmapPoint> {
+private fun fallbackSpeedHeatmapPoints(
+    avgSpeedMps: Float?,
+    distanceMeters: Float?
+): List<HeatmapPoint> {
     val speedMps = avgSpeedMps?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
+    val totalDistance = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
     val speedKmh = speedMps * 3.6f
     return listOf(
         HeatmapPoint(0f, speedKmh),
-        HeatmapPoint(100f, speedKmh)
+        HeatmapPoint(totalDistance, speedKmh)
+    )
+}
+
+private fun meterAxisConfig(points: List<ChartPoint>): AxisConfig {
+    val maxX = points.maxOfOrNull { it.x }?.coerceAtLeast(1f) ?: 1f
+    val axisMax = (kotlin.math.ceil(maxX / 10f) * 10f).coerceAtLeast(10f)
+    return AxisConfig(
+        min = 0f,
+        max = axisMax,
+        label = "m",
+        format = { value ->
+            if (value >= 1000f) {
+                String.format(java.util.Locale.US, "%.1fkm", value / 1000f)
+            } else {
+                String.format(java.util.Locale.US, "%.0fm", value)
+            }
+        }
     )
 }
 
@@ -408,13 +460,17 @@ private fun normalizeToScore(seriesType: SeriesType, value: Float): Float {
 /**
  * Convert list of RunEvents to ChartEventMarkers with custom color
  */
-private fun List<RunEvent>.toChartMarkers(runColor: Color): List<ChartEventMarker> {
-    return map { event ->
+private fun List<RunEvent>.toChartMarkers(
+    runColor: Color,
+    distanceMeters: Float?
+): List<ChartEventMarker> {
+    return mapNotNull { event ->
+        val distanceM = distanceFromPct(event.distPct, distanceMeters) ?: return@mapNotNull null
         ChartEventMarker(
-            x = event.distPct,
+            x = distanceM,
             icon = event.type.toMarkerIcon(),
             color = runColor,
-            label = event.type.take(3)
+            label = event.type.toShortEventLabel()
         )
     }
 }
@@ -422,9 +478,10 @@ private fun List<RunEvent>.toChartMarkers(runColor: Color): List<ChartEventMarke
 /**
  * Convert a single RunEvent to ChartEventMarker with custom color
  */
-private fun RunEvent.toChartMarker(runColor: Color): ChartEventMarker {
+private fun RunEvent.toChartMarker(runColor: Color, distanceMeters: Float?): ChartEventMarker? {
+    val distanceM = distanceFromPct(distPct, distanceMeters) ?: return null
     return ChartEventMarker(
-        x = distPct,
+        x = distanceM,
         icon = type.toMarkerIcon(),
         color = runColor,
         label = ""
@@ -452,6 +509,15 @@ private fun String.toMarkerColor(): Color {
         EventType.LANDING -> Color(0xFFFF9800)          // Orange
         EventType.HARSHNESS_BURST -> Color(0xFFFFEB3B)  // Yellow
         else -> Color(0xFF9C27B0)                        // Purple
+    }
+}
+
+private fun String.toShortEventLabel(): String {
+    return when (this) {
+        EventType.IMPACT_PEAK -> "IMP"
+        EventType.LANDING -> "LAN"
+        EventType.HARSHNESS_BURST -> "VIB"
+        else -> this.take(3).uppercase(java.util.Locale.US)
     }
 }
 

@@ -470,6 +470,12 @@ class RecordingViewModel @Inject constructor(
         }
     }
 
+    fun updateEventSensitivity(value: Float) {
+        viewModelScope.launch {
+            sensitivityRepository.updateEventSensitivity(value)
+        }
+    }
+
     fun resetSensitivityDefaults() {
         viewModelScope.launch {
             sensitivityRepository.resetToDefaults()

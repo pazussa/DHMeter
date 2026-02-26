@@ -257,6 +257,7 @@ fun RecordingScreen(
             onHarshnessSensitivityChange = viewModel::updateHarshnessSensitivity,
             onStabilitySensitivityChange = viewModel::updateStabilitySensitivity,
             onGpsSensitivityChange = viewModel::updateGpsSensitivity,
+            onEventSensitivityChange = viewModel::updateEventSensitivity,
             onResetDefaults = viewModel::resetSensitivityDefaults
         )
     }
@@ -497,6 +498,7 @@ private fun SensorSensitivitySheet(
     onHarshnessSensitivityChange: (Float) -> Unit,
     onStabilitySensitivityChange: (Float) -> Unit,
     onGpsSensitivityChange: (Float) -> Unit,
+    onEventSensitivityChange: (Float) -> Unit,
     onResetDefaults: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -547,6 +549,11 @@ private fun SensorSensitivitySheet(
                 label = "GPS",
                 value = settings.gpsSensitivity,
                 onValueChange = onGpsSensitivityChange
+            )
+            SensitivitySliderRow(
+                label = tr("Event detection", "Detección de eventos"),
+                value = settings.eventSensitivity,
+                onValueChange = onEventSensitivityChange
             )
 
             TextButton(

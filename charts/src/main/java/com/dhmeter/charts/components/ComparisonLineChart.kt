@@ -29,7 +29,7 @@ import com.dhmeter.charts.model.ChartSeries
 
 /**
  * A line chart component for comparing multiple runs.
- * X-axis represents distance percentage (0-100%).
+ * X-axis range is provided by [xAxisConfig].
  */
 @Composable
 fun ComparisonLineChart(
@@ -41,10 +41,11 @@ fun ComparisonLineChart(
     @Suppress("UNUSED_PARAMETER")
     showLegend: Boolean = true,
     eventMarkers: List<ChartEventMarker> = emptyList(),
-    onPointSelected: ((seriesIndex: Int, pointIndex: Int, value: Float) -> Unit)? = null
+    onPointSelected: ((seriesIndex: Int, pointIndex: Int, xValue: Float, yValue: Float) -> Unit)? = null
 ) {
     val textMeasurer = rememberTextMeasurer()
     var selectedPoint by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var selectedXValue by remember { mutableStateOf<Float?>(null) }
 
     val gridColor = Color.Gray.copy(alpha = 0.2f)
     val axisColor = Color.Gray.copy(alpha = 0.5f)
@@ -53,21 +54,45 @@ fun ComparisonLineChart(
         modifier = modifier
             .fillMaxWidth()
             .height(200.dp)
-            .pointerInput(series) {
+            .pointerInput(series, xAxisConfig, yAxisConfig) {
                 detectTapGestures { offset ->
-                    // Find nearest point
                     val chartWidth = size.width - 60f
                     val chartLeft = 50f
+                    val chartHeight = size.height - 40f
+                    val chartTop = 10f
+                    val xRange = (xAxisConfig.max - xAxisConfig.min).takeIf { it > 0f } ?: 1f
+                    val yRange = (yAxisConfig.max - yAxisConfig.min).takeIf { it > 0f } ?: 1f
+                    val clampedX = offset.x.coerceIn(chartLeft, chartLeft + chartWidth)
+                    val tappedXValue =
+                        xAxisConfig.min + ((clampedX - chartLeft) / chartWidth) * xRange
 
-                    val xPercent = ((offset.x - chartLeft) / chartWidth)
-                        .coerceIn(0f, 1f) * 100f
+                    var bestSeriesIdx = -1
+                    var bestPointIdx = -1
+                    var bestDistanceSq = Float.MAX_VALUE
 
-                    series.forEachIndexed { seriesIdx, s ->
-                        val nearestIdx = s.points.indexOfFirst { it.x >= xPercent }
-                        if (nearestIdx >= 0) {
-                            selectedPoint = seriesIdx to nearestIdx
-                            onPointSelected?.invoke(seriesIdx, nearestIdx, s.points[nearestIdx].y)
+                    series.forEachIndexed { seriesIdx, chartSeries ->
+                        chartSeries.points.forEachIndexed { pointIdx, point ->
+                            val pointX = chartLeft + (chartWidth * (point.x - xAxisConfig.min) / xRange)
+                            val pointY = chartTop + chartHeight - (chartHeight * (point.y - yAxisConfig.min) / yRange)
+                            val clampedY = pointY.coerceIn(chartTop, chartTop + chartHeight)
+                            val dx = offset.x - pointX
+                            val dy = offset.y - clampedY
+                            val distanceSq = dx * dx + dy * dy
+                            if (distanceSq < bestDistanceSq) {
+                                bestDistanceSq = distanceSq
+                                bestSeriesIdx = seriesIdx
+                                bestPointIdx = pointIdx
+                            }
                         }
+                    }
+
+                    if (bestSeriesIdx >= 0 && bestPointIdx >= 0) {
+                        selectedPoint = bestSeriesIdx to bestPointIdx
+                        selectedXValue = tappedXValue
+                        val selected = series[bestSeriesIdx].points[bestPointIdx]
+                        val tappedYValue = interpolateYAtX(series[bestSeriesIdx].points, tappedXValue)
+                            ?: selected.y
+                        onPointSelected?.invoke(bestSeriesIdx, bestPointIdx, tappedXValue, tappedYValue)
                     }
                 }
             }
@@ -186,6 +211,16 @@ fun ComparisonLineChart(
             )
         }
 
+        selectedXValue?.let { xValue ->
+            val xPos = chartLeft + (chartWidth * (xValue - xAxisConfig.min) / xRange)
+            drawLine(
+                color = Color.White.copy(alpha = 0.5f),
+                start = Offset(xPos, chartTop),
+                end = Offset(xPos, chartTop + chartHeight),
+                strokeWidth = 1.5f
+            )
+        }
+
         // Draw selected point indicator
         selectedPoint?.let { (seriesIdx, pointIdx) ->
             if (seriesIdx < series.size && pointIdx < series[seriesIdx].points.size) {
@@ -206,6 +241,26 @@ fun ComparisonLineChart(
             }
         }
     }
+}
+
+private fun interpolateYAtX(points: List<com.dhmeter.charts.model.ChartPoint>, x: Float): Float? {
+    if (points.isEmpty()) return null
+    val sorted = points.sortedBy { it.x }
+    if (sorted.size == 1) return sorted.first().y
+
+    if (x <= sorted.first().x) return sorted.first().y
+    if (x >= sorted.last().x) return sorted.last().y
+
+    for (i in 0 until sorted.lastIndex) {
+        val a = sorted[i]
+        val b = sorted[i + 1]
+        if (x < a.x || x > b.x) continue
+        val dx = b.x - a.x
+        if (kotlin.math.abs(dx) < 1e-6f) return a.y
+        val t = ((x - a.x) / dx).coerceIn(0f, 1f)
+        return a.y + (b.y - a.y) * t
+    }
+    return sorted.minByOrNull { kotlin.math.abs(it.x - x) }?.y
 }
 
 private fun DrawScope.drawGrid(

@@ -20,6 +20,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dropindh.app.BuildConfig
+import com.dropindh.app.ui.charts.distanceFromPct
+import com.dropindh.app.ui.charts.pctFromDistance
+import com.dropindh.app.ui.charts.toAccelerationChartPointsMeters
+import com.dropindh.app.ui.charts.toBurdenChartPointsMeters
+import com.dropindh.app.ui.charts.toSpeedChartPointsMeters
+import com.dropindh.app.ui.charts.toSpeedHeatmapPointsMeters
 import com.dropindh.app.ui.i18n.tr
 import com.dropindh.app.ui.metrics.formatScore0to100
 import com.dropindh.app.ui.metrics.normalizeSeriesBurdenScore
@@ -64,23 +70,13 @@ fun RunSummaryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showCompareDialog by remember { mutableStateOf(false) }
-    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(runId) {
         viewModel.loadRun(runId)
     }
 
-    LaunchedEffect(uiState.exportMessage) {
-        val message = uiState.exportMessage ?: return@LaunchedEffect
-        snackbarHostState.showSnackbar(message)
-        viewModel.consumeExportMessage()
-    }
-
     Scaffold(
         containerColor = Color.Transparent,
-        snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState)
-        },
         topBar = {
             TopAppBar(
                 colors = dhTopBarColors(),
@@ -88,27 +84,6 @@ fun RunSummaryScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back", "Atrás"))
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = { viewModel.exportRunDiagnosticsJson() },
-                        enabled = uiState.run != null && !uiState.isExportingDiagnostics
-                    ) {
-                        if (uiState.isExportingDiagnostics) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Download,
-                                contentDescription = tr(
-                                    "Export diagnostics JSON",
-                                    "Exportar JSON de diagnóstico"
-                                )
-                            )
-                        }
                     }
                 }
             )
@@ -183,6 +158,26 @@ private fun RunSummaryContent(
     onShowCompareDialog: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var selectedDistanceM by remember(run.runId) { mutableStateOf<Float?>(null) }
+
+    val speedChartPoints = remember(speedSeries, run.distanceMeters, run.avgSpeed) {
+        speedSeries
+            ?.toSpeedChartPointsMeters(run.distanceMeters)
+            .orEmpty()
+            .ifEmpty { fallbackSpeedChartPoints(run.avgSpeed, run.distanceMeters) }
+    }
+    val accelerationChartPoints = remember(speedSeries, run.distanceMeters) {
+        speedSeries?.toAccelerationChartPointsMeters(run.distanceMeters).orEmpty()
+    }
+    val dynamicsInsights = remember(events, speedChartPoints, accelerationChartPoints, run.distanceMeters) {
+        buildRunDynamicsInsights(
+            events = events.sortedBy { it.distPct },
+            speedPoints = speedChartPoints,
+            accelerationPoints = accelerationChartPoints,
+            totalDistanceM = run.distanceMeters
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -205,7 +200,20 @@ private fun RunSummaryContent(
         
         Spacer(modifier = Modifier.height(24.dp))
 
-        RunChartsSection(
+        run.landingQualityScore?.let { landingScore ->
+            LandingQualityCard(score = landingScore)
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        RunMapSection(
+            mapData = mapData,
+            runDistanceMeters = run.distanceMeters,
+            selectedDistanceM = selectedDistanceM
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        RunChartsCarouselSection(
             impactSeries = impactSeries,
             harshnessSeries = harshnessSeries,
             stabilitySeries = stabilitySeries,
@@ -214,18 +222,29 @@ private fun RunSummaryContent(
             distanceMeters = run.distanceMeters,
             avgSpeedMps = run.avgSpeed,
             isLoading = isChartsLoading,
-            error = chartsError
+            error = chartsError,
+            onDistanceSelected = { selectedDistance ->
+                selectedDistanceM = selectedDistance
+            }
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Landing quality section
-        run.landingQualityScore?.let { landingScore ->
-            LandingQualityCard(score = landingScore)
-            Spacer(modifier = Modifier.height(24.dp))
-        }
+        RunDynamicsAnalysisSection(
+            dynamicsInsights = dynamicsInsights,
+            mapData = mapData,
+            runDistanceMeters = run.distanceMeters,
+            selectedDistanceM = selectedDistanceM,
+            events = events,
+            speedPoints = speedChartPoints,
+            accelerationPoints = accelerationChartPoints,
+            onDistanceSelected = { selectedDistance ->
+                selectedDistanceM = selectedDistance
+            }
+        )
 
-        // Compare button (shown for all runs)
+        Spacer(modifier = Modifier.height(24.dp))
+
         if (comparableRuns.isNotEmpty()) {
             Button(
                 onClick = onShowCompareDialog,
@@ -235,24 +254,22 @@ private fun RunSummaryContent(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(tr("Compare with another run", "Comparar con otra bajada"))
             }
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Setup notes
         NotesSection(
             setupNote = run.setupNote,
             conditionsNote = run.conditionsNote
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        RunMapAndEventsSection(
-            mapData = mapData,
-            events = events,
-            speedSeries = speedSeries,
-            runDistanceMeters = run.distanceMeters,
-            avgSpeedMps = run.avgSpeed
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = tr(
+                "Repeat the run for a more complete analysis by comparing sections.",
+                "Repite la bajada para un analisis mas completo comparando entre secciones."
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline
         )
     }
 }
@@ -692,7 +709,7 @@ private fun NotesSection(
 }
 
 @Composable
-private fun RunChartsSection(
+private fun RunChartsCarouselSection(
     impactSeries: RunSeries?,
     harshnessSeries: RunSeries?,
     stabilitySeries: RunSeries?,
@@ -701,19 +718,30 @@ private fun RunChartsSection(
     distanceMeters: Float?,
     avgSpeedMps: Float?,
     isLoading: Boolean,
-    error: String?
+    error: String?,
+    onDistanceSelected: (Float) -> Unit
 ) {
+    var currentChartIndex by remember { mutableIntStateOf(0) }
+    val chartTitles = listOf(
+        tr("Impacts", "Impactos"),
+        tr("Vibration", "Vibracion"),
+        tr("Instability", "Inestabilidad"),
+        tr("Speed", "Velocidad"),
+        tr("Acceleration", "Aceleracion"),
+        tr("Altitude", "Altitud")
+    )
+
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = tr("Charts", "Gráficas"),
+            text = tr("Run overview", "Resumen visual de la bajada"),
             style = MaterialTheme.typography.titleMedium
         )
         Text(
             text = tr(
-                "Chart scale is burden score: 0 = smoother/cleaner, 100 = more punishing.",
-                "La escala de gráfica es carga: 0 = más suave/limpio, 100 = más castigador."
+                "Tap any point to see where it happened on the trail.",
+                "Toca cualquier punto para ver donde paso en el sendero."
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
@@ -738,56 +766,92 @@ private fun RunChartsSection(
             }
 
             else -> {
-                SingleRunChartSection(
-                    title = tr("Impact Density vs Distance %", "Densidad de impacto vs Distancia %"),
-                    series = impactSeries,
-                    color = ChartImpact
-                )
+                currentChartIndex = currentChartIndex.coerceIn(0, chartTitles.lastIndex)
 
-                SingleRunChartSection(
-                    title = tr("Harshness vs Distance %", "Vibración vs Distancia %"),
-                    series = harshnessSeries,
-                    color = ChartHarshness
-                )
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    currentChartIndex =
+                                        if (currentChartIndex == 0) chartTitles.lastIndex else currentChartIndex - 1
+                                }
+                            ) {
+                                Icon(Icons.Default.KeyboardArrowLeft, contentDescription = tr("Previous chart", "Gráfica anterior"))
+                            }
 
-                SingleRunChartSection(
-                    title = tr("Instability vs Distance %", "Inestabilidad vs Distancia %"),
-                    series = stabilitySeries,
-                    color = ChartStability
-                )
+                            Text(
+                                text = tr(
+                                    "${chartTitles[currentChartIndex]} (${currentChartIndex + 1}/${chartTitles.size})",
+                                    "${chartTitles[currentChartIndex]} (${currentChartIndex + 1}/${chartTitles.size})"
+                                ),
+                                style = MaterialTheme.typography.titleSmall,
+                                textAlign = TextAlign.Center
+                            )
 
-                SpeedChartSection(
-                    title = tr("Speed vs Distance %", "Velocidad vs Distancia %"),
-                    series = speedSeries,
-                    distanceMeters = distanceMeters,
-                    fallbackAvgSpeedMps = avgSpeedMps,
-                    color = ChartSpeed
-                )
+                            IconButton(
+                                onClick = {
+                                    currentChartIndex =
+                                        if (currentChartIndex == chartTitles.lastIndex) 0 else currentChartIndex + 1
+                                }
+                            ) {
+                                Icon(Icons.Default.KeyboardArrowRight, contentDescription = tr("Next chart", "Siguiente gráfica"))
+                            }
+                        }
 
-                AltitudeChartSection(
-                    title = tr("Altitude vs Distance %", "Altitud vs Distancia %"),
-                    profile = elevationProfile,
-                    color = ChartSpeed
-                )
-
-                val speedHeatmapPoints = remember(speedSeries, distanceMeters, avgSpeedMps) {
-                    speedSeries
-                        ?.toSpeedHeatmapPoints(distanceMeters)
-                        .orEmpty()
-                        .ifEmpty { fallbackSpeedHeatmapPoints(avgSpeedMps) }
-                }
-                if (speedHeatmapPoints.isNotEmpty()) {
-                    val maxSpeed = speedHeatmapPoints.maxOfOrNull { it.value } ?: 0f
-                    Text(
-                        text = tr("Speed Heatmap", "Mapa de calor de velocidad"),
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    HeatmapBar(
-                        points = speedHeatmapPoints,
-                        colors = HeatmapColors.Speed,
-                        minValue = 0f,
-                        maxValue = maxSpeed.coerceAtLeast(10f)
-                    )
+                        when (currentChartIndex) {
+                            0 -> SingleRunChartSection(
+                                title = tr("Impacts vs Distance (m)", "Impactos vs Distancia (m)"),
+                                series = impactSeries,
+                                distanceMeters = distanceMeters,
+                                color = ChartImpact,
+                                onDistanceSelected = onDistanceSelected
+                            )
+                            1 -> SingleRunChartSection(
+                                title = tr("Harshness vs Distance (m)", "Vibración vs Distancia (m)"),
+                                series = harshnessSeries,
+                                distanceMeters = distanceMeters,
+                                color = ChartHarshness,
+                                onDistanceSelected = onDistanceSelected
+                            )
+                            2 -> SingleRunChartSection(
+                                title = tr("Instability vs Distance (m)", "Inestabilidad vs Distancia (m)"),
+                                series = stabilitySeries,
+                                distanceMeters = distanceMeters,
+                                color = ChartStability,
+                                onDistanceSelected = onDistanceSelected
+                            )
+                            3 -> SpeedChartSection(
+                                title = tr("Speed vs Distance (m)", "Velocidad vs Distancia (m)"),
+                                series = speedSeries,
+                                distanceMeters = distanceMeters,
+                                fallbackAvgSpeedMps = avgSpeedMps,
+                                color = ChartSpeed,
+                                onDistanceSelected = onDistanceSelected
+                            )
+                            4 -> AccelerationChartSection(
+                                title = tr("Acceleration vs Distance (m)", "Aceleracion vs Distancia (m)"),
+                                series = speedSeries,
+                                distanceMeters = distanceMeters,
+                                color = ChartStability,
+                                onDistanceSelected = onDistanceSelected
+                            )
+                            else -> AltitudeChartSection(
+                                title = tr("Altitude vs Distance (m)", "Altitud vs Distancia (m)"),
+                                profile = elevationProfile,
+                                distanceMeters = distanceMeters,
+                                color = ChartSpeed,
+                                onDistanceSelected = onDistanceSelected
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -798,7 +862,9 @@ private fun RunChartsSection(
 private fun SingleRunChartSection(
     title: String,
     series: RunSeries?,
-    color: Color
+    distanceMeters: Float?,
+    color: Color,
+    onDistanceSelected: (Float) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -806,7 +872,7 @@ private fun SingleRunChartSection(
             style = MaterialTheme.typography.titleSmall
         )
 
-        val points = remember(series) { series?.toChartPoints().orEmpty() }
+        val points = remember(series, distanceMeters) { series?.toChartPoints(distanceMeters).orEmpty() }
         if (points.isEmpty()) {
             Text(
                 text = tr("No data available", "No hay datos disponibles"),
@@ -822,20 +888,23 @@ private fun SingleRunChartSection(
                         color = color
                     )
                 ),
-                xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
+                xAxisConfig = meterAxisConfig(points),
                 yAxisConfig = AxisConfig(0f, 100f, label = tr("Score (0-100)", "Puntaje (0-100)")),
                 showLegend = false,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .height(200.dp),
+                onPointSelected = { _, _, xValue, _ ->
+                    onDistanceSelected(xValue)
+                }
             )
 
             val peakPoint = points.maxByOrNull { it.y }
             peakPoint?.let {
                 Text(
                     text = tr(
-                        "Peak burden ${String.format(Locale.US, "%.0f", it.y)} at ${String.format(Locale.US, "%.0f", it.x)}% of run",
-                        "Pico de carga ${String.format(Locale.US, "%.0f", it.y)} en ${String.format(Locale.US, "%.0f", it.x)}% de la bajada"
+                        "Most demanding point around ${formatDistanceLabel(it.x)}",
+                        "Punto mas exigente cerca de ${formatDistanceLabel(it.x)}"
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
@@ -851,7 +920,8 @@ private fun SpeedChartSection(
     series: RunSeries?,
     distanceMeters: Float?,
     fallbackAvgSpeedMps: Float?,
-    color: Color
+    color: Color,
+    onDistanceSelected: (Float) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -861,9 +931,9 @@ private fun SpeedChartSection(
 
         val points = remember(series, distanceMeters, fallbackAvgSpeedMps) {
             series
-                ?.toSpeedChartPoints(distanceMeters)
+                ?.toSpeedChartPointsMeters(distanceMeters)
                 .orEmpty()
-                .ifEmpty { fallbackSpeedChartPoints(fallbackAvgSpeedMps) }
+                .ifEmpty { fallbackSpeedChartPoints(fallbackAvgSpeedMps, distanceMeters) }
         }
         if (points.isEmpty()) {
             Text(
@@ -883,12 +953,72 @@ private fun SpeedChartSection(
                         color = color
                     )
                 ),
-                xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
+                xAxisConfig = meterAxisConfig(points),
                 yAxisConfig = AxisConfig(0f, axisMax, label = "km/h"),
                 showLegend = false,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .height(200.dp),
+                onPointSelected = { _, _, xValue, _ ->
+                    onDistanceSelected(xValue)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun AccelerationChartSection(
+    title: String,
+    series: RunSeries?,
+    distanceMeters: Float?,
+    color: Color,
+    onDistanceSelected: (Float) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall
+        )
+        Text(
+            text = tr(
+                "Shows where you brake hard or recover speed.",
+                "Muestra donde frenas fuerte o recuperas velocidad."
+            ),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline
+        )
+
+        val points = remember(series, distanceMeters) {
+            series?.toAccelerationChartPointsMeters(distanceMeters).orEmpty()
+        }
+        if (points.isEmpty()) {
+            Text(
+                text = tr("No data available", "No hay datos disponibles"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            val maxAbs = points.maxOfOrNull { kotlin.math.abs(it.y) } ?: 0f
+            val axisLimit = (kotlin.math.ceil(maxAbs * 2f) / 2f).coerceAtLeast(0.5f)
+
+            ComparisonLineChart(
+                series = listOf(
+                    ChartSeries(
+                        label = tr("Acceleration", "Aceleracion"),
+                        points = points,
+                        color = color
+                    )
+                ),
+                xAxisConfig = meterAxisConfig(points),
+                yAxisConfig = AxisConfig(-axisLimit, axisLimit, label = "m/s²"),
+                showLegend = false,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp),
+                onPointSelected = { _, _, xValue, _ ->
+                    onDistanceSelected(xValue)
+                }
             )
         }
     }
@@ -898,7 +1028,9 @@ private fun SpeedChartSection(
 private fun AltitudeChartSection(
     title: String,
     profile: ElevationProfile?,
-    color: Color
+    distanceMeters: Float?,
+    color: Color,
+    onDistanceSelected: (Float) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -906,11 +1038,17 @@ private fun AltitudeChartSection(
             style = MaterialTheme.typography.titleSmall
         )
 
-        val points = remember(profile) {
+        val points = remember(profile, distanceMeters) {
+            val totalDistance = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return@remember emptyList()
             profile?.points
                 ?.filter { it.distPct.isFinite() && it.altitudeM.isFinite() }
                 ?.sortedBy { it.distPct }
-                ?.map { ChartPoint(it.distPct.coerceIn(0f, 100f), it.altitudeM) }
+                ?.map { point ->
+                    ChartPoint(
+                        x = (totalDistance * (point.distPct.coerceIn(0f, 100f) / 100f)).coerceIn(0f, totalDistance),
+                        y = point.altitudeM
+                    )
+                }
                 .orEmpty()
         }
 
@@ -936,12 +1074,15 @@ private fun AltitudeChartSection(
                         color = color
                     )
                 ),
-                xAxisConfig = AxisConfig(0f, 100f, label = tr("Distance %", "Distancia %")),
+                xAxisConfig = meterAxisConfig(points),
                 yAxisConfig = AxisConfig(axisMin, axisMax, label = tr("Altitude (m)", "Altitud (m)")),
                 showLegend = false,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .height(200.dp),
+                onPointSelected = { _, _, xValue, _ ->
+                    onDistanceSelected(xValue)
+                }
             )
 
             profile?.let {
@@ -959,18 +1100,13 @@ private fun AltitudeChartSection(
 }
 
 @Composable
-private fun RunMapAndEventsSection(
+private fun RunMapSection(
     mapData: RunMapData?,
-    events: List<RunEvent>,
-    speedSeries: RunSeries?,
     runDistanceMeters: Float?,
-    avgSpeedMps: Float?
+    selectedDistanceM: Float?
 ) {
-    val sortedEvents = remember(events) { events.sortedBy { it.distPct } }
-    var selectedEventId by remember(events) { mutableStateOf<String?>(null) }
-
     Text(
-        text = tr("Map & Events", "Mapa y eventos"),
+        text = tr("Map", "Mapa"),
         style = MaterialTheme.typography.titleMedium
     )
     Spacer(modifier = Modifier.height(8.dp))
@@ -994,10 +1130,12 @@ private fun RunMapAndEventsSection(
     } else {
         val startPoint = points.firstOrNull()
         val endPoint = points.lastOrNull()
-        val selectedEvent = sortedEvents.firstOrNull { it.eventId == selectedEventId }
-        val selectedEventPoint = selectedEvent?.let {
-            findLatLngForDistPct(points, it.distPct)
-        }
+        val orderedPoints = remember(points) { points.sortedBy { it.distPct } }
+        val totalDistanceM = runDistanceMeters?.takeIf { it.isFinite() && it > 0f }
+            ?: mapData.polyline.totalDistanceM.takeIf { it.isFinite() && it > 0f }
+        val selectedDistancePoint = selectedDistanceM
+            ?.let { distance -> pctFromDistance(distance, totalDistanceM) }
+            ?.let { distPct -> findLatLngForDistPct(orderedPoints, distPct) }
         var mapLoaded by remember(points) { mutableStateOf(false) }
         val boundsBuilder = remember(points) {
             LatLngBounds.builder().apply {
@@ -1019,8 +1157,8 @@ private fun RunMapAndEventsSection(
                 )
             }
         }
-        LaunchedEffect(selectedEventPoint, mapLoaded) {
-            val marker = selectedEventPoint ?: return@LaunchedEffect
+        LaunchedEffect(selectedDistancePoint, mapLoaded) {
+            val marker = selectedDistancePoint ?: return@LaunchedEffect
             if (!mapLoaded) return@LaunchedEffect
             runCatching {
                 cameraPositionState.animate(
@@ -1087,264 +1225,680 @@ private fun RunMapAndEventsSection(
                     )
                 }
 
-                selectedEvent?.let { selected ->
-                    selectedEventPoint?.let { marker ->
-                        com.google.maps.android.compose.Circle(
-                            center = marker,
-                            radius = 5.2,
-                            fillColor = Color.White.copy(alpha = 0.9f),
-                            strokeColor = Color.White,
-                            strokeWidth = 2f
-                        )
-                        com.google.maps.android.compose.Circle(
-                            center = marker,
-                            radius = 2.6,
-                            fillColor = eventTypeColor(selected.type),
-                            strokeColor = Color.Black.copy(alpha = 0.35f),
-                            strokeWidth = 1f
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    Spacer(modifier = Modifier.height(12.dp))
-
-    Text(
-        text = tr("Event list", "Lista de eventos"),
-        style = MaterialTheme.typography.titleSmall
-    )
-
-    if (events.isEmpty()) {
-        Text(
-            text = tr("No events detected in this run.", "No se detectaron eventos en esta bajada."),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    } else {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            sortedEvents.forEach { event ->
-                val eventName = eventTypeLabel(event.type)
-                val eventIcon = when (event.type) {
-                    EventType.IMPACT_PEAK -> Icons.Default.Bolt
-                    EventType.LANDING -> Icons.Default.FlightLand
-                    EventType.HARSHNESS_BURST -> Icons.Default.Vibration
-                    else -> Icons.Default.Info
-                }
-                val eventColor = eventTypeColor(event.type)
-                val isSelected = selectedEventId == event.eventId
-                OutlinedCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            selectedEventId = if (isSelected) null else event.eventId
-                        },
-                    border = BorderStroke(
-                        width = if (isSelected) 2.dp else 1.dp,
-                        color = if (isSelected) eventColor else MaterialTheme.colorScheme.outlineVariant
+                selectedDistancePoint?.let { marker ->
+                    com.google.maps.android.compose.Circle(
+                        center = marker,
+                        radius = 6.2,
+                        fillColor = Color.White.copy(alpha = 0.95f),
+                        strokeColor = Color(0xFF0D47A1),
+                        strokeWidth = 2.5f
                     )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = eventIcon,
-                            contentDescription = null,
-                            tint = eventColor
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = eventName,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                text = tr(
-                                    "Code ${eventTypeShortCode(event.type)}",
-                                    "Sigla ${eventTypeShortCode(event.type)}"
-                                ),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = eventColor
-                            )
-                            Text(
-                                text = tr(
-                                    "Dist ${String.format(Locale.US, "%.1f", event.distPct)}% | Time ${String.format(Locale.US, "%.1f", event.timeSec)} s | Sev ${String.format(Locale.US, "%.2f", event.severity)}",
-                                    "Dist ${String.format(Locale.US, "%.1f", event.distPct)}% | Tiempo ${String.format(Locale.US, "%.1f", event.timeSec)} s | Sev ${String.format(Locale.US, "%.2f", event.severity)}"
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-
-            val speedHeatmapPoints = remember(speedSeries, runDistanceMeters, avgSpeedMps) {
-                speedSeries
-                    ?.toSpeedHeatmapPoints(runDistanceMeters)
-                    .orEmpty()
-                    .ifEmpty { fallbackSpeedHeatmapPoints(avgSpeedMps) }
-            }
-            val correlationStats = remember(sortedEvents, speedHeatmapPoints) {
-                buildEventSpeedCorrelationStats(sortedEvents, speedHeatmapPoints)
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = tr(
-                    "Event-speed heatmap correlation",
-                    "Correlación eventos - mapa de calor de velocidad"
-                ),
-                style = MaterialTheme.typography.titleSmall
-            )
-            if (correlationStats == null) {
-                Text(
-                    text = tr(
-                        "Not enough data to build a correlation summary.",
-                        "No hay suficientes datos para generar el análisis de correlación."
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                val trendText = when {
-                    correlationStats.highSpeedEvents > correlationStats.lowSpeedEvents + 1 -> tr(
-                        "Most events occur in faster sections of the speed heatmap.",
-                        "La mayoría de eventos ocurre en secciones rápidas del mapa de calor."
+                    com.google.maps.android.compose.Circle(
+                        center = marker,
+                        radius = 3.1,
+                        fillColor = Color(0xFF42A5F5),
+                        strokeColor = Color.White,
+                        strokeWidth = 1.5f
                     )
-
-                    correlationStats.lowSpeedEvents > correlationStats.highSpeedEvents + 1 -> tr(
-                        "Most events occur in slower sections of the speed heatmap.",
-                        "La mayoría de eventos ocurre en secciones lentas del mapa de calor."
-                    )
-
-                    else -> tr(
-                        "Events are distributed between fast and slow sections.",
-                        "Los eventos están distribuidos entre secciones rápidas y lentas."
-                    )
-                }
-
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = trendText,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = tr(
-                                "Mapped ${correlationStats.mappedEvents}/${correlationStats.totalEvents} events. Event avg ${String.format(Locale.US, "%.1f", correlationStats.avgEventSpeedKmh)} km/h vs run heatmap avg ${String.format(Locale.US, "%.1f", correlationStats.avgRunSpeedKmh)} km/h.",
-                                "Se mapearon ${correlationStats.mappedEvents}/${correlationStats.totalEvents} eventos. Promedio de velocidad en eventos ${String.format(Locale.US, "%.1f", correlationStats.avgEventSpeedKmh)} km/h vs promedio de heatmap ${String.format(Locale.US, "%.1f", correlationStats.avgRunSpeedKmh)} km/h."
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = tr(
-                                "Low-speed zone <= ${String.format(Locale.US, "%.1f", correlationStats.lowSpeedThresholdKmh)} km/h | High-speed zone >= ${String.format(Locale.US, "%.1f", correlationStats.highSpeedThresholdKmh)} km/h.",
-                                "Zona lenta <= ${String.format(Locale.US, "%.1f", correlationStats.lowSpeedThresholdKmh)} km/h | Zona rápida >= ${String.format(Locale.US, "%.1f", correlationStats.highSpeedThresholdKmh)} km/h."
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        correlationStats.mostFrequentEventCode?.let { code ->
-                            Text(
-                                text = tr(
-                                    "Most frequent event type: $code",
-                                    "Tipo de evento más frecuente: $code"
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        correlationStats.mostFrequentHighSpeedEventCode?.let { code ->
-                            Text(
-                                text = tr(
-                                    "Most frequent event in high-speed zones: $code",
-                                    "Evento más frecuente en zonas rápidas: $code"
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
                 }
             }
         }
     }
 }
 
-private data class EventSpeedCorrelationStats(
-    val totalEvents: Int,
-    val mappedEvents: Int,
-    val lowSpeedEvents: Int,
-    val highSpeedEvents: Int,
-    val avgEventSpeedKmh: Float,
-    val avgRunSpeedKmh: Float,
-    val lowSpeedThresholdKmh: Float,
-    val highSpeedThresholdKmh: Float,
-    val mostFrequentEventCode: String?,
-    val mostFrequentHighSpeedEventCode: String?
-)
-
-private fun buildEventSpeedCorrelationStats(
+@Composable
+private fun RunDynamicsAnalysisSection(
+    dynamicsInsights: RunDynamicsInsights?,
+    mapData: RunMapData?,
+    runDistanceMeters: Float?,
+    selectedDistanceM: Float?,
     events: List<RunEvent>,
-    speedPoints: List<HeatmapPoint>
-): EventSpeedCorrelationStats? {
-    if (events.isEmpty() || speedPoints.isEmpty()) return null
-    val cleanSpeedPoints = speedPoints.filter { it.x.isFinite() && it.value.isFinite() }
-    if (cleanSpeedPoints.isEmpty()) return null
+    speedPoints: List<ChartPoint>,
+    accelerationPoints: List<ChartPoint>,
+    onDistanceSelected: (Float) -> Unit
+) {
+    Text(
+        text = tr(
+            "What happened on the trail",
+            "Que paso en el sendero"
+        ),
+        style = MaterialTheme.typography.titleSmall
+    )
+    if (dynamicsInsights == null) {
+        Text(
+            text = tr(
+                "There is not enough data yet to explain key points.",
+                "Aun no hay datos suficientes para explicar puntos clave."
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        return
+    }
 
-    val speedValues = cleanSpeedPoints.map { it.value }.sorted()
-    if (speedValues.isEmpty()) return null
+    val totalDistanceM = runDistanceMeters?.takeIf { it.isFinite() && it > 0f }
+        ?: mapData?.polyline?.totalDistanceM?.takeIf { it.isFinite() && it > 0f }
+    val groupedInsights = if (totalDistanceM == null) {
+        emptyList()
+    } else {
+        buildTrailPointInsights(
+            dynamicsInsights = dynamicsInsights,
+            events = events,
+            totalDistanceM = totalDistanceM
+        )
+    }
+    val focusDistanceM = selectedDistanceM
+        ?: groupedInsights.firstOrNull()?.distanceM
+        ?: dynamicsInsights.speedDrops.firstOrNull()?.midDistanceM
+        ?: dynamicsInsights.decelerationDrops.firstOrNull()?.distanceM
 
-    val lowThreshold = percentile(speedValues, 0.25f)
-    val highThreshold = percentile(speedValues, 0.75f)
+    val focusSpeedKmh = if (focusDistanceM != null && totalDistanceM != null) {
+        interpolatedChartValueAtDist(speedPoints, focusDistanceM, totalDistanceM)
+    } else null
+    val focusAccelerationMs2 = if (focusDistanceM != null && totalDistanceM != null) {
+        interpolatedChartValueAtDist(accelerationPoints, focusDistanceM, totalDistanceM)
+    } else null
+    val focusEvents = if (focusDistanceM != null && totalDistanceM != null) {
+        nearbyEvents(events, focusDistanceM, totalDistanceM, maxDeltaM = 22f)
+            .filter { it.type != EventType.HARSHNESS_BURST }
+    } else emptyList()
+    val focusTip = buildFocusAdvice(
+        focusAccelerationMs2 = focusAccelerationMs2,
+        focusEvents = focusEvents
+    )
 
-    val eventSpeeds = events.mapNotNull { event ->
-        nearestSpeedAtDistPct(cleanSpeedPoints, event.distPct)?.let { speed ->
-            event to speed
+    val focusTitle = when {
+        focusAccelerationMs2 != null && focusAccelerationMs2 <= -1.2f -> tr(
+            "Strong braking at this point.",
+            "Frenada fuerte en este punto."
+        )
+        focusAccelerationMs2 != null && focusAccelerationMs2 <= -0.5f -> tr(
+            "Noticeable speed control here.",
+            "Control marcado de velocidad en esta zona."
+        )
+        focusAccelerationMs2 != null && focusAccelerationMs2 >= 0.7f -> tr(
+            "You are recovering speed here.",
+            "Aqui vuelves a ganar velocidad."
+        )
+        else -> tr(
+            "Transition section with moderate load.",
+            "Seccion de transicion con carga moderada."
+        )
+    }
+    val focusDetail = buildString {
+        focusDistanceM?.let { append(tr("Position", "Ubicacion")); append(": "); append(formatDistanceLabel(it)); append(". ") }
+        focusSpeedKmh?.let { append(tr("Speed", "Velocidad")); append(": "); append(String.format(Locale.US, "%.1f km/h", it)); append(". ") }
+        focusAccelerationMs2?.let { acceleration ->
+            val speedShiftKmh = kotlin.math.abs(acceleration) * 3.6f
+            when {
+                acceleration < -0.05f -> {
+                    append(
+                        tr(
+                            "You lost about ${String.format(Locale.US, "%.1f", speedShiftKmh)} km/h here.",
+                            "Perdiste aprox ${String.format(Locale.US, "%.1f", speedShiftKmh)} km/h en este punto."
+                        )
+                    )
+                    append(" ")
+                }
+                acceleration > 0.05f -> {
+                    append(
+                        tr(
+                            "You gained about ${String.format(Locale.US, "%.1f", speedShiftKmh)} km/h here.",
+                            "Ganaste aprox ${String.format(Locale.US, "%.1f", speedShiftKmh)} km/h en este punto."
+                        )
+                    )
+                    append(" ")
+                }
+                else -> Unit
+            }
+        }
+        if (focusEvents.isNotEmpty()) {
+            append(
+                tr(
+                    "Nearby events: ",
+                    "Eventos cercanos: "
+                )
+            )
+            append(focusEvents.take(2).joinToString(", ") { eventTypeShortCode(it.type) })
+            append(".")
+        }
+    }.trim()
+
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = tr("Selected point", "Punto seleccionado"),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = focusTitle,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = focusDetail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            focusTip?.let { tip ->
+                Text(
+                    text = tip,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            focusDistanceM?.let {
+                AnalysisFocusMap(
+                    mapData = mapData,
+                    runDistanceMeters = totalDistanceM,
+                    focusDistanceM = it
+                )
+            }
         }
     }
-    if (eventSpeeds.isEmpty()) return null
 
-    val lowCount = eventSpeeds.count { (_, speed) -> speed <= lowThreshold }
-    val highCount = eventSpeeds.count { (_, speed) -> speed >= highThreshold }
-    val avgEventSpeed = eventSpeeds.map { it.second }.average().toFloat()
-    val avgRunSpeed = speedValues.average().toFloat()
+    Spacer(modifier = Modifier.height(12.dp))
+    Text(
+        text = tr("Tap a point to inspect it on the map:", "Toca un punto para verlo en el mapa:"),
+        style = MaterialTheme.typography.bodyMedium
+    )
 
-    val mostFrequent = eventSpeeds
-        .groupingBy { (event, _) -> event.type }
-        .eachCount()
-        .maxByOrNull { it.value }
-        ?.key
-        ?.let(::eventTypeShortCode)
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (groupedInsights.isEmpty()) {
+                Text(
+                    text = tr(
+                        "No clear drop zones were detected in this run.",
+                        "No se detectaron zonas claras de caida en esta bajada."
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                groupedInsights.forEach { insight ->
+                    ObservationItem(
+                        distanceM = insight.distanceM,
+                        focusDistanceM = focusDistanceM,
+                        onClick = onDistanceSelected,
+                        title = insight.title,
+                        detail = insight.detail
+                    )
+                }
+            }
+        }
+    }
+}
 
-    val mostFrequentHighSpeed = eventSpeeds
-        .filter { (_, speed) -> speed >= highThreshold }
-        .groupingBy { (event, _) -> event.type }
-        .eachCount()
-        .maxByOrNull { it.value }
-        ?.key
-        ?.let(::eventTypeShortCode)
+@Composable
+private fun ObservationItem(
+    distanceM: Float,
+    focusDistanceM: Float?,
+    title: String,
+    detail: String,
+    onClick: (Float) -> Unit
+) {
+    val isSelected = focusDistanceM != null && kotlin.math.abs(distanceM - focusDistanceM) <= 8f
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick(distanceM) },
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.outlineVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
 
-    return EventSpeedCorrelationStats(
-        totalEvents = events.size,
-        mappedEvents = eventSpeeds.size,
-        lowSpeedEvents = lowCount,
-        highSpeedEvents = highCount,
-        avgEventSpeedKmh = avgEventSpeed,
-        avgRunSpeedKmh = avgRunSpeed,
-        lowSpeedThresholdKmh = lowThreshold,
-        highSpeedThresholdKmh = highThreshold,
-        mostFrequentEventCode = mostFrequent,
-        mostFrequentHighSpeedEventCode = mostFrequentHighSpeed
+private enum class TrailObservationKind {
+    SPEED_DROP,
+    BRAKING,
+    RECOVERY,
+    LANDING,
+    IMPACT,
+    TRANSITION
+}
+
+private data class TrailObservationCandidate(
+    val distanceM: Float,
+    val kind: TrailObservationKind,
+    val speedDropKmh: Float? = null,
+    val decelerationAbsMs2: Float? = null
+)
+
+private data class TrailPointInsight(
+    val distanceM: Float,
+    val title: String,
+    val detail: String
+)
+
+@Composable
+private fun buildFocusAdvice(
+    focusAccelerationMs2: Float?,
+    focusEvents: List<RunEvent>
+): String? {
+    val hasLanding = focusEvents.any { it.type == EventType.LANDING }
+    val hasImpact = focusEvents.any { it.type == EventType.IMPACT_PEAK }
+    return when {
+        hasLanding -> tr(
+            "Tip: Absorb this landing with bent elbows and knees, then look to the exit.",
+            "Consejo: Absorbe este aterrizaje con codos y rodillas flexionados y mira la salida."
+        )
+        hasImpact -> tr(
+            "Tip: Lighten the bike just before this hit or choose a cleaner line.",
+            "Consejo: Descarga peso de la bici justo antes del golpe o busca una linea mas limpia."
+        )
+        focusAccelerationMs2 != null && focusAccelerationMs2 <= -1.0f -> tr(
+            "Tip: Start braking a little earlier and release before the exit to keep flow.",
+            "Consejo: Comienza a frenar un poco antes y suelta antes de la salida para mantener fluidez."
+        )
+        focusAccelerationMs2 != null && focusAccelerationMs2 <= -0.45f -> tr(
+            "Tip: Brake progressively and keep the bike stable to preserve traction.",
+            "Consejo: Frena progresivo y manten la bici estable para conservar traccion."
+        )
+        focusAccelerationMs2 != null && focusAccelerationMs2 >= 0.75f -> tr(
+            "Tip: Keep your eyes on the next section and push speed only with control.",
+            "Consejo: Mira la siguiente seccion y acelera solo con control."
+        )
+        else -> null
+    }
+}
+
+@Composable
+private fun buildTrailPointInsights(
+    dynamicsInsights: RunDynamicsInsights,
+    events: List<RunEvent>,
+    totalDistanceM: Float
+): List<TrailPointInsight> {
+    val candidates = mutableListOf<TrailObservationCandidate>()
+
+    dynamicsInsights.speedDrops.forEach { drop ->
+        candidates += TrailObservationCandidate(
+            distanceM = drop.midDistanceM,
+            kind = TrailObservationKind.SPEED_DROP,
+            speedDropKmh = drop.dropKmh
+        )
+    }
+    dynamicsInsights.decelerationDrops.forEach { drop ->
+        candidates += TrailObservationCandidate(
+            distanceM = drop.distanceM,
+            kind = TrailObservationKind.BRAKING,
+            decelerationAbsMs2 = kotlin.math.abs(drop.accelerationMs2)
+        )
+    }
+    dynamicsInsights.keyPoints.forEach { point ->
+        val kind = when (point.trend) {
+            KeyTrackTrend.HARD_BRAKING -> TrailObservationKind.BRAKING
+            KeyTrackTrend.ACCELERATING -> TrailObservationKind.RECOVERY
+            KeyTrackTrend.STABLE -> TrailObservationKind.TRANSITION
+        }
+        candidates += TrailObservationCandidate(
+            distanceM = point.distanceM,
+            kind = kind
+        )
+    }
+    events.forEach { event ->
+        if (event.type == EventType.HARSHNESS_BURST) return@forEach
+        val distanceM = distanceFromPct(event.distPct, totalDistanceM) ?: return@forEach
+        val kind = when (event.type) {
+            EventType.LANDING -> TrailObservationKind.LANDING
+            EventType.IMPACT_PEAK -> TrailObservationKind.IMPACT
+            else -> null
+        } ?: return@forEach
+        candidates += TrailObservationCandidate(
+            distanceM = distanceM,
+            kind = kind
+        )
+    }
+
+    if (candidates.isEmpty()) return emptyList()
+
+    val mergeThresholdM = (totalDistanceM * 0.008f).coerceIn(8f, 14f)
+    val clusters = mutableListOf<MutableList<TrailObservationCandidate>>()
+    candidates.sortedBy { it.distanceM }.forEach { candidate ->
+        val lastCluster = clusters.lastOrNull()
+        if (lastCluster == null) {
+            clusters += mutableListOf(candidate)
+            return@forEach
+        }
+        val clusterCenter = lastCluster.map { it.distanceM }.average().toFloat()
+        if (kotlin.math.abs(candidate.distanceM - clusterCenter) <= mergeThresholdM) {
+            lastCluster += candidate
+        } else {
+            clusters += mutableListOf(candidate)
+        }
+    }
+
+    return clusters.map { cluster ->
+        val kinds = cluster.map { it.kind }.toSet()
+        val distanceM = cluster.map { it.distanceM }.average().toFloat()
+        val title = when {
+            TrailObservationKind.BRAKING in kinds -> tr("Braking zone", "Zona de frenada")
+            TrailObservationKind.LANDING in kinds -> tr("Landing point", "Punto de aterrizaje")
+            TrailObservationKind.IMPACT in kinds -> tr("Impact point", "Punto de impacto")
+            TrailObservationKind.SPEED_DROP in kinds -> tr("Speed loss zone", "Zona de perdida de velocidad")
+            TrailObservationKind.RECOVERY in kinds -> tr("Speed recovery zone", "Zona de recuperacion de velocidad")
+            else -> tr("Transition zone", "Zona de transicion")
+        }
+
+        val details = mutableListOf<String>()
+        val maxSpeedDrop = cluster.mapNotNull { it.speedDropKmh }.maxOrNull()
+        if (maxSpeedDrop != null) {
+            details += tr(
+                "You lost about ${String.format(Locale.US, "%.1f", maxSpeedDrop)} km/h.",
+                "Perdiste aprox ${String.format(Locale.US, "%.1f", maxSpeedDrop)} km/h."
+            )
+        }
+        val maxDecel = cluster.mapNotNull { it.decelerationAbsMs2 }.maxOrNull()
+        if (maxDecel != null) {
+            val speedLossRateKmh = maxDecel * 3.6f
+            details += tr(
+                "Braking here removes speed at about ${String.format(Locale.US, "%.1f", speedLossRateKmh)} km/h per second.",
+                "Al frenar aqui pierdes velocidad a aprox ${String.format(Locale.US, "%.1f", speedLossRateKmh)} km/h por segundo."
+            )
+        }
+        val landingCount = cluster.count { it.kind == TrailObservationKind.LANDING }
+        if (landingCount > 0) {
+            details += if (landingCount == 1) {
+                tr("Landing event detected.", "Se detecta un aterrizaje.")
+            } else {
+                tr("$landingCount landing events detected.", "Se detectan $landingCount aterrizajes.")
+            }
+        }
+        val impactCount = cluster.count { it.kind == TrailObservationKind.IMPACT }
+        if (impactCount > 0) {
+            details += if (impactCount == 1) {
+                tr("Impact event detected.", "Se detecta un impacto.")
+            } else {
+                tr("$impactCount impact events detected.", "Se detectan $impactCount impactos.")
+            }
+        }
+        if (TrailObservationKind.RECOVERY in kinds && TrailObservationKind.BRAKING !in kinds) {
+            details += tr(
+                "You start recovering speed here.",
+                "Aqui empiezas a recuperar velocidad."
+            )
+        }
+        val tip = when {
+            TrailObservationKind.LANDING in kinds -> tr(
+                "Tip: Stay loose on landing and prepare the next movement early.",
+                "Consejo: Mantente suelto en el aterrizaje y prepara el siguiente movimiento temprano."
+            )
+            TrailObservationKind.IMPACT in kinds -> tr(
+                "Tip: Unweight the bike before this impact or open your line.",
+                "Consejo: Descarga la bici antes de este impacto o abre la linea."
+            )
+            TrailObservationKind.BRAKING in kinds -> tr(
+                "Tip: Brake before the turn-in and release toward the exit.",
+                "Consejo: Frena antes de entrar y suelta hacia la salida."
+            )
+            TrailObservationKind.RECOVERY in kinds -> tr(
+                "Tip: Keep your eyes ahead and build speed only when traction is steady.",
+                "Consejo: Mira adelante y gana velocidad solo cuando la traccion este firme."
+            )
+            else -> null
+        }
+        tip?.let { details += it }
+        if (details.isEmpty()) {
+            details += tr(
+                "Section with stable behavior.",
+                "Seccion con comportamiento estable."
+            )
+        }
+
+        TrailPointInsight(
+            distanceM = distanceM,
+            title = title,
+            detail = details.distinct().joinToString(" ")
+        )
+    }.sortedBy { it.distanceM }
+}
+
+@Composable
+private fun AnalysisFocusMap(
+    mapData: RunMapData?,
+    runDistanceMeters: Float?,
+    focusDistanceM: Float
+) {
+    val points = mapData?.polyline?.points.orEmpty()
+    if (mapData == null || points.size < 2) return
+    if (!BuildConfig.HAS_MAPS_API_KEY) return
+
+    val orderedPoints = remember(points) { points.sortedBy { it.distPct } }
+    val marker = remember(orderedPoints, focusDistanceM, runDistanceMeters) {
+        pctFromDistance(focusDistanceM, runDistanceMeters)
+            ?.let { findLatLngForDistPct(orderedPoints, it) }
+    } ?: return
+
+    var mapLoaded by remember(points) { mutableStateOf(false) }
+    val boundsBuilder = remember(points) {
+        LatLngBounds.builder().apply {
+            points.forEach { include(LatLng(it.lat, it.lon)) }
+        }
+    }
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(
+            LatLng(points.first().lat, points.first().lon),
+            14f
+        )
+    }
+
+    LaunchedEffect(boundsBuilder, mapLoaded) {
+        if (!mapLoaded) return@LaunchedEffect
+        runCatching {
+            cameraPositionState.animate(
+                CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), 90)
+            )
+        }
+    }
+    LaunchedEffect(marker, mapLoaded) {
+        if (!mapLoaded) return@LaunchedEffect
+        runCatching {
+            cameraPositionState.animate(
+                CameraUpdateFactory.newLatLngZoom(marker, 17f)
+            )
+        }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(220.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        GoogleMap(
+            modifier = Modifier.fillMaxSize(),
+            cameraPositionState = cameraPositionState,
+            properties = MapProperties(mapType = MapType.HYBRID),
+            uiSettings = MapUiSettings(
+                zoomControlsEnabled = true,
+                mapToolbarEnabled = false,
+                compassEnabled = true,
+                myLocationButtonEnabled = false
+            ),
+            onMapLoaded = { mapLoaded = true }
+        ) {
+            Polyline(
+                points = points.map { LatLng(it.lat, it.lon) },
+                color = Color(0xFF607D8B),
+                width = 4f
+            )
+            com.google.maps.android.compose.Circle(
+                center = marker,
+                radius = 6.2,
+                fillColor = Color.White.copy(alpha = 0.95f),
+                strokeColor = Color(0xFF0D47A1),
+                strokeWidth = 2.5f
+            )
+            com.google.maps.android.compose.Circle(
+                center = marker,
+                radius = 3.1,
+                fillColor = Color(0xFF42A5F5),
+                strokeColor = Color.White,
+                strokeWidth = 1.5f
+            )
+        }
+    }
+}
+
+private data class SpeedDropInsight(
+    val startDistanceM: Float,
+    val endDistanceM: Float,
+    val midDistanceM: Float,
+    val dropKmh: Float,
+    val nearbyEventCode: String?
+)
+
+private data class DecelerationDropInsight(
+    val distanceM: Float,
+    val accelerationMs2: Float,
+    val nearbyEventCode: String?
+)
+
+private enum class KeyTrackTrend {
+    HARD_BRAKING,
+    ACCELERATING,
+    STABLE
+}
+
+private data class KeyTrackPointInsight(
+    val distanceM: Float,
+    val speedKmh: Float?,
+    val accelerationMs2: Float?,
+    val eventCodes: List<String>,
+    val trend: KeyTrackTrend
+)
+
+private data class RunDynamicsInsights(
+    val speedDropThresholdKmh: Float,
+    val decelerationThresholdMs2: Float,
+    val speedDrops: List<SpeedDropInsight>,
+    val decelerationDrops: List<DecelerationDropInsight>,
+    val keyPoints: List<KeyTrackPointInsight>
+)
+
+private fun buildRunDynamicsInsights(
+    events: List<RunEvent>,
+    speedPoints: List<ChartPoint>,
+    accelerationPoints: List<ChartPoint>,
+    totalDistanceM: Float?
+): RunDynamicsInsights? {
+    val totalDistance = totalDistanceM?.takeIf { it.isFinite() && it > 0f } ?: return null
+    val cleanSpeedPoints = speedPoints
+        .filter { it.x.isFinite() && it.y.isFinite() }
+        .sortedBy { it.x }
+    val cleanAccelerationPoints = accelerationPoints
+        .filter { it.x.isFinite() && it.y.isFinite() }
+        .sortedBy { it.x }
+    if (cleanSpeedPoints.size < 2 && cleanAccelerationPoints.isEmpty()) return null
+
+    val rawSpeedDrops = cleanSpeedPoints.zipWithNext().mapNotNull { (prev, curr) ->
+        val delta = curr.y - prev.y
+        if (!delta.isFinite() || delta >= 0f) return@mapNotNull null
+        val midDist = ((prev.x + curr.x) / 2f).coerceIn(0f, totalDistance)
+        SpeedDropInsight(
+            startDistanceM = prev.x.coerceIn(0f, totalDistance),
+            endDistanceM = curr.x.coerceIn(0f, totalDistance),
+            midDistanceM = midDist,
+            dropKmh = -delta,
+            nearbyEventCode = nearestEventCode(events, midDist, totalDistance)
+        )
+    }
+    val speedDropThreshold = if (rawSpeedDrops.isEmpty()) {
+        0f
+    } else {
+        kotlin.math.max(0.8f, percentile(rawSpeedDrops.map { it.dropKmh }.sorted(), 0.55f))
+    }
+    val significantSpeedDrops = rawSpeedDrops
+        .filter { it.dropKmh >= speedDropThreshold }
+        .sortedByDescending { it.dropKmh }
+        .take(10)
+
+    val rawDecelerationDrops = cleanAccelerationPoints
+        .filter { it.y < 0f }
+        .map { point ->
+            DecelerationDropInsight(
+                distanceM = point.x.coerceIn(0f, totalDistance),
+                accelerationMs2 = point.y,
+                nearbyEventCode = nearestEventCode(events, point.x, totalDistance)
+            )
+        }
+    val decelerationThreshold = if (rawDecelerationDrops.isEmpty()) {
+        0f
+    } else {
+        val magnitudes = rawDecelerationDrops.map { -it.accelerationMs2 }.sorted()
+        kotlin.math.max(0.2f, percentile(magnitudes, 0.60f))
+    }
+    val significantDecelerationDrops = rawDecelerationDrops
+        .filter { -it.accelerationMs2 >= decelerationThreshold }
+        .sortedBy { it.accelerationMs2 }
+        .take(10)
+
+    val candidateKeyDistances = mutableListOf<Float>().apply {
+        addAll(significantSpeedDrops.map { it.midDistanceM })
+        addAll(significantDecelerationDrops.map { it.distanceM })
+        addAll(
+            events.sortedByDescending { it.severity }
+                .take(4)
+                .mapNotNull { event -> distanceFromPct(event.distPct, totalDistance) }
+        )
+        if (isEmpty()) addAll(listOf(totalDistance * 0.2f, totalDistance * 0.5f, totalDistance * 0.8f))
+    }
+
+    val keyDistances = candidateKeyDistances.sorted().fold(mutableListOf<Float>()) { acc, dist ->
+        if (acc.none { kotlin.math.abs(it - dist) < 12f }) {
+            acc.add(dist.coerceIn(0f, totalDistance))
+        }
+        acc
+    }.take(8)
+
+    val keyPoints = keyDistances.map { dist ->
+        val speed = nearestChartValueAtDist(cleanSpeedPoints, dist, totalDistance)
+        val acceleration = nearestChartValueAtDist(cleanAccelerationPoints, dist, totalDistance)
+        val nearbyEventCodes = nearbyEvents(events, dist, totalDistance, 25f)
+            .take(2)
+            .map { eventTypeShortCode(it.type) }
+        val trend = when {
+            acceleration != null && acceleration <= -0.55f -> KeyTrackTrend.HARD_BRAKING
+            acceleration != null && acceleration >= 0.55f -> KeyTrackTrend.ACCELERATING
+            else -> KeyTrackTrend.STABLE
+        }
+        KeyTrackPointInsight(
+            distanceM = dist,
+            speedKmh = speed,
+            accelerationMs2 = acceleration,
+            eventCodes = nearbyEventCodes,
+            trend = trend
+        )
+    }
+
+    return RunDynamicsInsights(
+        speedDropThresholdKmh = speedDropThreshold,
+        decelerationThresholdMs2 = decelerationThreshold,
+        speedDrops = significantSpeedDrops,
+        decelerationDrops = significantDecelerationDrops,
+        keyPoints = keyPoints
     )
 }
 
@@ -1353,19 +1907,90 @@ private fun findLatLngForDistPct(
     distPct: Float
 ): LatLng? {
     if (points.isEmpty()) return null
+    val sorted = points.sortedBy { it.distPct }
     val target = distPct.coerceIn(0f, 100f)
-    val nearest = points.minByOrNull { point ->
+    if (target <= sorted.first().distPct) return LatLng(sorted.first().lat, sorted.first().lon)
+    if (target >= sorted.last().distPct) return LatLng(sorted.last().lat, sorted.last().lon)
+
+    for (index in 0 until sorted.lastIndex) {
+        val a = sorted[index]
+        val b = sorted[index + 1]
+        if (target < a.distPct || target > b.distPct) continue
+        val range = b.distPct - a.distPct
+        if (kotlin.math.abs(range) < 1e-6f) {
+            return LatLng(a.lat, a.lon)
+        }
+        val t = ((target - a.distPct) / range).coerceIn(0f, 1f)
+        val lat = a.lat + (b.lat - a.lat) * t
+        val lon = a.lon + (b.lon - a.lon) * t
+        return LatLng(lat, lon)
+    }
+
+    val nearest = sorted.minByOrNull { point ->
         kotlin.math.abs(point.distPct - target)
     } ?: return null
     return LatLng(nearest.lat, nearest.lon)
 }
 
-private fun nearestSpeedAtDistPct(speedPoints: List<HeatmapPoint>, distPct: Float): Float? {
-    if (speedPoints.isEmpty()) return null
-    val target = distPct.coerceIn(0f, 100f)
-    return speedPoints.minByOrNull { point ->
-        kotlin.math.abs(point.x - target)
-    }?.value
+private fun nearestEventCode(
+    events: List<RunEvent>,
+    distanceM: Float,
+    totalDistanceM: Float,
+    maxDeltaM: Float = 25f
+): String? {
+    val targetPct = pctFromDistance(distanceM, totalDistanceM) ?: return null
+    val maxDeltaPct = (maxDeltaM / totalDistanceM * 100f).coerceAtLeast(0.5f)
+    return events
+        .minByOrNull { event -> kotlin.math.abs(event.distPct - targetPct) }
+        ?.takeIf { kotlin.math.abs(it.distPct - targetPct) <= maxDeltaPct }
+        ?.let { eventTypeShortCode(it.type) }
+}
+
+private fun nearbyEvents(
+    events: List<RunEvent>,
+    distanceM: Float,
+    totalDistanceM: Float,
+    maxDeltaM: Float
+): List<RunEvent> {
+    val targetPct = pctFromDistance(distanceM, totalDistanceM) ?: return emptyList()
+    val maxDeltaPct = (maxDeltaM / totalDistanceM * 100f).coerceAtLeast(0.5f)
+    return events
+        .filter { kotlin.math.abs(it.distPct - targetPct) <= maxDeltaPct }
+        .sortedBy { kotlin.math.abs(it.distPct - targetPct) }
+}
+
+private fun nearestChartValueAtDist(
+    points: List<ChartPoint>,
+    distanceM: Float,
+    totalDistanceM: Float
+): Float? {
+    if (points.isEmpty()) return null
+    return interpolatedChartValueAtDist(points, distanceM, totalDistanceM)
+}
+
+private fun interpolatedChartValueAtDist(
+    points: List<ChartPoint>,
+    distanceM: Float,
+    totalDistanceM: Float
+): Float? {
+    if (points.isEmpty()) return null
+    val target = distanceM.coerceIn(0f, totalDistanceM)
+    val sorted = points.sortedBy { it.x }
+    if (sorted.size == 1) return sorted.first().y
+    if (target <= sorted.first().x) return sorted.first().y
+    if (target >= sorted.last().x) return sorted.last().y
+
+    for (index in 0 until sorted.lastIndex) {
+        val a = sorted[index]
+        val b = sorted[index + 1]
+        if (target < a.x || target > b.x) continue
+        val range = b.x - a.x
+        if (kotlin.math.abs(range) < 1e-6f) return a.y
+        val t = ((target - a.x) / range).coerceIn(0f, 1f)
+        return a.y + (b.y - a.y) * t
+    }
+
+    return sorted.minByOrNull { kotlin.math.abs(it.x - target) }?.y
 }
 
 private fun percentile(sortedValues: List<Float>, fraction: Float): Float {
@@ -1380,7 +2005,7 @@ private fun eventTypeShortCode(type: String): String {
     return when (type) {
         EventType.IMPACT_PEAK -> "IMP"
         EventType.LANDING -> "LAN"
-        EventType.HARSHNESS_BURST -> "HAR"
+        EventType.HARSHNESS_BURST -> "VIB"
         else -> type.take(3).uppercase(Locale.US)
     }
 }
@@ -1390,7 +2015,7 @@ private fun eventTypeLabel(type: String): String {
     return when (type) {
         EventType.IMPACT_PEAK -> tr("Strong Impact", "Impacto fuerte")
         EventType.LANDING -> tr("Hard Landing", "Aterrizaje duro")
-        EventType.HARSHNESS_BURST -> tr("Harshness Burst", "Ráfaga de vibración")
+        EventType.HARSHNESS_BURST -> tr("Vibration event", "Evento de vibracion")
         else -> tr("Event", "Evento")
     }
 }
@@ -1404,61 +2029,62 @@ private fun eventTypeColor(type: String): Color {
     }
 }
 
-private fun RunSeries.toChartPoints(): List<ChartPoint> {
-    val count = effectivePointCount
-    return (0 until count).mapNotNull { i ->
-        ChartPoint(points[i * 2], normalizeToScore(seriesType, points[i * 2 + 1]))
-            .takeIf { it.x.isFinite() && it.y.isFinite() }
-    }
+private fun RunSeries.toChartPoints(distanceMeters: Float?): List<ChartPoint> {
+    return toBurdenChartPointsMeters(distanceMeters)
+        .map { point -> ChartPoint(point.x, normalizeToScore(seriesType, point.y)) }
 }
 
-private fun RunSeries.toSpeedChartPoints(distanceMeters: Float?): List<ChartPoint> {
-    if (seriesType != SeriesType.SPEED_TIME) return emptyList()
-    val totalDistanceM = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
-    val count = effectivePointCount
-    if (count < 2) return emptyList()
-
-    val result = ArrayList<ChartPoint>(count - 1)
-    for (i in 1 until count) {
-        val prevX = points[(i - 1) * 2]
-        val prevT = points[(i - 1) * 2 + 1]
-        val currX = points[i * 2]
-        val currT = points[i * 2 + 1]
-        val distPctDelta = (currX - prevX).coerceAtLeast(0f)
-        val timeDeltaSec = (currT - prevT).coerceAtLeast(0f)
-        if (timeDeltaSec <= 1e-3f) continue
-
-        val distM = totalDistanceM * (distPctDelta / 100f)
-        val speedMps = distM / timeDeltaSec
-        if (!speedMps.isFinite()) continue
-
-        val midX = (prevX + currX) / 2f
-        result.add(ChartPoint(midX, speedMps * 3.6f))
-    }
-    return result
-}
-
-private fun fallbackSpeedChartPoints(avgSpeedMps: Float?): List<ChartPoint> {
+private fun fallbackSpeedChartPoints(
+    avgSpeedMps: Float?,
+    distanceMeters: Float?
+): List<ChartPoint> {
     val speedMps = avgSpeedMps?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
+    val totalDistance = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
     val speedKmh = speedMps * 3.6f
     return listOf(
         ChartPoint(0f, speedKmh),
-        ChartPoint(100f, speedKmh)
+        ChartPoint(totalDistance, speedKmh)
     )
 }
 
-private fun RunSeries.toSpeedHeatmapPoints(distanceMeters: Float?): List<HeatmapPoint> {
-    return toSpeedChartPoints(distanceMeters)
-        .map { HeatmapPoint(x = it.x, value = it.y.coerceAtLeast(0f)) }
-}
-
-private fun fallbackSpeedHeatmapPoints(avgSpeedMps: Float?): List<HeatmapPoint> {
+private fun fallbackSpeedHeatmapPoints(
+    avgSpeedMps: Float?,
+    distanceMeters: Float?
+): List<HeatmapPoint> {
     val speedMps = avgSpeedMps?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
+    val totalDistance = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
     val speedKmh = speedMps * 3.6f
     return listOf(
         HeatmapPoint(0f, speedKmh),
-        HeatmapPoint(100f, speedKmh)
+        HeatmapPoint(totalDistance, speedKmh)
     )
+}
+
+private fun meterAxisConfig(points: List<ChartPoint>): AxisConfig {
+    val maxX = points.maxOfOrNull { it.x }?.coerceAtLeast(1f) ?: 1f
+    val axisMax = kotlin.math.ceil(maxX / 10f) * 10f
+    return AxisConfig(
+        min = 0f,
+        max = axisMax.coerceAtLeast(10f),
+        label = "m",
+        format = { value -> formatDistanceTick(value) }
+    )
+}
+
+private fun formatDistanceTick(distanceM: Float): String {
+    return if (distanceM >= 1000f) {
+        String.format(Locale.US, "%.1fkm", distanceM / 1000f)
+    } else {
+        String.format(Locale.US, "%.0fm", distanceM)
+    }
+}
+
+private fun formatDistanceLabel(distanceM: Float): String {
+    return if (distanceM >= 1000f) {
+        String.format(Locale.US, "%.2f km", distanceM / 1000f)
+    } else {
+        String.format(Locale.US, "%.1f m", distanceM)
+    }
 }
 
 private fun normalizeToScore(seriesType: SeriesType, value: Float): Float {

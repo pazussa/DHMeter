@@ -21,6 +21,7 @@ class SensorSensitivityRepositoryImpl @Inject constructor(
         private const val KEY_HARSHNESS = "harshness_sensitivity"
         private const val KEY_STABILITY = "stability_sensitivity"
         private const val KEY_GPS = "gps_sensitivity"
+        private const val KEY_EVENT = "event_sensitivity"
     }
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -46,6 +47,10 @@ class SensorSensitivityRepositoryImpl @Inject constructor(
         writeSettings(currentSettings.copy(gpsSensitivity = value))
     }
 
+    override suspend fun updateEventSensitivity(value: Float) {
+        writeSettings(currentSettings.copy(eventSensitivity = value))
+    }
+
     override suspend fun resetToDefaults() {
         writeSettings(SensorSensitivitySettings())
     }
@@ -67,6 +72,10 @@ class SensorSensitivityRepositoryImpl @Inject constructor(
             gpsSensitivity = prefs.getFloat(
                 KEY_GPS,
                 SensorSensitivitySettings.DEFAULT_GPS_SENSITIVITY
+            ),
+            eventSensitivity = prefs.getFloat(
+                KEY_EVENT,
+                SensorSensitivitySettings.DEFAULT_EVENT_SENSITIVITY
             )
         ).normalized()
     }
@@ -78,6 +87,7 @@ class SensorSensitivityRepositoryImpl @Inject constructor(
             .putFloat(KEY_HARSHNESS, normalized.harshnessSensitivity)
             .putFloat(KEY_STABILITY, normalized.stabilitySensitivity)
             .putFloat(KEY_GPS, normalized.gpsSensitivity)
+            .putFloat(KEY_EVENT, normalized.eventSensitivity)
             .apply()
         mutableSettings.value = normalized
     }
