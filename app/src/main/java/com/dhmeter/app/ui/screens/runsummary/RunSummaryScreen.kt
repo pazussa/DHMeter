@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -205,14 +206,6 @@ private fun RunSummaryContent(
             LandingQualityCard(score = landingScore)
             Spacer(modifier = Modifier.height(24.dp))
         }
-
-        RunMapSection(
-            mapData = mapData,
-            runDistanceMeters = run.distanceMeters,
-            selectedDistanceM = selectedDistanceM
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
 
         RunChartsCarouselSection(
             impactSeries = impactSeries,
@@ -1398,7 +1391,8 @@ private fun RunDynamicsAnalysisSection(
                 AnalysisFocusMap(
                     mapData = mapData,
                     runDistanceMeters = totalDistanceM,
-                    focusDistanceM = it
+                    focusDistanceM = it,
+                    speedPoints = speedPoints
                 )
             }
             if (groupedInsights.isEmpty()) {
@@ -1821,17 +1815,51 @@ private fun buildTrailPointInsights(
 private fun AnalysisFocusMap(
     mapData: RunMapData?,
     runDistanceMeters: Float?,
-    focusDistanceM: Float
+    focusDistanceM: Float,
+    speedPoints: List<ChartPoint>
 ) {
     val points = mapData?.polyline?.points.orEmpty()
     if (mapData == null || points.size < 2) return
     if (!BuildConfig.HAS_MAPS_API_KEY) return
 
     val orderedPoints = remember(points) { points.sortedBy { it.distPct } }
+    val totalDistanceM = runDistanceMeters?.takeIf { it.isFinite() && it > 0f }
+        ?: mapData.polyline.totalDistanceM.takeIf { it.isFinite() && it > 0f }
+        ?: return
     val marker = remember(orderedPoints, focusDistanceM, runDistanceMeters) {
-        pctFromDistance(focusDistanceM, runDistanceMeters)
+        pctFromDistance(focusDistanceM, totalDistanceM)
             ?.let { findLatLngForDistPct(orderedPoints, it) }
     } ?: return
+    val speedStats = remember(speedPoints) {
+        val values = speedPoints.map { it.y }.filter { it.isFinite() && it >= 0f }
+        if (values.isEmpty()) null else {
+            val min = values.minOrNull() ?: 0f
+            val max = values.maxOrNull() ?: min
+            min to max
+        }
+    }
+    val heatSegments = remember(orderedPoints, speedPoints, speedStats, totalDistanceM) {
+        if (orderedPoints.size < 2) {
+            emptyList()
+        } else {
+            orderedPoints.zipWithNext().mapNotNull { (start, end) ->
+                val startPct = start.distPct.takeIf { it.isFinite() } ?: return@mapNotNull null
+                val endPct = end.distPct.takeIf { it.isFinite() } ?: return@mapNotNull null
+                val midPct = ((startPct + endPct) / 2f).coerceIn(0f, 100f)
+                val midDistanceM = distanceFromPct(midPct, totalDistanceM) ?: return@mapNotNull null
+                val speedKmh = interpolatedChartValueAtDist(speedPoints, midDistanceM, totalDistanceM)
+                val color = speedStats?.let { (minSpeed, maxSpeed) ->
+                    speedToFadedHeatColor(speedKmh, minSpeed, maxSpeed)
+                } ?: Color(0xFF78909C).copy(alpha = 0.62f)
+
+                SpeedHeatSegment(
+                    start = LatLng(start.lat, start.lon),
+                    end = LatLng(end.lat, end.lon),
+                    color = color
+                )
+            }
+        }
+    }
 
     var mapLoaded by remember(points) { mutableStateOf(false) }
     val boundsBuilder = remember(points) {
@@ -1883,9 +1911,16 @@ private fun AnalysisFocusMap(
         ) {
             Polyline(
                 points = points.map { LatLng(it.lat, it.lon) },
-                color = Color(0xFF607D8B),
-                width = 4f
+                color = Color(0xFF263238).copy(alpha = 0.35f),
+                width = 9f
             )
+            heatSegments.forEach { segment ->
+                Polyline(
+                    points = listOf(segment.start, segment.end),
+                    color = segment.color,
+                    width = 7f
+                )
+            }
             com.google.maps.android.compose.Circle(
                 center = marker,
                 radius = 6.2,
@@ -1902,6 +1937,32 @@ private fun AnalysisFocusMap(
             )
         }
     }
+}
+
+private data class SpeedHeatSegment(
+    val start: LatLng,
+    val end: LatLng,
+    val color: Color
+)
+
+private fun speedToFadedHeatColor(
+    speedKmh: Float?,
+    minSpeedKmh: Float,
+    maxSpeedKmh: Float
+): Color {
+    val palette = HeatmapColors.Speed
+    val speed = speedKmh?.takeIf { it.isFinite() } ?: return Color(0xFF78909C).copy(alpha = 0.62f)
+
+    val span = (maxSpeedKmh - minSpeedKmh).coerceAtLeast(0.1f)
+    val normalized = ((speed - minSpeedKmh) / span).coerceIn(0f, 1f)
+
+    val scaled = normalized * (palette.lastIndex.toFloat())
+    val lowIndex = scaled.toInt().coerceIn(0, palette.lastIndex)
+    val highIndex = (lowIndex + 1).coerceAtMost(palette.lastIndex)
+    val t = (scaled - lowIndex).coerceIn(0f, 1f)
+
+    val base = lerp(palette[lowIndex], palette[highIndex], t)
+    return lerp(base, Color(0xFFECEFF1), 0.28f).copy(alpha = 0.70f)
 }
 
 private data class SpeedDropInsight(
