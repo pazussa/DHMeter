@@ -67,6 +67,11 @@ class RecordingViewModel @Inject constructor(
     companion object {
         private const val PREVIEW_CLIENT_ID = "recording_screen"
         private const val MANUAL_START_DELAY_SECONDS = 10
+        private const val AUTO_STOP_MIN_RECORDING_SECONDS = 20L
+        private const val AUTO_STOP_LOW_VIBRATION_THRESHOLD = 0.03f
+        private const val AUTO_STOP_LOW_SPEED_MPS = 0.5f
+        private const val AUTO_STOP_MOVEMENT_MIN_SPEED_MPS = 2.0f
+        private const val AUTO_STOP_REQUIRED_DURATION_MS = 6_000L
     }
 
     private val _uiState = MutableStateFlow(RecordingUiState())
@@ -83,6 +88,9 @@ class RecordingViewModel @Inject constructor(
     private var manualStartDelayJob: Job? = null
     private var isManualStartForegroundArmed: Boolean = false
     private var isPreviewForegroundArmed: Boolean = false
+    private var autoStopLowVibrationSinceMs: Long? = null
+    private var hadMovementDuringRecording: Boolean = false
+    private var autoStopTriggered: Boolean = false
 
     init {
         viewModelScope.launch {
@@ -102,6 +110,7 @@ class RecordingViewModel @Inject constructor(
         manualStartDelayJob = null
         localSegments = emptyList()
         isStartingRecording = false
+        resetAutoStopState()
 
         _uiState.update {
             it.copy(
@@ -150,6 +159,7 @@ class RecordingViewModel @Inject constructor(
                     is RecordingState.Idle -> {
                         isStartingRecording = false
                         processingRecoveryJob?.cancel()
+                        resetAutoStopState()
                         _uiState.update { 
                             it.copy(
                                 isRecording = false,
@@ -187,8 +197,10 @@ class RecordingViewModel @Inject constructor(
                                 segmentStatus = msgManualRecordingActive()
                             )
                         }
+                        handleAutoStopIfRunEnded(state)
                     }
                     is RecordingState.Processing -> {
+                        autoStopLowVibrationSinceMs = null
                         _uiState.update { 
                             it.copy(
                                 isRecording = false,
@@ -203,6 +215,7 @@ class RecordingViewModel @Inject constructor(
                     }
                     is RecordingState.Completed -> {
                         processingRecoveryJob?.cancel()
+                        resetAutoStopState()
                         _uiState.update { 
                             it.copy(
                                 isRecording = false,
@@ -218,6 +231,7 @@ class RecordingViewModel @Inject constructor(
                     is RecordingState.Error -> {
                         isStartingRecording = false
                         processingRecoveryJob?.cancel()
+                        resetAutoStopState()
                         stopForegroundRecordingService()
                         _uiState.update { 
                             it.copy(
@@ -327,6 +341,7 @@ class RecordingViewModel @Inject constructor(
         if (_uiState.value.isRecording || _uiState.value.isProcessing || isStartingRecording) return false
 
         isStartingRecording = true
+        resetAutoStopState()
 
         // Stop preview before starting real recording
         stopPreview(keepForeground = true)
@@ -387,6 +402,7 @@ class RecordingViewModel @Inject constructor(
 
     private fun stopRecordingInternal() {
         if (_uiState.value.isProcessing) return
+        autoStopLowVibrationSinceMs = null
         timerJob?.cancel()
         _uiState.update {
             it.copy(
@@ -521,6 +537,7 @@ class RecordingViewModel @Inject constructor(
         previewManager.resumeAll()
         stopForegroundRecordingService()
         isStartingRecording = false
+        resetAutoStopState()
         _uiState.update {
             it.copy(
                 isRecording = false,
@@ -676,6 +693,13 @@ class RecordingViewModel @Inject constructor(
     private fun msgManualRecordingStarted(): String =
         tr(appContext, "Manual recording started", "Grabación manual iniciada")
 
+    private fun msgAutoStopDetected(): String =
+        tr(
+            appContext,
+            "Run end detected automatically (low vibration).",
+            "Fin de bajada detectado automáticamente (vibración baja)."
+        )
+
     private fun msgFailedStartService(): String =
         tr(appContext, "Failed to start recording service", "No se pudo iniciar el servicio de grabación")
 
@@ -703,6 +727,48 @@ class RecordingViewModel @Inject constructor(
         _uiState.update { state ->
             if (state.segmentStatus == message) state else state.copy(segmentStatus = message)
         }
+    }
+
+    private fun resetAutoStopState() {
+        autoStopLowVibrationSinceMs = null
+        hadMovementDuringRecording = false
+        autoStopTriggered = false
+    }
+
+    private fun handleAutoStopIfRunEnded(state: RecordingState.Recording) {
+        if (autoStopTriggered || _uiState.value.isProcessing) return
+
+        if (
+            state.movementDetected ||
+            state.currentSpeed >= AUTO_STOP_MOVEMENT_MIN_SPEED_MPS ||
+            state.liveHarshness >= 0.12f
+        ) {
+            hadMovementDuringRecording = true
+        }
+        if (!hadMovementDuringRecording) {
+            autoStopLowVibrationSinceMs = null
+            return
+        }
+
+        if (_uiState.value.elapsedSeconds < AUTO_STOP_MIN_RECORDING_SECONDS) {
+            autoStopLowVibrationSinceMs = null
+            return
+        }
+
+        val lowVibration = state.liveHarshness <= AUTO_STOP_LOW_VIBRATION_THRESHOLD
+        val lowMotion = !state.movementDetected || state.currentSpeed <= AUTO_STOP_LOW_SPEED_MPS
+        if (!lowVibration || !lowMotion) {
+            autoStopLowVibrationSinceMs = null
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        val startedAt = autoStopLowVibrationSinceMs ?: now.also { autoStopLowVibrationSinceMs = it }
+        if (now - startedAt < AUTO_STOP_REQUIRED_DURATION_MS) return
+
+        autoStopTriggered = true
+        updateSegmentStatus(msgAutoStopDetected())
+        stopRecordingInternal()
     }
 
     private fun mapGpsSignal(accuracy: Float, gpsSensitivity: Float): GpsSignalLevel {

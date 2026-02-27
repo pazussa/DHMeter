@@ -543,6 +543,7 @@ private fun SensorSensitivitySheet(
             SensitivitySliderRow(
                 label = tr("Instability (Gyroscope)", "Inestabilidad (Giroscopio)"),
                 value = settings.stabilitySensitivity,
+                minValue = SensorSensitivitySettings.MIN_STABILITY_SENSITIVITY,
                 onValueChange = onStabilitySensitivityChange
             )
             SensitivitySliderRow(
@@ -572,6 +573,7 @@ private fun SensorSensitivitySheet(
 private fun SensitivitySliderRow(
     label: String,
     value: Float,
+    minValue: Float = SensorSensitivitySettings.MIN_SENSITIVITY,
     onValueChange: (Float) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -593,7 +595,7 @@ private fun SensitivitySliderRow(
         Slider(
             value = value,
             onValueChange = onValueChange,
-            valueRange = SensorSensitivitySettings.MIN_SENSITIVITY..SensorSensitivitySettings.MAX_SENSITIVITY,
+            valueRange = minValue..SensorSensitivitySettings.MAX_SENSITIVITY,
             colors = SliderDefaults.colors(
                 thumbColor = MaterialTheme.colorScheme.primary,
                 activeTrackColor = MaterialTheme.colorScheme.primary,

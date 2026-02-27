@@ -812,7 +812,8 @@ private fun localizedMetricName(metricName: String): String {
         "Impact" -> "Impacto"
         "Harshness" -> "Vibración"
         "Stability" -> "Inestabilidad"
-        "Landing Quality" -> "Calidad de aterrizaje"
+        "Landing Quality" -> "Severidad de aterrizaje"
+        "Landing Severity" -> "Severidad de aterrizaje"
         "Duration" -> "Duración"
         "Max Speed" -> "Velocidad máxima"
         else -> metricName
@@ -833,11 +834,25 @@ private fun localizedInsightText(text: String): String {
     return text
         .replace("Most metrics are similar across runs.", "La mayoría de métricas son similares entre bajadas.")
         .replace("Metrics are too close to declare a clear advantage.", "Las métricas están demasiado cerca para una ventaja clara.")
-        .replace("No significant differences detected between runs", "No se detectaron diferencias significativas entre bajadas")
+        .replace("No significant differences detected between runs", "No se detectaron diferencias significativas entre bajadas.")
         .replace("Mixed results", "Resultados mixtos")
         .replace("Similar performance", "Rendimiento similar")
         .replace("Best ", "Mejor ")
-        .replace(" varies by ", " varia en ")
+        .replace(" recorded the fastest total time.", " registró el mejor tiempo total.")
+        .replace(" reached the highest top speed.", " alcanzó la mayor velocidad punta.")
+        .replace(" has the lowest combined burden.", " tiene la menor carga combinada.")
+        .replace(" has the lowest combined burden, ", " tiene la menor carga combinada, ")
+        .replace(" points better than ", " puntos mejor que ")
+        .replace(" is the most consistent across burden metrics.", " es la más consistente entre las métricas de carga.")
+        .replace(" is faster than ", " es más rápida que ")
+        .replace(" is slower than ", " es más lenta que ")
+        .replace(" increased max speed by ", " aumentó la velocidad máxima en ")
+        .replace(" decreased max speed by ", " redujo la velocidad máxima en ")
+        .replace(" versus ", " frente a ")
+        .replace(" improved ", " mejoró ")
+        .replace(" regressed ", " empeoró ")
+        .replace(" points versus ", " puntos frente a ")
+        .replace(" varies by ", " varía en ")
         .replace("% across runs", "% entre bajadas")
         .replace(" spread is ", " tiene un rango de ")
         .replace(" points", " puntos")
@@ -848,7 +863,8 @@ private fun localizedInsightText(text: String): String {
         .replace("Impact", "Impacto")
         .replace("Harshness", "Vibración")
         .replace("Stability", "Inestabilidad")
-        .replace("Landing Quality", "Calidad de aterrizaje")
+        .replace("Landing Quality", "Severidad de aterrizaje")
+        .replace("Landing Severity", "Severidad de aterrizaje")
         .replace("Duration", "Duración")
         .replace("Max Speed", "Velocidad máxima")
 }

@@ -10,18 +10,22 @@ data class SensorSensitivitySettings(
     fun normalized(): SensorSensitivitySettings = copy(
         impactSensitivity = impactSensitivity.coerceIn(MIN_SENSITIVITY, MAX_SENSITIVITY),
         harshnessSensitivity = harshnessSensitivity.coerceIn(MIN_SENSITIVITY, MAX_SENSITIVITY),
-        stabilitySensitivity = stabilitySensitivity.coerceIn(MIN_SENSITIVITY, MAX_SENSITIVITY),
+        stabilitySensitivity = stabilitySensitivity.coerceIn(
+            MIN_STABILITY_SENSITIVITY,
+            MAX_SENSITIVITY
+        ),
         gpsSensitivity = gpsSensitivity.coerceIn(MIN_SENSITIVITY, MAX_SENSITIVITY),
         eventSensitivity = eventSensitivity.coerceIn(MIN_SENSITIVITY, MAX_SENSITIVITY)
     )
 
     companion object {
         const val MIN_SENSITIVITY = 0.1f
+        const val MIN_STABILITY_SENSITIVITY = 0.05f
         const val MAX_SENSITIVITY = 5.0f
         const val DEFAULT_SENSITIVITY = 1.0f
         const val DEFAULT_IMPACT_SENSITIVITY = 0.62f
         const val DEFAULT_HARSHNESS_SENSITIVITY = 5.0f
-        const val DEFAULT_STABILITY_SENSITIVITY = 0.1f
+        const val DEFAULT_STABILITY_SENSITIVITY = 0.05f
         const val DEFAULT_GPS_SENSITIVITY = 1.0f
         const val DEFAULT_EVENT_SENSITIVITY = 1.0f
     }

@@ -433,8 +433,8 @@ private fun RunCard(
                 overallQuality?.let {
                     Text(
                         text = tr(
-                            "Quality: ${formatScore0to100(it)}",
-                            "Calidad: ${formatScore0to100(it)}"
+                            "Severity: ${formatScore0to100(it)}",
+                            "Severidad: ${formatScore0to100(it)}"
                         ),
                         style = MaterialTheme.typography.labelSmall
                     )

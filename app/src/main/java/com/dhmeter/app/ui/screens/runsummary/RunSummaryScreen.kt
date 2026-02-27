@@ -267,7 +267,7 @@ private fun RunSummaryContent(
         Text(
             text = tr(
                 "Repeat the run for a more complete analysis by comparing sections.",
-                "Repite la bajada para un analisis mas completo comparando entre secciones."
+                "Repite la bajada para un análisis más completo comparando entre secciones."
             ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline
@@ -639,7 +639,7 @@ private fun LandingQualityCard(score: Float) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = tr("Landing Quality", "Calidad de aterrizaje"),
+                    text = tr("Landing Severity", "Severidad de aterrizaje"),
                     style = MaterialTheme.typography.titleSmall
                 )
             }
@@ -676,7 +676,7 @@ private fun NotesSection(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text(
-                        text = tr("Setup", "Configuracion"),
+                        text = tr("Setup", "Configuración"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -725,10 +725,10 @@ private fun RunChartsCarouselSection(
     var currentChartIndex by remember { mutableIntStateOf(0) }
     val chartTitles = listOf(
         tr("Impacts", "Impactos"),
-        tr("Vibration", "Vibracion"),
+        tr("Vibration", "Vibración"),
         tr("Instability", "Inestabilidad"),
         tr("Speed", "Velocidad"),
-        tr("Acceleration", "Aceleracion"),
+        tr("Acceleration", "Aceleración"),
         tr("Altitude", "Altitud")
     )
 
@@ -742,7 +742,7 @@ private fun RunChartsCarouselSection(
         Text(
             text = tr(
                 "Tap any point to see where it happened on the trail.",
-                "Toca cualquier punto para ver donde paso en el sendero."
+                "Toca cualquier punto para ver dónde pasó en el sendero."
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
@@ -838,7 +838,7 @@ private fun RunChartsCarouselSection(
                                 onDistanceSelected = onDistanceSelected
                             )
                             4 -> AccelerationChartSection(
-                                title = tr("Acceleration vs Distance (m)", "Aceleracion vs Distancia (m)"),
+                                title = tr("Acceleration vs Distance (m)", "Aceleración vs Distancia (m)"),
                                 series = speedSeries,
                                 distanceMeters = distanceMeters,
                                 color = ChartStability,
@@ -905,7 +905,7 @@ private fun SingleRunChartSection(
                 Text(
                     text = tr(
                         "Most demanding point around ${formatDistanceLabel(it.x)}",
-                        "Punto mas exigente cerca de ${formatDistanceLabel(it.x)}"
+                        "Punto más exigente cerca de ${formatDistanceLabel(it.x)}"
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
@@ -984,7 +984,7 @@ private fun AccelerationChartSection(
         Text(
             text = tr(
                 "Shows where you brake hard or recover speed.",
-                "Muestra donde frenas fuerte o recuperas velocidad."
+                "Muestra dónde frenas fuerte o recuperas velocidad."
             ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
@@ -1006,7 +1006,7 @@ private fun AccelerationChartSection(
             ComparisonLineChart(
                 series = listOf(
                     ChartSeries(
-                        label = tr("Acceleration", "Aceleracion"),
+                        label = tr("Acceleration", "Aceleración"),
                         points = points,
                         color = color
                     )
@@ -1261,7 +1261,7 @@ private fun RunDynamicsAnalysisSection(
     Text(
         text = tr(
             "What happened on the trail",
-            "Que paso en el sendero"
+            "Qué pasó en el sendero"
         ),
         style = MaterialTheme.typography.titleSmall
     )
@@ -1269,7 +1269,7 @@ private fun RunDynamicsAnalysisSection(
         Text(
             text = tr(
                 "There is not enough data yet to explain key points.",
-                "Aun no hay datos suficientes para explicar puntos clave."
+                "Aún no hay datos suficientes para explicar puntos clave."
             ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1322,15 +1322,15 @@ private fun RunDynamicsAnalysisSection(
         )
         focusAccelerationMs2 != null && focusAccelerationMs2 >= 0.7f -> tr(
             "You are recovering speed here.",
-            "Aqui vuelves a ganar velocidad."
+            "Aquí vuelves a ganar velocidad."
         )
         else -> tr(
             "Transition section with moderate load.",
-            "Seccion de transicion con carga moderada."
+            "Sección de transición con carga moderada."
         )
     }
     val focusDetail = buildString {
-        focusDistanceM?.let { append(tr("Position", "Ubicacion")); append(": "); append(formatDistanceLabel(it)); append(". ") }
+        focusDistanceM?.let { append(tr("Position", "Ubicación")); append(": "); append(formatDistanceLabel(it)); append(". ") }
         focusSpeedKmh?.let { append(tr("Speed", "Velocidad")); append(": "); append(String.format(Locale.US, "%.1f km/h", it)); append(". ") }
         focusAccelerationMs2?.let { acceleration ->
             val speedShiftKmh = kotlin.math.abs(acceleration) * 3.6f
@@ -1339,7 +1339,7 @@ private fun RunDynamicsAnalysisSection(
                     append(
                         tr(
                             "You lost about ${String.format(Locale.US, "%.1f", speedShiftKmh)} km/h here.",
-                            "Perdiste aprox ${String.format(Locale.US, "%.1f", speedShiftKmh)} km/h en este punto."
+                            "Perdiste aprox. ${String.format(Locale.US, "%.1f", speedShiftKmh)} km/h en este punto."
                         )
                     )
                     append(" ")
@@ -1348,7 +1348,7 @@ private fun RunDynamicsAnalysisSection(
                     append(
                         tr(
                             "You gained about ${String.format(Locale.US, "%.1f", speedShiftKmh)} km/h here.",
-                            "Ganaste aprox ${String.format(Locale.US, "%.1f", speedShiftKmh)} km/h en este punto."
+                            "Ganaste aprox. ${String.format(Locale.US, "%.1f", speedShiftKmh)} km/h en este punto."
                         )
                     )
                     append(" ")
@@ -1401,39 +1401,30 @@ private fun RunDynamicsAnalysisSection(
                     focusDistanceM = it
                 )
             }
-        }
-    }
-
-    Spacer(modifier = Modifier.height(12.dp))
-    Text(
-        text = tr("Tap a point to inspect it on the map:", "Toca un punto para verlo en el mapa:"),
-        style = MaterialTheme.typography.bodyMedium
-    )
-
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
             if (groupedInsights.isEmpty()) {
                 Text(
                     text = tr(
                         "No clear drop zones were detected in this run.",
-                        "No se detectaron zonas claras de caida en esta bajada."
+                        "No se detectaron zonas claras de caída en esta bajada."
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                groupedInsights.forEach { insight ->
-                    ObservationItem(
-                        distanceM = insight.distanceM,
-                        focusDistanceM = focusDistanceM,
-                        onClick = onDistanceSelected,
-                        title = insight.title,
-                        detail = insight.detail
-                    )
-                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = tr(
+                        "Trail points (carousel)",
+                        "Puntos del sendero (carrusel)"
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                TrailPointsCarousel(
+                    insights = groupedInsights,
+                    focusDistanceM = focusDistanceM,
+                    onDistanceSelected = onDistanceSelected
+                )
             }
         }
     }
@@ -1470,6 +1461,81 @@ private fun ObservationItem(
                 text = detail,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun TrailPointsCarousel(
+    insights: List<TrailPointInsight>,
+    focusDistanceM: Float?,
+    onDistanceSelected: (Float) -> Unit
+) {
+    if (insights.isEmpty()) return
+
+    val nearestIndex = remember(insights, focusDistanceM) {
+        if (focusDistanceM == null) {
+            0
+        } else {
+            insights.indices.minByOrNull { index ->
+                kotlin.math.abs(insights[index].distanceM - focusDistanceM)
+            } ?: 0
+        }
+    }
+    var currentIndex by remember(insights) { mutableIntStateOf(nearestIndex.coerceIn(0, insights.lastIndex)) }
+
+    LaunchedEffect(nearestIndex) {
+        currentIndex = nearestIndex.coerceIn(0, insights.lastIndex)
+    }
+
+    val current = insights[currentIndex]
+
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = {
+                        val nextIndex = if (currentIndex == 0) insights.lastIndex else currentIndex - 1
+                        currentIndex = nextIndex
+                        onDistanceSelected(insights[nextIndex].distanceM)
+                    }
+                ) {
+                    Icon(Icons.Default.KeyboardArrowLeft, contentDescription = tr("Previous point", "Punto anterior"))
+                }
+
+                Text(
+                    text = tr(
+                        "Point ${currentIndex + 1}/${insights.size}",
+                        "Punto ${currentIndex + 1}/${insights.size}"
+                    ),
+                    style = MaterialTheme.typography.labelMedium
+                )
+
+                IconButton(
+                    onClick = {
+                        val nextIndex = if (currentIndex == insights.lastIndex) 0 else currentIndex + 1
+                        currentIndex = nextIndex
+                        onDistanceSelected(insights[nextIndex].distanceM)
+                    }
+                ) {
+                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = tr("Next point", "Siguiente punto"))
+                }
+            }
+
+            ObservationItem(
+                distanceM = current.distanceM,
+                focusDistanceM = focusDistanceM,
+                title = current.title,
+                detail = current.detail,
+                onClick = onDistanceSelected
             )
         }
     }
@@ -1528,7 +1594,7 @@ private fun buildFocusAdvice(
         )
         hasImpact -> tr(
             "Reduce speed slightly before impact and avoid hard braking right after it.",
-            "Reducir un poco la velocidad antes del impacto y evitar frenada fuerte justo despues."
+            "Reducir un poco la velocidad antes del impacto y evitar frenada fuerte justo después."
         )
         focusAccelerationMs2 != null && focusAccelerationMs2 <= -1.0f -> tr(
             "For strong braking, start braking earlier and release before exit.",
@@ -1647,9 +1713,9 @@ private fun buildTrailPointInsights(
             TrailObservationKind.BRAKING in kinds -> tr("Braking zone", "Zona de frenada")
             TrailObservationKind.LANDING in kinds -> tr("Landing point", "Punto de aterrizaje")
             TrailObservationKind.IMPACT in kinds -> tr("Impact point", "Punto de impacto")
-            TrailObservationKind.SPEED_DROP in kinds -> tr("Speed loss zone", "Zona de perdida de velocidad")
-            TrailObservationKind.RECOVERY in kinds -> tr("Speed recovery zone", "Zona de recuperacion de velocidad")
-            else -> tr("Transition zone", "Zona de transicion")
+            TrailObservationKind.SPEED_DROP in kinds -> tr("Speed loss zone", "Zona de pérdida de velocidad")
+            TrailObservationKind.RECOVERY in kinds -> tr("Speed recovery zone", "Zona de recuperación de velocidad")
+            else -> tr("Transition zone", "Zona de transición")
         }
 
         val details = mutableListOf<String>()
@@ -1687,13 +1753,13 @@ private fun buildTrailPointInsights(
         if (TrailObservationKind.RECOVERY in kinds && TrailObservationKind.BRAKING !in kinds) {
             details += tr(
                 "You start recovering speed here.",
-                "Aqui empiezas a recuperar velocidad."
+                "Aquí empiezas a recuperar velocidad."
             )
         }
         strongestCurve?.let { curve ->
             details += tr(
                 "Turn angle about ${String.format(Locale.US, "%.0f", curve.turnAngleDeg)}°.",
-                "Angulo de giro aprox ${String.format(Locale.US, "%.0f", curve.turnAngleDeg)}°."
+                "Ángulo de giro aprox. ${String.format(Locale.US, "%.0f", curve.turnAngleDeg)}°."
             )
             val entrySpeedText = curve.entrySpeedKmh?.let { String.format(Locale.US, "%.1f km/h", it) }
                 ?: tr("not available", "sin dato")
@@ -1709,7 +1775,7 @@ private fun buildTrailPointInsights(
                 ?: tr("not available", "sin dato")
             details += tr(
                 "Curve acceleration, entry: $entryAccelText, exit: $exitAccelText.",
-                "Aceleracion en curva, entrada: $entryAccelText, salida: $exitAccelText."
+                "Aceleración en curva, entrada: $entryAccelText, salida: $exitAccelText."
             )
         }
         val tip = when {
@@ -1731,7 +1797,7 @@ private fun buildTrailPointInsights(
             )
             TrailObservationKind.RECOVERY in kinds -> tr(
                 "In this section, recover speed progressively and avoid abrupt acceleration.",
-                "En esta seccion, recuperar velocidad de forma progresiva y evitar aceleracion brusca."
+                "En esta sección, recuperar velocidad de forma progresiva y evitar aceleración brusca."
             )
             else -> null
         }
@@ -2204,7 +2270,7 @@ private fun eventTypeLabel(type: String): String {
     return when (type) {
         EventType.IMPACT_PEAK -> tr("Strong Impact", "Impacto fuerte")
         EventType.LANDING -> tr("Hard Landing", "Aterrizaje duro")
-        EventType.HARSHNESS_BURST -> tr("Vibration event", "Evento de vibracion")
+        EventType.HARSHNESS_BURST -> tr("Vibration event", "Evento de vibración")
         else -> tr("Event", "Evento")
     }
 }

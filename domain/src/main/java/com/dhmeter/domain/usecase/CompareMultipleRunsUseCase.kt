@@ -4,6 +4,7 @@ import com.dhmeter.domain.model.*
 import com.dhmeter.domain.repository.RunRepository
 import javax.inject.Inject
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.roundToLong
 
 /**
@@ -40,15 +41,18 @@ class CompareMultipleRunsUseCase @Inject constructor(
                 return Result.failure(Exception("Need at least 2 runs to compare"))
             }
 
-            // Load all runs
-            val runs = runIds.mapIndexedNotNull { index, runId ->
-                runRepository.getRunById(runId)?.let { run ->
-                    RunWithColor(
-                        run = run,
-                        color = runColors[index % runColors.size],
-                        label = "Run ${index + 1}"
-                    )
-                }
+            // Load all runs and sort chronologically (oldest -> newest).
+            val loadedRuns = runIds
+                .distinct()
+                .mapNotNull { runId -> runRepository.getRunById(runId) }
+                .sortedBy { it.startedAt }
+
+            val runs = loadedRuns.mapIndexed { index, run ->
+                RunWithColor(
+                    run = run,
+                    color = runColors[index % runColors.size],
+                    label = "Run ${index + 1}"
+                )
             }
 
             if (runs.size < 2) {
@@ -71,9 +75,13 @@ class CompareMultipleRunsUseCase @Inject constructor(
             val verdict = determineVerdict(runs, metricComparisons)
 
             // Generate insights
-            val insights = (generateInsights(metricComparisons) + generateSectionDeltaInsights(mapComparison))
+            val insights = buildInsights(
+                runs = runs,
+                metricComparisons = metricComparisons,
+                mapComparison = mapComparison
+            )
                 .distinct()
-                .take(6)
+                .take(10)
 
             Result.success(
                 MultiRunComparisonResult(
@@ -117,7 +125,7 @@ class CompareMultipleRunsUseCase @Inject constructor(
                 lowerIsBetter = true
             ),
             MultiMetricComparison(
-                metricName = "Landing Quality",
+                metricName = "Landing Severity",
                 values = runs.map { it.run.landingQualityScore },
                 bestRunIndex = findBestRunIndex(runs.map { it.run.landingQualityScore }, lowerIsBetter = true),
                 lowerIsBetter = true
@@ -233,6 +241,131 @@ class CompareMultipleRunsUseCase @Inject constructor(
         return insights.take(5)
     }
 
+    private fun buildInsights(
+        runs: List<RunWithColor>,
+        metricComparisons: List<MultiMetricComparison>,
+        mapComparison: MapComparisonData?
+    ): List<String> {
+        return buildList {
+            addAll(generateInsights(metricComparisons))
+            addAll(generatePerformanceInsights(runs, metricComparisons))
+            addAll(generateRecentTrendInsights(runs, metricComparisons))
+            addAll(generateSectionDeltaInsights(mapComparison))
+        }
+    }
+
+    private fun generatePerformanceInsights(
+        runs: List<RunWithColor>,
+        metricComparisons: List<MultiMetricComparison>
+    ): List<String> {
+        val insights = mutableListOf<String>()
+
+        metricComparisons.firstOrNull { it.metricName == "Duration" }?.bestRunIndex?.let { bestIndex ->
+            insights += "${runs[bestIndex].label} recorded the fastest total time."
+        }
+        metricComparisons.firstOrNull { it.metricName == "Max Speed" }?.bestRunIndex?.let { bestIndex ->
+            insights += "${runs[bestIndex].label} reached the highest top speed."
+        }
+
+        val burdenComparisons = metricComparisons.filter {
+            it.metricName == "Impact" || it.metricName == "Harshness" || it.metricName == "Stability"
+        }
+        val burdenAverages = runs.indices.mapNotNull { runIndex ->
+            val values = burdenComparisons.mapNotNull { comparison ->
+                comparison.values.getOrNull(runIndex)?.takeIf { it.isFinite() }
+            }
+            if (values.isEmpty()) null else runIndex to values.average().toFloat()
+        }
+        if (burdenAverages.size >= 2) {
+            val best = burdenAverages.minByOrNull { it.second }
+            val worst = burdenAverages.maxByOrNull { it.second }
+            if (best != null && worst != null) {
+                val gap = (worst.second - best.second).coerceAtLeast(0f)
+                if (gap >= 2f) {
+                    insights += "${runs[best.first].label} has the lowest combined burden, ${String.format("%.1f", gap)} points better than ${runs[worst.first].label}."
+                } else {
+                    insights += "${runs[best.first].label} has the lowest combined burden."
+                }
+            }
+        }
+
+        val consistencyByRun = runs.indices.mapNotNull { runIndex ->
+            val values = burdenComparisons.mapNotNull { comparison ->
+                comparison.values.getOrNull(runIndex)?.takeIf { it.isFinite() }
+            }
+            if (values.size < 2) return@mapNotNull null
+            runIndex to (values.maxOrNull()!! - values.minOrNull()!!)
+        }
+        if (consistencyByRun.size >= 2) {
+            val bestConsistency = consistencyByRun.minByOrNull { it.second }
+            bestConsistency?.let { (bestIndex, _) ->
+                insights += "${runs[bestIndex].label} is the most consistent across burden metrics."
+            }
+        }
+
+        return insights.take(5)
+    }
+
+    private fun generateRecentTrendInsights(
+        runs: List<RunWithColor>,
+        metricComparisons: List<MultiMetricComparison>
+    ): List<String> {
+        if (runs.size < 2) return emptyList()
+
+        val latestIndex = runs.lastIndex
+        val previousIndex = latestIndex - 1
+        val latestLabel = runs[latestIndex].label
+        val previousLabel = runs[previousIndex].label
+        val insights = mutableListOf<String>()
+
+        metricComparisons.forEach { comparison ->
+            val previousValue = comparison.values.getOrNull(previousIndex)?.takeIf { it.isFinite() } ?: return@forEach
+            val latestValue = comparison.values.getOrNull(latestIndex)?.takeIf { it.isFinite() } ?: return@forEach
+
+            when (comparison.metricName) {
+                "Duration" -> {
+                    val deltaSec = previousValue - latestValue
+                    if (abs(deltaSec) >= 0.75f) {
+                        if (deltaSec > 0f) {
+                            insights += "$latestLabel is faster than $previousLabel by ${String.format("%.2f s", deltaSec)}."
+                        } else {
+                            insights += "$latestLabel is slower than $previousLabel by ${String.format("%.2f s", abs(deltaSec))}."
+                        }
+                    }
+                }
+
+                "Max Speed" -> {
+                    val delta = latestValue - previousValue
+                    if (abs(delta) >= 0.5f) {
+                        if (delta > 0f) {
+                            insights += "$latestLabel increased max speed by ${String.format("%.1f", delta)} km/h versus $previousLabel."
+                        } else {
+                            insights += "$latestLabel decreased max speed by ${String.format("%.1f", abs(delta))} km/h versus $previousLabel."
+                        }
+                    }
+                }
+
+                else -> {
+                    val delta = if (comparison.lowerIsBetter) {
+                        previousValue - latestValue
+                    } else {
+                        latestValue - previousValue
+                    }
+                    if (abs(delta) >= 1.5f) {
+                        val metric = comparison.metricName.cleanMetricName().lowercase()
+                        if (delta > 0f) {
+                            insights += "$latestLabel improved $metric by ${String.format("%.1f", delta)} points versus $previousLabel."
+                        } else {
+                            insights += "$latestLabel regressed $metric by ${String.format("%.1f", abs(delta))} points versus $previousLabel."
+                        }
+                    }
+                }
+            }
+        }
+
+        return insights.take(4)
+    }
+
     private suspend fun buildMapComparison(runs: List<RunWithColor>): MapComparisonData? {
         val mapRuns = runs.mapNotNull { runWithColor ->
             val polyline = runRepository.getGpsPolyline(runWithColor.run.runId) ?: return@mapNotNull null
@@ -334,31 +467,32 @@ class CompareMultipleRunsUseCase @Inject constructor(
         mapComparison ?: return emptyList()
         if (mapComparison.runs.size < 2 || mapComparison.sections.isEmpty()) return emptyList()
 
-        val challengerIndex = 1
-        val challengerLabel = mapComparison.runs[challengerIndex].runLabel
-        val deltas = mapComparison.sections.mapNotNull { section ->
-            section.deltaVsBaselineMs.getOrNull(challengerIndex)?.let { delta ->
-                section to delta
+        val insights = mutableListOf<String>()
+        for (challengerIndex in 1 until mapComparison.runs.size) {
+            val challengerLabel = mapComparison.runs[challengerIndex].runLabel
+            val deltas = mapComparison.sections.mapNotNull { section ->
+                section.deltaVsBaselineMs.getOrNull(challengerIndex)?.let { delta ->
+                    section to delta
+                }
+            }
+            if (deltas.isEmpty()) continue
+
+            val biggestGain = deltas.minByOrNull { it.second }
+            val biggestLoss = deltas.maxByOrNull { it.second }
+
+            biggestGain?.takeIf { it.second < 0L }?.let { (section, delta) ->
+                insights.add(
+                    "$challengerLabel gained ${formatAbsDelta(delta)} in S${section.sectionIndex} (${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%)."
+                )
+            }
+            biggestLoss?.takeIf { it.second > 0L }?.let { (section, delta) ->
+                insights.add(
+                    "$challengerLabel lost ${formatAbsDelta(delta)} in S${section.sectionIndex} (${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%)."
+                )
             }
         }
-        if (deltas.isEmpty()) return emptyList()
 
-        val biggestGain = deltas.minByOrNull { it.second }
-        val biggestLoss = deltas.maxByOrNull { it.second }
-        val insights = mutableListOf<String>()
-
-        biggestGain?.takeIf { it.second < 0L }?.let { (section, delta) ->
-            insights.add(
-                "$challengerLabel gained ${formatAbsDelta(delta)} in S${section.sectionIndex} (${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%)"
-            )
-        }
-        biggestLoss?.takeIf { it.second > 0L }?.let { (section, delta) ->
-            insights.add(
-                "$challengerLabel lost ${formatAbsDelta(delta)} in S${section.sectionIndex} (${section.startDistPct.toInt()}-${section.endDistPct.toInt()}%)"
-            )
-        }
-
-        return insights
+        return insights.take(max(2, mapComparison.runs.size * 2))
     }
 
     private suspend fun buildAltitudeComparison(runs: List<RunWithColor>): AltitudeComparisonData? {
