@@ -78,10 +78,9 @@ private fun RunSeries.toDerivedSpeedSamples(totalDistanceM: Float?): List<Derive
     if (seriesType != SeriesType.SPEED_TIME) return emptyList()
     val distance = totalDistanceM?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
     val timingSamples = toTimingSamples()
-    if (timingSamples.size < 5) return emptyList()
+    if (timingSamples.size < 3) return emptyList()
 
-    val smoothedTime = smoothFloatSeries(timingSamples.map { it.timeSec }, windowRadius = 3)
-    val monotonicTime = enforceMonotonic(smoothedTime, minStep = 2e-3f)
+    val monotonicTime = enforceMonotonic(timingSamples.map { it.timeSec }, minStep = 2e-3f)
 
     val smoothedSamples = timingSamples.indices.map { index ->
         TimingSample(
@@ -90,14 +89,12 @@ private fun RunSeries.toDerivedSpeedSamples(totalDistanceM: Float?): List<Derive
         )
     }
 
-    val rawSpeed = ArrayList<DerivedSpeedSample>(smoothedSamples.size - 2)
-    for (i in 1 until smoothedSamples.lastIndex) {
+    val rawSpeed = ArrayList<DerivedSpeedSample>(smoothedSamples.size)
+    for (i in 1 until smoothedSamples.size) {
         val prev = smoothedSamples[i - 1]
         val curr = smoothedSamples[i]
-        val next = smoothedSamples[i + 1]
-
-        val dxPct = next.distPct - prev.distPct
-        val dtSec = next.timeSec - prev.timeSec
+        val dxPct = curr.distPct - prev.distPct
+        val dtSec = curr.timeSec - prev.timeSec
         if (dxPct <= MIN_DX_PCT || dtSec <= MIN_DT_SEC) continue
 
         val distanceM = distance * (curr.distPct / 100f)
@@ -111,11 +108,23 @@ private fun RunSeries.toDerivedSpeedSamples(totalDistanceM: Float?): List<Derive
         )
     }
 
+    if (rawSpeed.isEmpty()) return emptyList()
+    if (rawSpeed.size == 1) {
+        val firstDistanceM = distance * (smoothedSamples.first().distPct / 100f)
+        return listOf(rawSpeed.first()).let { only ->
+            if (!firstDistanceM.isFinite()) only else listOf(
+                only.first().copy(distanceM = firstDistanceM.coerceIn(0f, distance)),
+                only.first()
+            )
+        }
+    }
     if (rawSpeed.size < 3) return rawSpeed
-    val smoothedSpeed = smoothFloatSeries(rawSpeed.map { it.speedMps }, windowRadius = 2)
 
+    val smoothedSpeed = smoothFloatSeries(rawSpeed.map { it.speedMps }, windowRadius = 1)
     return rawSpeed.indices.map { index ->
-        rawSpeed[index].copy(speedMps = smoothedSpeed[index].coerceAtLeast(0f))
+        rawSpeed[index].copy(
+            speedMps = max(rawSpeed[index].speedMps, smoothedSpeed[index]).coerceAtLeast(0f)
+        )
     }
 }
 
@@ -186,4 +195,3 @@ private fun enforceMonotonic(values: List<Float>, minStep: Float): List<Float> {
     }
     return result.toList()
 }
-

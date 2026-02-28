@@ -104,6 +104,10 @@ private class FakeSensorSensitivityRepository : SensorSensitivityRepository {
         mutable.value = mutable.value.copy(gpsSensitivity = value).normalized()
     }
 
+    override suspend fun updateEventSensitivity(value: Float) {
+        mutable.value = mutable.value.copy(eventSensitivity = value).normalized()
+    }
+
     override suspend fun resetToDefaults() {
         mutable.value = SensorSensitivitySettings()
     }
