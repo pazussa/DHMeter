@@ -4,6 +4,7 @@ import com.dhmeter.domain.model.*
 import com.dhmeter.domain.repository.SensorSensitivityRepository
 import com.dhmeter.domain.usecase.RunProcessor
 import com.dhmeter.sensing.data.AccelSample
+import com.dhmeter.sensing.data.GpsSample
 import com.dhmeter.sensing.data.SensorBuffers
 import com.dhmeter.signal.metrics.*
 import com.dhmeter.signal.validation.RunValidator
@@ -43,15 +44,24 @@ class SignalProcessor @Inject constructor(
         private const val HARSHNESS_BURST_HOP_SEC = 0.10f
         private const val HARSHNESS_BURST_MIN_DURATION_MS = 180L
         private const val HARSHNESS_BURST_MERGE_GAP_MS = 220L
+        private const val DIST_MIN_SPEED_MPS = 0.5f
+        private const val DIST_MAX_ACCURACY_BASE_M = 20f
+        private const val DIST_MIN_DISTANCE_FACTOR = 0.5f
     }
 
     override suspend fun process(handle: RawCaptureHandle): ProcessedRun = withContext(Dispatchers.Default) {
         val accelSamples = sensorBuffers.accel.getAll()
         val gyroSamples = sensorBuffers.gyro.getAll()
-        val gpsSamples = sensorBuffers.gps.getAll()
+        val rawGpsSamples = sensorBuffers.gps.getAll()
+        val gpsSensitivity = sensitivityRepository.currentSettings.gpsSensitivity
+        val cleanedGpsSamples = GpsSampleSanitizer.sanitize(
+            samples = rawGpsSamples,
+            gpsSensitivity = gpsSensitivity
+        )
+        val gpsSamples = if (cleanedGpsSamples.size >= 2) cleanedGpsSamples else rawGpsSamples
 
         val durationMs = (handle.endTimeNs - handle.startTimeNs) / 1_000_000
-        val totalDistance = calculateFilteredDistance(gpsSamples)
+        val totalDistance = calculateFilteredDistance(gpsSamples, gpsSensitivity)
 
         // Validate run (no barometer - uses GPS/movement)
         val validation = runValidator.validateRun(
@@ -62,7 +72,11 @@ class SignalProcessor @Inject constructor(
         )
 
         // Create distance mapping
-        val distMapping = distanceMapper.createMapping(gpsSamples, handle.startTimeNs)
+        val distMapping = distanceMapper.createMapping(
+            samples = gpsSamples,
+            startTimeNs = handle.startTimeNs,
+            gpsSensitivity = gpsSensitivity
+        )
 
         // Process windows
         val windowResults = processWindows(accelSamples, gyroSamples, distMapping, handle)
@@ -125,7 +139,8 @@ class SignalProcessor @Inject constructor(
             gpsSamples = gpsSamples,
             totalDistanceM = totalDistance,
             startTimeNs = handle.startTimeNs,
-            durationMs = durationMs
+            durationMs = durationMs,
+            gpsSensitivity = gpsSensitivity
         )?.let { series.add(it) }
 
         // Set runId on events
@@ -143,10 +158,11 @@ class SignalProcessor @Inject constructor(
 
     private fun createTimingSeries(
         runId: String,
-        gpsSamples: List<com.dhmeter.sensing.data.GpsSample>,
+        gpsSamples: List<GpsSample>,
         totalDistanceM: Float,
         startTimeNs: Long,
-        durationMs: Long
+        durationMs: Long,
+        gpsSensitivity: Float
     ): RunSeries? {
         if (durationMs <= 0L) return null
         if (gpsSamples.size < 2 || totalDistanceM <= 0f) {
@@ -168,15 +184,23 @@ class SignalProcessor @Inject constructor(
         for (i in 1 until gpsSamples.size) {
             val prev = gpsSamples[i - 1]
             val curr = gpsSamples[i]
-            cumulativeDistanceM += haversineDistance(
+            val segmentDistanceM = haversineDistance(
                 prev.latitude,
                 prev.longitude,
                 curr.latitude,
                 curr.longitude
             )
+            if (isValidDistanceSegment(prev, curr, segmentDistanceM, gpsSensitivity)) {
+                cumulativeDistanceM += segmentDistanceM
+            }
             val distPct = ((cumulativeDistanceM / totalDistanceM) * 100.0).toFloat().coerceIn(0f, 100f)
+            if (abs(distPcts.last() - distPct) < 1e-5f && i != gpsSamples.lastIndex) {
+                continue
+            }
             distPcts.add(distPct)
-            elapsedSec.add(((curr.timestampNs - startTimeNs).coerceAtLeast(0L) / 1_000_000_000.0).toFloat())
+            elapsedSec.add(
+                ((curr.timestampNs - startTimeNs).coerceAtLeast(0L) / 1_000_000_000.0).toFloat()
+            )
         }
 
         // Ensure the profile always spans full 0..100% and full duration for robust split interpolation.
@@ -655,30 +679,34 @@ class SignalProcessor @Inject constructor(
      * - Movement distance exceeds accuracy uncertainty
      */
     private fun calculateFilteredDistance(
-        gpsSamples: List<com.dhmeter.sensing.data.GpsSample>
+        gpsSamples: List<GpsSample>,
+        gpsSensitivity: Float
     ): Float {
         if (gpsSamples.size < 2) return 0f
 
-        val gpsSensitivity = sensitivityRepository.currentSettings.gpsSensitivity
-        val minSpeedMps = 0.5f
-        val maxAccuracyM = (20f / gpsSensitivity.coerceAtLeast(0.01f)).coerceIn(10f, 60f)
-        val minDistanceFactor = 0.5f
-        
         var totalDistance = 0.0
-        
+
         gpsSamples.zipWithNext { a, b ->
             val segmentDist = haversineDistance(a.latitude, a.longitude, b.latitude, b.longitude)
-            
-            val isValidMovement = b.accuracy <= maxAccuracyM &&
-                    b.speed >= minSpeedMps &&
-                    segmentDist > (maxOf(a.accuracy, b.accuracy) * minDistanceFactor)
-            
-            if (isValidMovement) {
+
+            if (isValidDistanceSegment(a, b, segmentDist, gpsSensitivity)) {
                 totalDistance += segmentDist
             }
         }
-        
+
         return totalDistance.toFloat()
+    }
+
+    private fun isValidDistanceSegment(
+        previous: GpsSample,
+        current: GpsSample,
+        segmentDistanceM: Double,
+        gpsSensitivity: Float
+    ): Boolean {
+        val maxAccuracyM = (DIST_MAX_ACCURACY_BASE_M / gpsSensitivity.coerceAtLeast(0.01f)).coerceIn(10f, 60f)
+        return current.accuracy <= maxAccuracyM &&
+            current.speed >= DIST_MIN_SPEED_MPS &&
+            segmentDistanceM > (maxOf(previous.accuracy, current.accuracy) * DIST_MIN_DISTANCE_FACTOR)
     }
 
     private fun haversineDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

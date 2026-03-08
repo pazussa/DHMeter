@@ -162,11 +162,20 @@ private fun RunSummaryContent(
 ) {
     var selectedDistanceM by remember(run.runId) { mutableStateOf<Float?>(null) }
 
-    val speedChartPoints = remember(speedSeries, run.distanceMeters, run.avgSpeed) {
+    val speedChartPoints = remember(speedSeries, run.distanceMeters, run.avgSpeed, run.maxSpeed) {
         speedSeries
-            ?.toSpeedChartPointsMeters(run.distanceMeters)
+            ?.toSpeedChartPointsMeters(
+                totalDistanceM = run.distanceMeters,
+                recordedMaxSpeedMps = run.maxSpeed
+            )
             .orEmpty()
-            .ifEmpty { fallbackSpeedChartPoints(run.avgSpeed, run.distanceMeters) }
+            .ifEmpty {
+                fallbackSpeedChartPoints(
+                    avgSpeedMps = run.avgSpeed,
+                    maxSpeedMps = run.maxSpeed,
+                    distanceMeters = run.distanceMeters
+                )
+            }
     }
     val accelerationChartPoints = remember(speedSeries, run.distanceMeters) {
         speedSeries?.toAccelerationChartPointsMeters(run.distanceMeters).orEmpty()
@@ -215,6 +224,7 @@ private fun RunSummaryContent(
             elevationProfile = elevationProfile,
             distanceMeters = run.distanceMeters,
             avgSpeedMps = run.avgSpeed,
+            maxSpeedMps = run.maxSpeed,
             isLoading = isChartsLoading,
             error = chartsError,
             onDistanceSelected = { selectedDistance ->
@@ -711,6 +721,7 @@ private fun RunChartsCarouselSection(
     elevationProfile: ElevationProfile?,
     distanceMeters: Float?,
     avgSpeedMps: Float?,
+    maxSpeedMps: Float?,
     isLoading: Boolean,
     error: String?,
     onDistanceSelected: (Float) -> Unit
@@ -827,6 +838,7 @@ private fun RunChartsCarouselSection(
                                 series = speedSeries,
                                 distanceMeters = distanceMeters,
                                 fallbackAvgSpeedMps = avgSpeedMps,
+                                fallbackMaxSpeedMps = maxSpeedMps,
                                 color = ChartSpeed,
                                 onDistanceSelected = onDistanceSelected
                             )
@@ -914,6 +926,7 @@ private fun SpeedChartSection(
     series: RunSeries?,
     distanceMeters: Float?,
     fallbackAvgSpeedMps: Float?,
+    fallbackMaxSpeedMps: Float?,
     color: Color,
     onDistanceSelected: (Float) -> Unit
 ) {
@@ -923,11 +936,20 @@ private fun SpeedChartSection(
             style = MaterialTheme.typography.titleSmall
         )
 
-        val points = remember(series, distanceMeters, fallbackAvgSpeedMps) {
+        val points = remember(series, distanceMeters, fallbackAvgSpeedMps, fallbackMaxSpeedMps) {
             series
-                ?.toSpeedChartPointsMeters(distanceMeters)
+                ?.toSpeedChartPointsMeters(
+                    totalDistanceM = distanceMeters,
+                    recordedMaxSpeedMps = fallbackMaxSpeedMps
+                )
                 .orEmpty()
-                .ifEmpty { fallbackSpeedChartPoints(fallbackAvgSpeedMps, distanceMeters) }
+                .ifEmpty {
+                    fallbackSpeedChartPoints(
+                        avgSpeedMps = fallbackAvgSpeedMps,
+                        maxSpeedMps = fallbackMaxSpeedMps,
+                        distanceMeters = distanceMeters
+                    )
+                }
         }
         if (points.isEmpty()) {
             Text(
@@ -2352,28 +2374,54 @@ private fun RunSeries.toChartPoints(distanceMeters: Float?): List<ChartPoint> {
 
 private fun fallbackSpeedChartPoints(
     avgSpeedMps: Float?,
+    maxSpeedMps: Float?,
     distanceMeters: Float?
 ): List<ChartPoint> {
-    val speedMps = avgSpeedMps?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
     val totalDistance = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
-    val speedKmh = speedMps * 3.6f
-    return listOf(
-        ChartPoint(0f, speedKmh),
-        ChartPoint(totalDistance, speedKmh)
-    )
+    val avgSpeedKmh = avgSpeedMps?.takeIf { it.isFinite() && it > 0f }?.times(3.6f)
+    val maxSpeedKmh = maxSpeedMps?.takeIf { it.isFinite() && it > 0f }?.times(3.6f)
+    return when {
+        avgSpeedKmh != null && maxSpeedKmh != null -> listOf(
+            ChartPoint(0f, avgSpeedKmh),
+            ChartPoint(totalDistance * 0.5f, maxSpeedKmh),
+            ChartPoint(totalDistance, avgSpeedKmh)
+        )
+        maxSpeedKmh != null -> listOf(
+            ChartPoint(0f, maxSpeedKmh),
+            ChartPoint(totalDistance, maxSpeedKmh)
+        )
+        avgSpeedKmh != null -> listOf(
+            ChartPoint(0f, avgSpeedKmh),
+            ChartPoint(totalDistance, avgSpeedKmh)
+        )
+        else -> emptyList()
+    }
 }
 
 private fun fallbackSpeedHeatmapPoints(
     avgSpeedMps: Float?,
+    maxSpeedMps: Float?,
     distanceMeters: Float?
 ): List<HeatmapPoint> {
-    val speedMps = avgSpeedMps?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
     val totalDistance = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
-    val speedKmh = speedMps * 3.6f
-    return listOf(
-        HeatmapPoint(0f, speedKmh),
-        HeatmapPoint(totalDistance, speedKmh)
-    )
+    val avgSpeedKmh = avgSpeedMps?.takeIf { it.isFinite() && it > 0f }?.times(3.6f)
+    val maxSpeedKmh = maxSpeedMps?.takeIf { it.isFinite() && it > 0f }?.times(3.6f)
+    return when {
+        avgSpeedKmh != null && maxSpeedKmh != null -> listOf(
+            HeatmapPoint(0f, avgSpeedKmh),
+            HeatmapPoint(totalDistance * 0.5f, maxSpeedKmh),
+            HeatmapPoint(totalDistance, avgSpeedKmh)
+        )
+        maxSpeedKmh != null -> listOf(
+            HeatmapPoint(0f, maxSpeedKmh),
+            HeatmapPoint(totalDistance, maxSpeedKmh)
+        )
+        avgSpeedKmh != null -> listOf(
+            HeatmapPoint(0f, avgSpeedKmh),
+            HeatmapPoint(totalDistance, avgSpeedKmh)
+        )
+        else -> emptyList()
+    }
 }
 
 private fun meterAxisConfig(points: List<ChartPoint>): AxisConfig {

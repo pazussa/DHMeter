@@ -206,9 +206,18 @@ private fun ChartsContent(
         uiState.runs.forEach { run ->
             val distanceMeters = run.run?.distanceMeters
             val speedPoints = run.speedSeries
-                ?.toSpeedHeatmapPointsMeters(distanceMeters)
+                ?.toSpeedHeatmapPointsMeters(
+                    totalDistanceM = distanceMeters,
+                    recordedMaxSpeedMps = run.run?.maxSpeed
+                )
                 .orEmpty()
-                .ifEmpty { fallbackSpeedHeatmapPoints(run.run?.avgSpeed, distanceMeters) }
+                .ifEmpty {
+                    fallbackSpeedHeatmapPoints(
+                        avgSpeedMps = run.run?.avgSpeed,
+                        maxSpeedMps = run.run?.maxSpeed,
+                        distanceMeters = distanceMeters
+                    )
+                }
 
             if (speedPoints.isNotEmpty()) {
                 val maxSpeed = speedPoints.maxOfOrNull { it.value } ?: 0f
@@ -316,9 +325,18 @@ private fun SpeedComparisonSection(
         val chartSeriesList = runs.mapNotNull { run ->
             val distanceMeters = run.run?.distanceMeters
             val points = run.speedSeries
-                ?.toSpeedChartPointsMeters(distanceMeters)
+                ?.toSpeedChartPointsMeters(
+                    totalDistanceM = distanceMeters,
+                    recordedMaxSpeedMps = run.run?.maxSpeed
+                )
                 .orEmpty()
-                .ifEmpty { fallbackSpeedChartPoints(run.run?.avgSpeed, distanceMeters) }
+                .ifEmpty {
+                    fallbackSpeedChartPoints(
+                        avgSpeedMps = run.run?.avgSpeed,
+                        maxSpeedMps = run.run?.maxSpeed,
+                        distanceMeters = distanceMeters
+                    )
+                }
             if (points.isNotEmpty()) {
                 ChartSeries(run.runLabel, points, run.color)
             } else {
@@ -411,28 +429,54 @@ private fun RunSeries.toChartPoints(distanceMeters: Float?): List<ChartPoint> {
 
 private fun fallbackSpeedChartPoints(
     avgSpeedMps: Float?,
+    maxSpeedMps: Float?,
     distanceMeters: Float?
 ): List<ChartPoint> {
-    val speedMps = avgSpeedMps?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
     val totalDistance = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
-    val speedKmh = speedMps * 3.6f
-    return listOf(
-        ChartPoint(0f, speedKmh),
-        ChartPoint(totalDistance, speedKmh)
-    )
+    val avgSpeedKmh = avgSpeedMps?.takeIf { it.isFinite() && it > 0f }?.times(3.6f)
+    val maxSpeedKmh = maxSpeedMps?.takeIf { it.isFinite() && it > 0f }?.times(3.6f)
+    return when {
+        avgSpeedKmh != null && maxSpeedKmh != null -> listOf(
+            ChartPoint(0f, avgSpeedKmh),
+            ChartPoint(totalDistance * 0.5f, maxSpeedKmh),
+            ChartPoint(totalDistance, avgSpeedKmh)
+        )
+        maxSpeedKmh != null -> listOf(
+            ChartPoint(0f, maxSpeedKmh),
+            ChartPoint(totalDistance, maxSpeedKmh)
+        )
+        avgSpeedKmh != null -> listOf(
+            ChartPoint(0f, avgSpeedKmh),
+            ChartPoint(totalDistance, avgSpeedKmh)
+        )
+        else -> emptyList()
+    }
 }
 
 private fun fallbackSpeedHeatmapPoints(
     avgSpeedMps: Float?,
+    maxSpeedMps: Float?,
     distanceMeters: Float?
 ): List<HeatmapPoint> {
-    val speedMps = avgSpeedMps?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
     val totalDistance = distanceMeters?.takeIf { it.isFinite() && it > 0f } ?: return emptyList()
-    val speedKmh = speedMps * 3.6f
-    return listOf(
-        HeatmapPoint(0f, speedKmh),
-        HeatmapPoint(totalDistance, speedKmh)
-    )
+    val avgSpeedKmh = avgSpeedMps?.takeIf { it.isFinite() && it > 0f }?.times(3.6f)
+    val maxSpeedKmh = maxSpeedMps?.takeIf { it.isFinite() && it > 0f }?.times(3.6f)
+    return when {
+        avgSpeedKmh != null && maxSpeedKmh != null -> listOf(
+            HeatmapPoint(0f, avgSpeedKmh),
+            HeatmapPoint(totalDistance * 0.5f, maxSpeedKmh),
+            HeatmapPoint(totalDistance, avgSpeedKmh)
+        )
+        maxSpeedKmh != null -> listOf(
+            HeatmapPoint(0f, maxSpeedKmh),
+            HeatmapPoint(totalDistance, maxSpeedKmh)
+        )
+        avgSpeedKmh != null -> listOf(
+            HeatmapPoint(0f, avgSpeedKmh),
+            HeatmapPoint(totalDistance, avgSpeedKmh)
+        )
+        else -> emptyList()
+    }
 }
 
 private fun meterAxisConfig(points: List<ChartPoint>): AxisConfig {

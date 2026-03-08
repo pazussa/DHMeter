@@ -45,9 +45,13 @@ fun RunSeries.toBurdenChartPointsMeters(totalDistanceM: Float?): List<ChartPoint
     }
 }
 
-fun RunSeries.toSpeedChartPointsMeters(totalDistanceM: Float?): List<ChartPoint> {
-    return toDerivedSpeedSamples(totalDistanceM)
+fun RunSeries.toSpeedChartPointsMeters(
+    totalDistanceM: Float?,
+    recordedMaxSpeedMps: Float? = null
+): List<ChartPoint> {
+    val points = toDerivedSpeedSamples(totalDistanceM)
         .map { sample -> ChartPoint(sample.distanceM, sample.speedMps * 3.6f) }
+    return alignSpeedPeakWithRecordedMax(points, recordedMaxSpeedMps)
 }
 
 fun RunSeries.toAccelerationChartPointsMeters(totalDistanceM: Float?): List<ChartPoint> {
@@ -69,8 +73,11 @@ fun RunSeries.toAccelerationChartPointsMeters(totalDistanceM: Float?): List<Char
     return smoothSeriesY(rawAcceleration, windowRadius = 2)
 }
 
-fun RunSeries.toSpeedHeatmapPointsMeters(totalDistanceM: Float?): List<HeatmapPoint> {
-    return toSpeedChartPointsMeters(totalDistanceM)
+fun RunSeries.toSpeedHeatmapPointsMeters(
+    totalDistanceM: Float?,
+    recordedMaxSpeedMps: Float? = null
+): List<HeatmapPoint> {
+    return toSpeedChartPointsMeters(totalDistanceM, recordedMaxSpeedMps)
         .map { point -> HeatmapPoint(x = point.x, value = point.y.coerceAtLeast(0f)) }
 }
 
@@ -109,23 +116,18 @@ private fun RunSeries.toDerivedSpeedSamples(totalDistanceM: Float?): List<Derive
     }
 
     if (rawSpeed.isEmpty()) return emptyList()
-    if (rawSpeed.size == 1) {
-        val firstDistanceM = distance * (smoothedSamples.first().distPct / 100f)
-        return listOf(rawSpeed.first()).let { only ->
-            if (!firstDistanceM.isFinite()) only else listOf(
-                only.first().copy(distanceM = firstDistanceM.coerceIn(0f, distance)),
-                only.first()
+    val speedSamples = if (rawSpeed.size < 3) {
+        rawSpeed
+    } else {
+        val smoothedSpeed = smoothFloatSeries(rawSpeed.map { it.speedMps }, windowRadius = 1)
+        rawSpeed.indices.map { index ->
+            rawSpeed[index].copy(
+                speedMps = max(rawSpeed[index].speedMps, smoothedSpeed[index]).coerceAtLeast(0f)
             )
         }
     }
-    if (rawSpeed.size < 3) return rawSpeed
 
-    val smoothedSpeed = smoothFloatSeries(rawSpeed.map { it.speedMps }, windowRadius = 1)
-    return rawSpeed.indices.map { index ->
-        rawSpeed[index].copy(
-            speedMps = max(rawSpeed[index].speedMps, smoothedSpeed[index]).coerceAtLeast(0f)
-        )
-    }
+    return ensureDistanceCoverage(speedSamples, distance)
 }
 
 private fun RunSeries.toTimingSamples(): List<TimingSample> {
@@ -166,6 +168,48 @@ private fun smoothSeriesY(points: List<ChartPoint>, windowRadius: Int): List<Cha
     val smoothedY = smoothFloatSeries(ys, windowRadius)
     return points.indices.map { index ->
         ChartPoint(points[index].x, smoothedY[index])
+    }
+}
+
+private fun ensureDistanceCoverage(
+    samples: List<DerivedSpeedSample>,
+    totalDistanceM: Float
+): List<DerivedSpeedSample> {
+    if (samples.isEmpty()) return emptyList()
+    val covered = ArrayList<DerivedSpeedSample>(samples.size + 2)
+    val first = samples.first()
+    if (first.distanceM > 0.05f) {
+        covered += first.copy(distanceM = 0f)
+    }
+    covered += samples
+
+    val last = samples.last()
+    if (last.distanceM < totalDistanceM - 0.05f) {
+        covered += last.copy(distanceM = totalDistanceM)
+    }
+    return covered
+}
+
+private fun alignSpeedPeakWithRecordedMax(
+    points: List<ChartPoint>,
+    recordedMaxSpeedMps: Float?
+): List<ChartPoint> {
+    val targetMaxKmh = recordedMaxSpeedMps
+        ?.takeIf { it.isFinite() && it > 0f }
+        ?.times(3.6f)
+        ?: return points
+    if (points.isEmpty()) return points
+
+    val peakIndex = points.indices.maxByOrNull { points[it].y } ?: return points
+    val currentPeak = points[peakIndex].y
+    if (!currentPeak.isFinite() || currentPeak <= 0f || abs(currentPeak - targetMaxKmh) < 0.05f) {
+        return points
+    }
+
+    val scale = targetMaxKmh / currentPeak
+    if (!scale.isFinite() || scale <= 0f) return points
+    return points.map { point ->
+        point.copy(y = (point.y * scale).coerceAtLeast(0f))
     }
 }
 

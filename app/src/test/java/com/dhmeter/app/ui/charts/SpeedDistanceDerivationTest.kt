@@ -2,6 +2,7 @@ package com.dropindh.app.ui.charts
 
 import com.dhmeter.domain.model.RunSeries
 import com.dhmeter.domain.model.SeriesType
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -34,6 +35,46 @@ class SpeedDistanceDerivationTest {
         val peakKmh = points.maxOfOrNull { it.y } ?: 0f
 
         assertTrue("Expected speed peak near finish to remain visible, got $peakKmh km/h", peakKmh >= 110f)
+    }
+
+    @Test
+    fun toSpeedChartPointsMeters_covers_full_distance_range() {
+        val series = runSeries(
+            0f, 0f,
+            40f, 18f,
+            70f, 30f,
+            100f, 45f
+        )
+
+        val points = series.toSpeedChartPointsMeters(totalDistanceM = 1_000f)
+        val firstX = points.firstOrNull()?.x
+        val lastX = points.lastOrNull()?.x
+
+        assertEquals("Expected speed chart to start at 0m", 0f, firstX ?: -1f, 0.05f)
+        assertEquals("Expected speed chart to reach total distance", 1_000f, lastX ?: -1f, 0.05f)
+    }
+
+    @Test
+    fun toSpeedChartPointsMeters_aligns_peak_with_recorded_max_speed() {
+        val series = runSeries(
+            0f, 0f,
+            50f, 20f,
+            100f, 42f
+        )
+
+        val recordedMaxSpeedMps = 19.4f
+        val points = series.toSpeedChartPointsMeters(
+            totalDistanceM = 1_000f,
+            recordedMaxSpeedMps = recordedMaxSpeedMps
+        )
+        val peakKmh = points.maxOfOrNull { it.y } ?: 0f
+
+        assertEquals(
+            "Expected chart peak to align with recorded run max speed",
+            recordedMaxSpeedMps * 3.6f,
+            peakKmh,
+            0.05f
+        )
     }
 
     private fun runSeries(vararg values: Float): RunSeries {

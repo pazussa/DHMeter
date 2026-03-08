@@ -2,7 +2,12 @@ package com.dhmeter.signal.processor
 
 import com.dhmeter.sensing.data.GpsSample
 import javax.inject.Inject
-import kotlin.math.*
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * Maps timestamps to distance percentage along the track.
@@ -34,12 +39,8 @@ class DistanceMapping(
      */
     fun getDistPct(timestampNs: Long): Float {
         if (samples.isEmpty() || totalDistance == 0.0) return 0f
-        
-        // Find surrounding GPS samples by timestamp
-        var lowIdx = 0
-        for (i in samples.indices) {
-            if (samples[i].timestampNs <= timestampNs) lowIdx = i
-        }
+
+        val lowIdx = findFloorIndex(timestampNs)
         val highIdx = (lowIdx + 1).coerceAtMost(samples.lastIndex)
 
         if (lowIdx == highIdx) {
@@ -49,7 +50,7 @@ class DistanceMapping(
         // Interpolate
         val fraction = (timestampNs - samples[lowIdx].timestampNs).toDouble() /
                        (samples[highIdx].timestampNs - samples[lowIdx].timestampNs)
-        
+
         val lowDist = cumulativeDistances[lowIdx]
         val highDist = cumulativeDistances[highIdx]
         val interpolatedDist = lowDist + fraction * (highDist - lowDist)
@@ -79,26 +80,73 @@ class DistanceMapping(
             return R * c
         }
     }
+
+    private fun findFloorIndex(timestampNs: Long): Int {
+        var low = 0
+        var high = samples.lastIndex
+        var floor = 0
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            val midTime = samples[mid].timestampNs
+            if (midTime <= timestampNs) {
+                floor = mid
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        return floor
+    }
 }
 
 /**
  * Creates distance mapping from GPS samples.
  */
 class DistanceMapper @Inject constructor() {
-    fun createMapping(samples: List<GpsSample>, startTimeNs: Long): DistanceMapping {
-        if (samples.isEmpty()) {
+    companion object {
+        private const val DIST_MIN_SPEED_MPS = 0.5f
+        private const val DIST_MAX_ACCURACY_BASE_M = 20f
+        private const val DIST_MIN_DISTANCE_FACTOR = 0.5f
+    }
+
+    fun createMapping(
+        samples: List<GpsSample>,
+        startTimeNs: Long,
+        gpsSensitivity: Float = 1f
+    ): DistanceMapping {
+        val sanitized = GpsSampleSanitizer.sanitize(samples, gpsSensitivity)
+        if (sanitized.size < 2) {
             return DistanceMapping(emptyList(), startTimeNs, 0.0)
         }
 
         // Calculate total distance
         var totalDistance = 0.0
-        for (i in 1 until samples.size) {
-            totalDistance += DistanceMapping.haversineDistance(
-                samples[i - 1].latitude, samples[i - 1].longitude,
-                samples[i].latitude, samples[i].longitude
+        for (i in 1 until sanitized.size) {
+            val previous = sanitized[i - 1]
+            val current = sanitized[i]
+            val segmentDistance = DistanceMapping.haversineDistance(
+                previous.latitude,
+                previous.longitude,
+                current.latitude,
+                current.longitude
             )
+            if (isValidDistanceSegment(previous, current, segmentDistance, gpsSensitivity)) {
+                totalDistance += segmentDistance
+            }
         }
 
-        return DistanceMapping(samples, startTimeNs, totalDistance)
+        return DistanceMapping(sanitized, startTimeNs, totalDistance)
+    }
+
+    private fun isValidDistanceSegment(
+        previous: GpsSample,
+        current: GpsSample,
+        segmentDistanceM: Double,
+        gpsSensitivity: Float
+    ): Boolean {
+        val maxAccuracyM = (DIST_MAX_ACCURACY_BASE_M / gpsSensitivity.coerceAtLeast(0.01f)).coerceIn(10f, 60f)
+        return current.accuracy <= maxAccuracyM &&
+            current.speed >= DIST_MIN_SPEED_MPS &&
+            segmentDistanceM > (max(previous.accuracy, current.accuracy) * DIST_MIN_DISTANCE_FACTOR)
     }
 }

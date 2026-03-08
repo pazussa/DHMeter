@@ -67,13 +67,12 @@ class RecordingViewModel @Inject constructor(
     companion object {
         private const val PREVIEW_CLIENT_ID = "recording_screen"
         private const val MANUAL_START_DELAY_SECONDS = 10
-        private const val AUTO_STOP_MIN_RECORDING_SECONDS = 20L
         private const val AUTO_STOP_ZERO_VIBRATION_THRESHOLD = 0.01f
-        private const val AUTO_STOP_ZERO_VIBRATION_REQUIRED_DURATION_MS = 3_000L
+        private const val AUTO_STOP_ZERO_IMPACT_THRESHOLD = 0.02f
         private const val AUTO_STOP_LOW_VIBRATION_THRESHOLD = 0.03f
         private const val AUTO_STOP_LOW_SPEED_MPS = 0.5f
         private const val AUTO_STOP_MOVEMENT_MIN_SPEED_MPS = 2.0f
-        private const val AUTO_STOP_REQUIRED_DURATION_MS = 6_000L
+        private const val AUTO_STOP_LOW_STATE_REQUIRED_DURATION_MS = 2_000L
     }
 
     private val _uiState = MutableStateFlow(RecordingUiState())
@@ -90,7 +89,6 @@ class RecordingViewModel @Inject constructor(
     private var manualStartDelayJob: Job? = null
     private var isManualStartForegroundArmed: Boolean = false
     private var isPreviewForegroundArmed: Boolean = false
-    private var autoStopZeroVibrationSinceMs: Long? = null
     private var autoStopLowVibrationSinceMs: Long? = null
     private var hadMovementDuringRecording: Boolean = false
     private var autoStopTriggered: Boolean = false
@@ -203,7 +201,6 @@ class RecordingViewModel @Inject constructor(
                         handleAutoStopIfRunEnded(state)
                     }
                     is RecordingState.Processing -> {
-                        autoStopZeroVibrationSinceMs = null
                         autoStopLowVibrationSinceMs = null
                         _uiState.update { 
                             it.copy(
@@ -406,7 +403,6 @@ class RecordingViewModel @Inject constructor(
 
     private fun stopRecordingInternal() {
         if (_uiState.value.isProcessing) return
-        autoStopZeroVibrationSinceMs = null
         autoStopLowVibrationSinceMs = null
         timerJob?.cancel()
         _uiState.update {
@@ -735,7 +731,6 @@ class RecordingViewModel @Inject constructor(
     }
 
     private fun resetAutoStopState() {
-        autoStopZeroVibrationSinceMs = null
         autoStopLowVibrationSinceMs = null
         hadMovementDuringRecording = false
         autoStopTriggered = false
@@ -747,34 +742,23 @@ class RecordingViewModel @Inject constructor(
         if (
             state.movementDetected ||
             state.currentSpeed >= AUTO_STOP_MOVEMENT_MIN_SPEED_MPS ||
-            state.liveHarshness >= 0.12f
+            state.liveHarshness >= 0.12f ||
+            state.liveImpact >= 0.08f
         ) {
             hadMovementDuringRecording = true
         }
         if (!hadMovementDuringRecording) {
-            autoStopZeroVibrationSinceMs = null
             autoStopLowVibrationSinceMs = null
             return
         }
 
-        if (_uiState.value.elapsedSeconds < AUTO_STOP_MIN_RECORDING_SECONDS) {
-            autoStopZeroVibrationSinceMs = null
-            autoStopLowVibrationSinceMs = null
-            return
-        }
-
-        val now = System.currentTimeMillis()
         val zeroVibration = state.liveHarshness <= AUTO_STOP_ZERO_VIBRATION_THRESHOLD
-        if (zeroVibration) {
-            val startedAt = autoStopZeroVibrationSinceMs ?: now.also { autoStopZeroVibrationSinceMs = it }
-            if (now - startedAt >= AUTO_STOP_ZERO_VIBRATION_REQUIRED_DURATION_MS) {
-                autoStopTriggered = true
-                updateSegmentStatus(msgAutoStopDetected())
-                stopRecordingInternal()
-                return
-            }
-        } else {
-            autoStopZeroVibrationSinceMs = null
+        val zeroImpact = state.liveImpact <= AUTO_STOP_ZERO_IMPACT_THRESHOLD
+        if (zeroVibration && zeroImpact) {
+            autoStopTriggered = true
+            updateSegmentStatus(msgAutoStopDetected())
+            stopRecordingInternal()
+            return
         }
 
         val lowVibration = state.liveHarshness <= AUTO_STOP_LOW_VIBRATION_THRESHOLD
@@ -784,8 +768,9 @@ class RecordingViewModel @Inject constructor(
             return
         }
 
+        val now = System.currentTimeMillis()
         val startedAt = autoStopLowVibrationSinceMs ?: now.also { autoStopLowVibrationSinceMs = it }
-        if (now - startedAt < AUTO_STOP_REQUIRED_DURATION_MS) return
+        if (now - startedAt < AUTO_STOP_LOW_STATE_REQUIRED_DURATION_MS) return
 
         autoStopTriggered = true
         updateSegmentStatus(msgAutoStopDetected())

@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Build
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
@@ -50,6 +51,8 @@ class GpsCollector @Inject constructor(
         private const val MIN_SPEED_MPS = 0.5f          // Minimum speed to accumulate distance
         private const val MAX_ACCURACY_M = 20f          // Maximum accuracy to consider valid
         private const val MIN_DISTANCE_FACTOR = 0.5f    // Movement must be > accuracy * factor
+        private const val HARD_MAX_ACCURACY_M = 80f     // Discard obviously unusable fixes
+        private const val MAX_LOCATION_AGE_MS = 4_000L  // Ignore stale cached fixes
     }
 
     private val fusedLocationClient: FusedLocationProviderClient by lazy {
@@ -82,8 +85,23 @@ class GpsCollector @Inject constructor(
     }
 
     private fun handleLocation(location: Location) {
-        // Map wall-clock time to monotonic time
-        val timestampNs = SystemClock.elapsedRealtimeNanos()
+        // Preserve sensor/GPS temporal alignment by using the location fix monotonic timestamp.
+        val timestampNs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+            location.elapsedRealtimeNanos.takeIf { it > 0L } ?: SystemClock.elapsedRealtimeNanos()
+        } else {
+            SystemClock.elapsedRealtimeNanos()
+        }
+        val locationAgeMs = (SystemClock.elapsedRealtimeNanos() - timestampNs).coerceAtLeast(0L) / 1_000_000L
+        if (
+            !location.latitude.isFinite() ||
+            !location.longitude.isFinite() ||
+            !location.accuracy.isFinite() ||
+            location.accuracy <= 0f ||
+            location.accuracy > HARD_MAX_ACCURACY_M ||
+            locationAgeMs > MAX_LOCATION_AGE_MS
+        ) {
+            return
+        }
 
         // Calculate distance from last point
         val segmentDistance = lastLat?.let { prevLat ->
@@ -238,7 +256,7 @@ class GpsCollector @Inject constructor(
             } || started
         }
 
-        if (networkEnabled) {
+        if (!gpsEnabled && networkEnabled) {
             started = runCatching {
                 locationManager.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
